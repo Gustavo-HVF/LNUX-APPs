@@ -1,0 +1,76 @@
+/* Vídeo — estilo da tela */
+
+:root { --altura-trilha: 54px; --largura-cabecalho: 128px; }
+:root[data-densidade="compacta"] { --altura-trilha: 44px; }
+:root[data-densidade="confortavel"] { --altura-trilha: 66px; }
+
+.area-cima { flex: 1; min-height: 0; display: flex; }
+.midias { width: 250px; flex: 0 0 250px; border-right: 0; }
+.propriedades { width: 300px; flex: 0 0 300px; }
+.monitor { flex: 1; min-width: 0; background: var(--fundo); }
+.tela { flex: 1; min-height: 0; display: grid; place-items: center; padding: 10px; overflow: hidden; }
+.tela canvas { max-width: 100%; max-height: 100%; background: #000; box-shadow: 0 2px 14px rgba(0,0,0,.4); touch-action: none; }
+.tela.soltando { box-shadow: inset 0 0 0 2px var(--destaque); }
+.controles { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-top: 1px solid var(--borda); background: var(--painel); flex-wrap: wrap; }
+.controles .tempo { font-size: 1.15em; padding: 0 6px 0 10px; }
+.controles .espaco { flex: 1; }
+
+.lista-midias { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; align-content: start; }
+.lista-midias.soltando { box-shadow: inset 0 0 0 2px var(--destaque); }
+.midia { display: grid; gap: 4px; padding: 4px; border-radius: var(--raio); border: 1px solid transparent; cursor: grab; user-select: none; }
+.midia:hover { background: var(--painel-2); }
+.midia.escolhida { border-color: var(--destaque); background: var(--destaque-suave); }
+.midia .miniatura { position: relative; aspect-ratio: 16/9; border-radius: 4px; background: var(--painel-3) center/cover no-repeat; display: grid; place-items: center; color: var(--texto-3); overflow: hidden; }
+.midia .miniatura svg { width: 26px; height: 26px; }
+.midia .miniatura .dur { position: absolute; right: 3px; bottom: 3px; padding: 0 4px; border-radius: 3px; background: rgba(0,0,0,.7); color: #fff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.midia .miniatura .falta { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(200, 40, 60, .55); color: #fff; font-size: 11px; font-weight: 600; text-align: center; padding: 4px; }
+.midia .nome { font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto-2); }
+
+.linha-do-tempo { height: 300px; flex: 0 0 300px; border-top: 1px solid var(--borda); }
+.barra-linha { border-bottom: 1px solid var(--borda); }
+.editor { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--largura-cabecalho) 1fr; grid-template-rows: 28px 1fr; }
+.canto { border-right: 1px solid var(--borda); border-bottom: 1px solid var(--borda); background: var(--painel); }
+.regua { display: block; width: 100%; height: 28px; border-bottom: 1px solid var(--borda); cursor: pointer; touch-action: none; }
+.cabecalhos { overflow: hidden; border-right: 1px solid var(--borda); background: var(--painel); }
+.rolagem { position: relative; overflow: auto; background: var(--trilha); outline: none; }
+.rolagem.soltando { box-shadow: inset 0 0 0 2px var(--destaque); }
+.espaco-rolagem { position: absolute; left: 0; top: 0; pointer-events: none; }
+.pistas { position: sticky; left: 0; top: 0; display: block; touch-action: none; }
+
+.cabecalho-trilha { display: flex; align-items: center; gap: 4px; height: var(--altura-trilha); padding: 0 6px 0 8px; border-bottom: 1px solid var(--borda); }
+.cabecalho-trilha.escolhida { background: var(--destaque-suave); }
+.cabecalho-trilha .rotulo { flex: 1; min-width: 0; font-weight: 600; font-size: .9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cabecalho-trilha .rotulo small { display: block; font-weight: 400; color: var(--texto-3); }
+.cabecalho-trilha button { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--texto-2); cursor: pointer; display: grid; place-items: center; }
+.cabecalho-trilha button:hover { background: var(--painel-3); }
+.cabecalho-trilha button[aria-pressed="true"] { color: var(--aviso); }
+.cabecalho-trilha button svg { width: 15px; height: 15px; }
+
+.looks { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 6px; }
+.looks button { padding: 6px 4px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--painel-2); cursor: pointer; font-size: .85em; }
+.looks button:hover { border-color: var(--destaque); }
+
+.abas-celular { display: none; }
+
+/* Layouts */
+:root[data-layout="cor"] .midias, :root[data-layout="cor"] .area-cima > .lnux-divisor:first-of-type { display: none; }
+:root[data-layout="cor"] .propriedades { width: 360px; flex-basis: 360px; }
+:root[data-layout="cor"] .linha-do-tempo { height: 200px; flex-basis: 200px; }
+:root[data-layout="montagem"] .linha-do-tempo { height: 48vh; flex-basis: 48vh; }
+:root[data-layout="celular"] { --largura-cabecalho: 100px; --altura-trilha: 48px; }
+:root[data-layout="celular"] .cabecalho-trilha .esconder { display: none; }
+:root[data-layout="celular"] .area-cima { flex: 0 0 auto; flex-direction: column; }
+:root[data-layout="celular"] .area-cima > .lnux-divisor, :root[data-layout="celular"] #divisor-linha { display: none; }
+:root[data-layout="celular"] .monitor { flex: 0 0 auto; }
+:root[data-layout="celular"] .tela { height: 34vh; flex: 0 0 auto; padding: 4px; }
+:root[data-layout="celular"] .abas-celular { display: flex; }
+:root[data-layout="celular"] .midias, :root[data-layout="celular"] .propriedades { display: none; width: auto; flex: 1; }
+:root[data-layout="celular"] .linha-do-tempo { display: none; height: auto; flex: 1; }
+:root[data-layout="celular"][data-aba="linha"] .linha-do-tempo,
+:root[data-layout="celular"][data-aba="midias"] .midias,
+:root[data-layout="celular"][data-aba="propriedades"] .propriedades { display: flex; }
+:root[data-layout="celular"] .area-cima { flex: 0 0 auto; }
+:root[data-layout="celular"][data-aba="midias"] .area-cima,
+:root[data-layout="celular"][data-aba="propriedades"] .area-cima { flex: 1; }
+:root[data-layout="celular"] .cabecalho-trilha .rotulo small { display: none; }
+:root[data-layout="celular"] .controles label { display: none; }

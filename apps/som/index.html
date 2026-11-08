@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Som · LNUX</title>
+  <meta name="description" content="Estúdio de áudio multipistas no navegador: gravar, editar, mixar e exportar.">
+  <link rel="stylesheet" href="../../comum/lnux.css">
+  <link rel="stylesheet" href="som.css">
+</head>
+<body>
+  <div class="lnux-app">
+    <header class="lnux-topo">
+      <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span>Som</a>
+      <nav class="lnux-menubar" aria-label="Menus"></nav>
+      <div class="lnux-titulo-doc" id="titulo-doc">Projeto sem nome</div>
+      <div class="lnux-topo-acoes"></div>
+    </header>
+
+    <div class="lnux-ferramentas" id="transporte" role="toolbar" aria-label="Transporte">
+      <span id="botoes-transporte"></span>
+      <span class="sep"></span>
+      <div class="relogio" aria-live="off">
+        <span class="mono" id="relogio-tempo">00:00.00</span>
+        <span class="mono fraco" id="relogio-compasso">1.1</span>
+      </div>
+      <span class="sep"></span>
+      <label class="campo-curto" title="Batidas por minuto">BPM <input class="lnux-entrada" id="bpm" type="number" min="30" max="300" step="1"></label>
+      <label class="campo-curto" title="Batidas por compasso">Compasso
+        <select class="lnux-selecao" id="compasso"><option>2</option><option>3</option><option>4</option><option>6</option></select>
+      </label>
+      <span id="botoes-grade"></span>
+      <label class="campo-curto" title="Encaixar na grade">Grade
+        <select class="lnux-selecao" id="grade">
+          <option value="0">Livre</option>
+          <option value="compasso">Compasso</option>
+          <option value="1">Batida</option>
+          <option value="0.5">1/2 batida</option>
+          <option value="0.25">1/4 batida</option>
+          <option value="seg">Segundo</option>
+        </select>
+      </label>
+      <span class="espaco"></span>
+      <span id="botoes-zoom"></span>
+      <canvas id="medidor-mestre" width="120" height="22" title="Nível do mestre" aria-label="Nível do som"></canvas>
+    </div>
+
+    <div class="area" id="area">
+      <section class="editor lnux-painel" id="editor" aria-label="Linha do tempo">
+        <div class="cabeca-trilhas-topo">
+          <button class="lnux-botao pequeno" id="nova-trilha" type="button">+ Trilha</button>
+          <button class="lnux-botao pequeno" id="importar" type="button" title="Importar áudio" aria-label="Importar áudio"><span id="importar-icone"></span><span class="rotulo-longo">Importar</span></button>
+        </div>
+        <canvas id="regua" class="regua" aria-label="Régua do tempo"></canvas>
+        <div class="trilhas-cabecalhos" id="cabecalhos"></div>
+        <div class="trilhas-rolagem" id="rolagem" tabindex="0" aria-label="Clipes">
+          <div class="trilhas-espaco" id="espaco"></div>
+          <canvas id="pistas" class="pistas"></canvas>
+        </div>
+        <div class="dica-vazia lnux-vazio" id="dica-vazia">
+          <span id="dica-icone"></span>
+          <div><strong>Comece gravando ou importando um áudio.</strong><br>
+          Arraste arquivos para cá, use <em>Importar áudio</em> ou aperte <kbd>R</kbd> para gravar pelo microfone.</div>
+        </div>
+      </section>
+
+      <div class="lnux-divisor" data-divisor="vertical" data-alvo="#propriedades" data-lado="depois" data-min="220" data-max="520"></div>
+
+      <aside class="lnux-painel propriedades" id="propriedades" aria-label="Propriedades">
+        <div class="lnux-painel-cabeca"><span id="titulo-propriedades">Propriedades</span></div>
+        <div class="lnux-painel-corpo" id="corpo-propriedades"></div>
+      </aside>
+    </div>
+
+    <div class="lnux-divisor" data-divisor="horizontal" data-alvo="#mixer" data-lado="depois" data-min="150" data-max="460" id="divisor-mixer"></div>
+    <section class="lnux-painel mixer" id="mixer" aria-label="Mixer">
+      <div class="lnux-painel-cabeca">Mixer<span class="espaco"></span><span class="fraco" style="text-transform:none;font-weight:400">volume, pan, mudo, solo e efeitos de cada trilha</span></div>
+      <div class="canais" id="canais"></div>
+    </section>
+  </div>
+
+  <script src="../../comum/lnux.js"></script>
+  <script src="../../comum/zip.js"></script>
+  <script src="motor.js"></script>
+  <script src="som.js"></script>
+</body>
+</html>

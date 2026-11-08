@@ -1,0 +1,61 @@
+{
+  "esquema": "lnux-apps/1",
+  "comentario": "Catálogo dos apps. A página inicial e o LNUX (🌐 Apps Web) leem este arquivo. ponte: 'nao' (não usa), 'opcional' (funciona sem, mas faz mais com ela) ou 'necessaria'. estado: 'pronto' ou 'planejado'.",
+  "categorias": ["Vídeo e som", "Programação", "Mensagens", "Escritório", "Imagem", "Design e técnico", "Inteligência artificial"],
+  "apps": [
+    {
+      "id": "video", "nome": "Vídeo", "icone": "video", "categoria": "Vídeo e som", "caminho": "apps/video/", "estado": "pronto",
+      "descricao": "Editor de vídeo com linha do tempo de várias trilhas: cortar, aparar, cor, transições, títulos, legendas e exportar.",
+      "ponte": "opcional", "com_ponte": "abre vídeos das pastas do aparelho e exporta em MP4 pelo ffmpeg",
+      "inspirado": { "nome": "FilmCraft", "url": "https://github.com/storytold/filmcraft", "licenca": "MIT OR Apache-2.0", "autores": "ArtCraft Team e os colaboradores do FilmCraft" }
+    },
+    {
+      "id": "efeitos", "nome": "Efeitos", "icone": "efeito", "categoria": "Vídeo e som", "caminho": "apps/efeitos/", "estado": "pronto",
+      "descricao": "Animação de títulos e gráficos: camadas, quadros-chave com suavização, animações prontas, efeitos e modos de mistura.",
+      "ponte": "opcional", "com_ponte": "salva nas pastas do aparelho e exporta em MP4 pelo ffmpeg",
+      "inspirado": { "nome": "EffectCraft", "url": "https://github.com/storytold/effectcraft", "licenca": "MIT OR Apache-2.0", "autores": "ArtCraft Team e os colaboradores do EffectCraft" }
+    },
+    {
+      "id": "som", "nome": "Som", "icone": "onda", "categoria": "Vídeo e som", "caminho": "apps/som/", "estado": "pronto",
+      "descricao": "Estúdio de áudio multipistas: gravar pelo microfone, editar clipes, mixer com EQ, compressor, eco e reverb, metrônomo.",
+      "ponte": "opcional", "com_ponte": "abre e salva nas pastas do aparelho e exporta em MP3, OGG, FLAC e M4A pelo ffmpeg",
+      "inspirado": { "nome": "SoundCraft", "url": "https://github.com/storytold/soundcraft", "licenca": "MIT OR Apache-2.0", "autores": "ArtCraft Team e os colaboradores do SoundCraft" }
+    },
+    { "id": "codigo", "nome": "Código", "icone": "comando", "categoria": "Programação", "caminho": "apps/codigo/", "estado": "planejado",
+      "descricao": "Editor de código no navegador (Monaco): abas, explorador de arquivos, cores por linguagem, paleta de comandos e terminal.", "ponte": "opcional" },
+    { "id": "vlc-web", "nome": "VLC-Web", "icone": "play", "categoria": "Vídeo e som", "caminho": "apps/vlc-web/", "estado": "planejado",
+      "descricao": "Player de vídeo e música: listas, legendas, velocidade, equalizador e as pastas do aparelho pela ponte.", "ponte": "opcional" },
+    { "id": "papo", "nome": "Papo", "icone": "texto", "categoria": "Mensagens", "caminho": "apps/papo/", "estado": "planejado",
+      "descricao": "Conversas e grupos, com cadastro por telefone ou e-mail e código de verificação.", "ponte": "necessaria" },
+    { "id": "praca", "nome": "Praça", "icone": "camadas", "categoria": "Mensagens", "caminho": "apps/praca/", "estado": "planejado",
+      "descricao": "Comunidades com canais de texto, cargos e menções, com cadastro por telefone ou e-mail.", "ponte": "necessaria" },
+    { "id": "texto", "nome": "Texto", "icone": "arquivo", "categoria": "Escritório", "caminho": "apps/texto/", "estado": "planejado",
+      "descricao": "Processador de texto.", "ponte": "opcional", "inspirado": { "nome": "WordCraft", "url": "https://github.com/storytold/wordcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "planilha", "nome": "Planilha", "icone": "layout", "categoria": "Escritório", "caminho": "apps/planilha/", "estado": "planejado",
+      "descricao": "Planilhas com fórmulas.", "ponte": "opcional", "inspirado": { "nome": "GridCraft", "url": "https://github.com/storytold/gridcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "apresentacao", "nome": "Apresentação", "icone": "tela", "categoria": "Escritório", "caminho": "apps/apresentacao/", "estado": "planejado",
+      "descricao": "Slides e apresentações.", "ponte": "opcional", "inspirado": { "nome": "DeckCraft", "url": "https://github.com/storytold/deckcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "pdf", "nome": "PDF", "icone": "arquivo", "categoria": "Escritório", "caminho": "apps/pdf/", "estado": "planejado",
+      "descricao": "Ler, organizar e juntar PDFs.", "ponte": "opcional", "inspirado": { "nome": "PdfCraft", "url": "https://github.com/storytold/pdfcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "foto", "nome": "Foto", "icone": "imagem", "categoria": "Imagem", "caminho": "apps/foto/", "estado": "planejado",
+      "descricao": "Editor de fotos com camadas.", "ponte": "opcional", "inspirado": { "nome": "PhotoCraft", "url": "https://github.com/storytold/photocraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "vetor", "nome": "Vetor", "icone": "estrela", "categoria": "Imagem", "caminho": "apps/vetor/", "estado": "planejado",
+      "descricao": "Desenho vetorial.", "ponte": "opcional", "inspirado": { "nome": "VectorCraft", "url": "https://github.com/storytold/vectorcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "revelacao", "nome": "Revelação", "icone": "cor", "categoria": "Imagem", "caminho": "apps/revelacao/", "estado": "planejado",
+      "descricao": "Biblioteca e revelação de fotos.", "ponte": "opcional", "inspirado": { "nome": "LightCraft", "url": "https://github.com/storytold/lightcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "animacao", "nome": "Animação", "icone": "particulas", "categoria": "Imagem", "caminho": "apps/animacao/", "estado": "planejado",
+      "descricao": "Animação 2D quadro a quadro e com interpolação.", "ponte": "opcional", "inspirado": { "nome": "AniCraft", "url": "https://github.com/storytold/AniCraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "diagramacao", "nome": "Diagramação", "icone": "layout", "categoria": "Design e técnico", "caminho": "apps/diagramacao/", "estado": "planejado",
+      "descricao": "Páginas e publicações.", "ponte": "opcional", "inspirado": { "nome": "DesignCraft", "url": "https://github.com/storytold/designcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "interface", "nome": "Interface", "icone": "tela", "categoria": "Design e técnico", "caminho": "apps/interface/", "estado": "planejado",
+      "descricao": "Telas de apps e protótipos.", "ponte": "opcional", "inspirado": { "nome": "FigCraft", "url": "https://github.com/storytold/figcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "cad", "nome": "CAD", "icone": "forma", "categoria": "Design e técnico", "caminho": "apps/cad/", "estado": "planejado",
+      "descricao": "Desenho técnico.", "ponte": "opcional", "inspirado": { "nome": "CADCraft", "url": "https://github.com/storytold/cadcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "textura", "nome": "Textura", "icone": "camadas", "categoria": "Design e técnico", "caminho": "apps/textura/", "estado": "planejado",
+      "descricao": "Pintura de texturas em 3D.", "ponte": "opcional", "inspirado": { "nome": "TextureCraft", "url": "https://github.com/storytold/texturecraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "material", "nome": "Material", "icone": "cor", "categoria": "Design e técnico", "caminho": "apps/material/", "estado": "planejado",
+      "descricao": "Materiais procedurais com nós.", "ponte": "opcional", "inspirado": { "nome": "MaterialCraft", "url": "https://github.com/storytold/materialcraft", "licenca": "MIT OR Apache-2.0" } },
+    { "id": "estudio-ia", "nome": "Estúdio IA", "icone": "ia", "categoria": "Inteligência artificial", "caminho": "apps/estudio-ia/", "estado": "planejado",
+      "descricao": "Criar imagens com IA usando a sua chave (Gemini ou ChatGPT).", "ponte": "necessaria", "inspirado": { "nome": "ArtCraft", "url": "https://github.com/storytold/artcraft", "licenca": "MIT OR Apache-2.0" } }
+  ]
+}

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LNUX-APPs</title>
+  <meta name="description" content="Apps web do LNUX: vídeo, som, efeitos e mais, no navegador.">
+  <link rel="stylesheet" href="comum/lnux.css">
+  <style>
+    body { overflow: auto; }
+    .pagina { max-width: 1180px; margin: 0 auto; padding: 18px 16px 48px; }
+    .cabeca { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+    .cabeca h1 { margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 10px; }
+    .cabeca h1 svg { width: 30px; height: 30px; color: var(--destaque); }
+    .cabeca .espaco { flex: 1; }
+    .cabeca .busca { width: min(320px, 100%); }
+    .filtros { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 18px; }
+    .filtros button { height: 30px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--borda); background: var(--painel); color: var(--texto-2); cursor: pointer; }
+    .filtros button[aria-pressed="true"] { background: var(--destaque); border-color: var(--destaque); color: var(--destaque-texto); }
+    h2.categoria { margin: 26px 0 10px; font-size: .95rem; color: var(--texto-2); text-transform: uppercase; letter-spacing: .05em; }
+    .grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+    .cartao {
+      position: relative; display: grid; grid-template-rows: auto 1fr auto; gap: 8px; padding: 16px;
+      border: 1px solid var(--borda); border-radius: var(--raio-g); background: var(--painel);
+      color: var(--texto); text-decoration: none; transition: border-color .12s, transform .12s;
+    }
+    a.cartao:hover { border-color: var(--destaque); transform: translateY(-1px); }
+    .cartao .topo { display: flex; align-items: center; gap: 10px; }
+    .cartao .simbolo { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--destaque-suave); color: var(--destaque); flex-shrink: 0; }
+    .cartao .simbolo svg { width: 22px; height: 22px; }
+    .cartao h3 { margin: 0; font-size: 1.05rem; }
+    .cartao p { margin: 0; color: var(--texto-2); }
+    .cartao .rodape { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .85em; color: var(--texto-3); }
+    .etiqueta { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 99px; background: var(--painel-2); border: 1px solid var(--borda); color: var(--texto-2); white-space: nowrap; }
+    .etiqueta.ponte { border-color: var(--destaque); color: var(--destaque); }
+    .cartao.planejado { opacity: .55; }
+    .cartao.planejado .simbolo { background: var(--painel-2); color: var(--texto-3); }
+    .aviso-ponte { margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--borda); border-left: 4px solid var(--aviso); border-radius: var(--raio-g); background: var(--painel); color: var(--texto-2); }
+    .aviso-ponte code { font-family: var(--fonte-mono); color: var(--texto); }
+    footer { margin-top: 36px; color: var(--texto-3); font-size: .9em; }
+    .vazio { padding: 30px; text-align: center; color: var(--texto-3); }
+  </style>
+</head>
+<body>
+  <main class="pagina">
+    <header class="cabeca">
+      <h1><span id="logo"></span>LNUX-APPs</h1>
+      <span class="espaco"></span>
+      <input class="lnux-entrada busca" id="busca" type="search" placeholder="Procurar app..." aria-label="Procurar app">
+      <span id="selo"></span>
+      <button class="lnux-botao" id="aparencia" type="button">Aparência</button>
+    </header>
+
+    <div class="aviso-ponte" id="aviso-ponte" hidden></div>
+    <nav class="filtros" id="filtros" aria-label="Categorias"></nav>
+    <div id="lista"></div>
+
+    <footer>
+      Apps em HTML, CSS e JavaScript, que funcionam sozinhos no navegador. Com a ponte local
+      (<code>servidor/lnux_apps.py</code>, aberta pelo LNUX em 🌐 Apps Web), eles também usam as pastas do aparelho e o ffmpeg.
+      Vários são reescritas próprias, bem mais simples, dos Crafting Apps da storytold (licença MIT ou Apache-2.0):
+      <a href="CREDITOS.md">créditos</a>.
+    </footer>
+  </main>
+
+  <script src="comum/lnux.js"></script>
+  <script>
+    "use strict";
+    const { el, icone } = LNUX;
+    document.getElementById("logo").innerHTML = icone("camadas");
+    document.getElementById("aparencia").addEventListener("click", () => LNUX.aparencia());
+    document.getElementById("selo").append(LNUX.ponte.selo());
+
+    let catalogo = { apps: [], categorias: [] };
+    let categoria = LNUX.preferencia.ler("lnux.inicio.categoria", "todas");
+
+    function desenhar() {
+      const q = document.getElementById("busca").value.trim().toLowerCase();
+      const filtros = document.getElementById("filtros");
+      const cats = ["todas", ...catalogo.categorias];
+      filtros.replaceChildren(...cats.map((c) => el("button", {
+        type: "button", "aria-pressed": String(c === categoria),
+        onclick: () => { categoria = c; LNUX.preferencia.gravar("lnux.inicio.categoria", c); desenhar(); },
+      }, c === "todas" ? "Todos" : c)));
+
+      const lista = document.getElementById("lista");
+      lista.replaceChildren();
+      const visiveis = catalogo.apps.filter((a) => (categoria === "todas" || a.categoria === categoria)
+        && (!q || `${a.nome} ${a.descricao} ${a.categoria} ${a.inspirado ? a.inspirado.nome : ""}`.toLowerCase().includes(q)));
+      // Os prontos primeiro; dentro disso, na ordem das categorias
+      for (const estado of ["pronto", "planejado"]) {
+        const deste = visiveis.filter((a) => a.estado === estado);
+        if (!deste.length) continue;
+        lista.append(el("h2", { class: "categoria" }, estado === "pronto" ? "Prontos para usar" : "Em breve"));
+        lista.append(el("div", { class: "grade" }, deste.map(cartao)));
+      }
+      if (!visiveis.length) lista.append(el("div", { class: "vazio" }, "Nenhum app com esse nome."));
+    }
+
+    function cartao(a) {
+      const pronto = a.estado === "pronto";
+      const etiquetas = [el("span", { class: "etiqueta" }, a.categoria)];
+      if (a.ponte === "necessaria") etiquetas.push(el("span", { class: "etiqueta ponte", title: "Precisa da ponte local" }, "precisa da ponte"));
+      else if (a.ponte === "opcional") etiquetas.push(el("span", { class: "etiqueta", title: a.com_ponte ? "Com a ponte: " + a.com_ponte : "Faz mais com a ponte local" }, "usa a ponte se tiver"));
+      if (a.inspirado) etiquetas.push(el("span", {}, "inspirado no " + a.inspirado.nome));
+      const conteudo = [
+        el("div", { class: "topo" }, el("span", { class: "simbolo", html: icone(a.icone) }), el("h3", {}, a.nome)),
+        el("p", {}, a.descricao),
+        el("div", { class: "rodape" }, etiquetas),
+      ];
+      return pronto
+        ? el("a", { class: "cartao", href: a.caminho }, conteudo)
+        : el("div", { class: "cartao planejado", "aria-disabled": "true", title: "Ainda não está pronto" }, conteudo);
+    }
+
+    document.getElementById("busca").addEventListener("input", desenhar);
+
+    fetch("apps.json", { cache: "no-cache" })
+      .then((r) => r.json())
+      .then((dados) => { catalogo = dados; if (categoria !== "todas" && !catalogo.categorias.includes(categoria)) categoria = "todas"; desenhar(); })
+      .catch(() => {
+        document.getElementById("lista").append(el("div", { class: "vazio" },
+          "Não deu para ler a lista de apps. Esta página precisa ser aberta por um servidor (python3 servidor/lnux_apps.py), e não direto do arquivo."));
+      });
+
+    LNUX.ponte.verificar().then((ligada) => {
+      if (ligada) return;
+      const aviso = document.getElementById("aviso-ponte");
+      aviso.hidden = false;
+      aviso.innerHTML = "Sem a ponte local (" + LNUX.escapar(LNUX.ponte.motivo || "desligada") + "): os apps funcionam, mas só com o que o navegador oferece. " +
+        "Para abrir e salvar nas pastas do aparelho e converter com o ffmpeg, abra pelo LNUX (🌐 Apps Web) ou rode <code>python3 servidor/lnux_apps.py --abrir</code>.";
+    });
+  </script>
+</body>
+</html>
