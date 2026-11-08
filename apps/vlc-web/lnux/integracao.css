@@ -1,0 +1,29 @@
+/* VLC Web no LNUX-APPs — janelas da integração com a ponte (usam as variáveis dos temas do VLC Web) */
+
+.lnux-pastas .win-body, .lnux-salvar .win-body { display: flex; flex-direction: column; gap: 8px; }
+.lnux-barra { display: flex; gap: 6px; align-items: center; }
+.lnux-barra input { flex: 1; min-width: 0; }
+.lnux-atalhos { display: flex; flex-wrap: wrap; gap: 4px; }
+.lnux-lista { flex: 1; min-height: 160px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel, var(--bg)); outline: none; }
+.lnux-lista:focus-visible { border-color: var(--accent); }
+.lnux-lista.carregando { opacity: .55; }
+.lnux-item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; cursor: pointer; user-select: none; border-bottom: 1px solid transparent; }
+.lnux-item:hover { background: var(--hover); }
+.lnux-item.sel { background: var(--sel); }
+.lnux-item .ico { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.lnux-item.pasta .ico { color: var(--accent); }
+.lnux-item .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lnux-item .t { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.lnux-vazio { padding: 16px; color: var(--muted); text-align: center; }
+.lnux-pe { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+.lnux-pe .lnux-info { flex: 1; }
+.lnux-opcoes { display: flex; gap: 12px; }
+.lnux-opcoes label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.lnux-quebra { word-break: break-all; color: var(--muted); }
+.lnux-selo { opacity: .75; }
+.lnux-selo.ligada { opacity: 1; color: var(--ok); }
+.lnux-selo.ligada::before { content: "●"; margin-right: 4px; font-size: 9px; vertical-align: 1px; }
+@media (max-width: 600px) {
+  .lnux-pastas { height: calc(100vh - 24px) !important; }
+  .lnux-opcoes { width: 100%; }
+}

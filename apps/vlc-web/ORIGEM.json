@@ -1,0 +1,17 @@
+{
+  "repositorio": "https://github.com/Gustavo-HVF/VLC-WEB",
+  "commit": "43dcb755fea7f56af04da0051ce0e8a8d1eb00d5",
+  "importado_em": "2026-11-08",
+  "copiados": [
+    "index.html",
+    "receiver.html",
+    "manifest.webmanifest",
+    "favicon.ico",
+    "README.md",
+    "css",
+    "js",
+    "vendor",
+    "assets"
+  ],
+  "nota": "Não edite os arquivos copiados: a integração fica em lnux/. Para atualizar: python3 tools/importar_vlc_web.py"
+}
