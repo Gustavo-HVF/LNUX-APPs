@@ -5,7 +5,7 @@
   "apps": [
     {
       "id": "video", "nome": "Vídeo", "icone": "video", "categoria": "Vídeo e som", "caminho": "apps/video/", "estado": "pronto",
-      "descricao": "Editor de vídeo com linha do tempo de várias trilhas: cortar, aparar, cor, transições, títulos, legendas e exportar.",
+      "descricao": "Editor de vídeo no jeito do Premiere: Origem, ferramentas de edição, efeitos com quadros-chave, cor com curvas e escopos, mixer com LUFS, legendas e exportar.",
       "ponte": "opcional", "com_ponte": "abre vídeos das pastas do aparelho e exporta em MP4 pelo ffmpeg",
       "inspirado": { "nome": "FilmCraft", "url": "https://github.com/storytold/filmcraft", "licenca": "MIT OR Apache-2.0", "autores": "ArtCraft Team e os colaboradores do FilmCraft" }
     },

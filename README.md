@@ -7,7 +7,7 @@ transferência.
 
 | App | O que faz | Inspirado em |
 |---|---|---|
-| 🎬 **Vídeo** | Editor de vídeo com linha do tempo de várias trilhas: cortar, aparar, mover; cor (com "looks" prontos), movimento, transições, títulos animados, legendas SRT, velocidade e áudio com fades; exporta em WebM, ou MP4 e GIF pela ponte | [FilmCraft](https://github.com/storytold/filmcraft) |
+| 🎬 **Vídeo** | Editor de vídeo no jeito do Premiere: espaços de trabalho (Edição, Montagem, Cor, Efeitos, Áudio, Legendas, Celular), monitor de Origem com entrada/saída, Inserir e Sobrescrever, 11 ferramentas (ondulação, rolante, slip, slide, navalha, esticar...), 31 efeitos de vídeo e 11 de áudio com quadros-chave e gráfico de velocidade, Cor (Lumetri) com curvas, rodas, HSL e escopos, 14 transições, mixer com loudness (LUFS), legendas SRT/VTT, gráficos prontos; exporta WebM, GIF, PNG, WAV, e MP4/MP3 pela ponte | [FilmCraft](https://github.com/storytold/filmcraft) |
 | ✨ **Efeitos** | Animação de títulos e gráficos: camadas de texto, forma, partículas, imagem e vídeo; quadros-chave com suavização (freando, quicando, elástico...); 12 animações prontas, 7 modelos, "tremer", desfoque, brilho, sombra e modos de mistura; exporta GIF e PNG (no navegador), WebM, ou MP4 pela ponte | [EffectCraft](https://github.com/storytold/effectcraft) |
 | 🎚️ **Som** | Estúdio de áudio multipistas: gravar pelo microfone, importar, cortar, aparar, fades, normalizar, inverter; mixer com volume, pan, mudo e solo; EQ de 3 bandas, compressor, eco e reverb por trilha; BPM, grade e metrônomo; loop; exporta WAV (16/24 bits) e, pela ponte, MP3, OGG, Opus, FLAC e M4A, ou uma trilha por arquivo | [SoundCraft](https://github.com/storytold/soundcraft) |
 
@@ -94,26 +94,76 @@ temporários das conversões ficam em `~/.lnux-apps/tmp` e são apagados depois 
 
 | | Som | Vídeo | Efeitos |
 |---|---|---|---|
-| Tocar / pausar | Espaço | Espaço, K | Espaço |
-| Separar no cursor | S | S | — |
-| Ferramenta de corte | C | C | — |
+| Tocar / pausar | Espaço | Espaço; J, K, L (para trás, parar, para a frente; repetir acelera) | Espaço |
+| Separar no cursor | S | Ctrl+K (Ctrl+Shift+K: todas as trilhas) | — |
+| Ferramenta de corte | C | C (navalha) | — |
 | Gravar | R | — | — |
 | Loop / metrônomo | L / M | — | — |
-| Novo texto | — | T | T |
-| Marcador | — | M | — |
-| Quadro a quadro | — | ← → | ← → |
-| Quadro-chave anterior/próximo | — | — | J / K |
-| Apagar / duplicar | Del / Ctrl+D | Del (Shift+Del fecha o buraco) / Ctrl+D | Del / Ctrl+D |
-| Exportar | Ctrl+E | Ctrl+E | Ctrl+E |
+| Novo texto | — | T (ferramenta Texto) | T |
+| Marcador | — | M (Shift+M: próximo) | — |
+| Quadro a quadro | — | ← → (Shift: 5 quadros); ↑ ↓ pontos de edição | ← → |
+| Quadro-chave anterior/próximo | — | ◀ ▶ nos Controles de efeito | J / K |
+| Apagar / duplicar | Del / Ctrl+D | Del, Shift+Del (fecha o buraco); Alt+arrastar duplica | Del / Ctrl+D |
+| Exportar | Ctrl+E | Ctrl+M ou Ctrl+E (Shift+E: o quadro) | Ctrl+E |
+
+### O Vídeo em detalhe
+
+Feito a partir das funções do FilmCraft (que imita o Premiere Pro). A tela tem a **Origem**, o **monitor de
+programa**, os **Controles de efeito**, o **Projeto**, as **ferramentas**, a **linha do tempo** e os
+**medidores**, arrumados em espaços de trabalho (barra de cima: Edição, Montagem, Cor, Efeitos, Áudio,
+Legendas e gráficos; no celular, o espaço Celular, com abas embaixo).
+
+- **Montagem (edição de três pontos)**: dois cliques numa mídia do Projeto abrem a Origem; `I` e `O` marcam
+  a entrada e a saída; `,` insere (empurra o resto) e `.` sobrescreve no cursor, nas trilhas marcadas como
+  origem (botões **V** e **A** no começo de cada trilha). Botões *Vídeo* e *Áudio* escolhem levar só um dos dois.
+  Arrastar do Projeto ou da Origem para a linha do tempo também funciona (com Ctrl, insere).
+- **Sequência**: `I`/`O` na sequência marcam o trecho; `;` levanta (deixa o buraco) e `'` extrai (fecha);
+  `X` marca o clipe; marcadores coloridos com nome, comentário e duração (painel Marcadores, exporta CSV).
+- **Ferramentas**: Seleção (V), Selecionar para a frente (A), Ondulação (B), Rolante (N), Esticar
+  velocidade (R), Navalha (C), Slip (Y), Slide (U), Mão (H), Zoom (Z) e Texto (T). Encaixe (S) nos cortes, no
+  cursor e nos marcadores; seleção vinculada (o vídeo e o som do mesmo arquivo andam juntos; Alt pega só um);
+  seleção por laço; trilhas com trava, olho, mudo, solo e altura dupla (dois cliques no nome); linha **Mix**.
+- **Controles de efeito**: Movimento (posição, escala, largura da escala, rotação, ponto de ancoragem),
+  Opacidade (com 18 modos de mistura), Recorte, Tempo (velocidade), Volume e Panorama, e os efeitos do clipe
+  com o botão **fx** (liga/desliga para comparar), ordem e voltar ao padrão. O **relógio** liga a animação;
+  ◀ ◆ ▶ andam e põem quadros-chave; os valores azuis mudam arrastando; a faixa à direita mostra os
+  quadros-chave (arrastar move, botão direito escolhe Linear, Bezier, Facilitar ou Segurar); clicar no nome
+  abre o **gráfico de valor e de velocidade**.
+- **No monitor**: arrastar move o clipe escolhido, os cantos mudam a escala, a bolinha de cima gira; guias
+  de área segura; zoom e resolução de reprodução; exportar o quadro.
+- **Efeitos** (painel com busca e predefinições): Cor (Lumetri), brilho e contraste, matiz e saturação,
+  tingir, duotone, preto e branco, sépia, desfoques (gaussiano, direcional, zoom, lente), nitidez, ruído,
+  chroma key, luma key, máscara, brilho (glow), aberração cromática, VHS, posterizar, mosaico, inverter,
+  bordas, relevo, espelhar, ondulação, redemoinho, esferizar, tremer a câmera, barras de cinema e gradiente.
+  No áudio: ganho, EQ de 3 bandas, passa-alta, passa-baixa, tirar o zumbido da rede, voz mais clara,
+  compressor, limitador, eco, reverb e mono. Camadas de ajuste aplicam efeitos em tudo o que está embaixo.
+- **Cor**: correção básica (com **Auto**), criativo (looks), **curvas** RGB, **rodas de cor**
+  (sombras, meios-tons, realces), **HSL secundária** com conta-gotas e vinheta; **Escopos**: forma de onda,
+  parade RGB, vetorscópio e histograma.
+- **Transições**: dissolver, preto, branco, desfocar, empurrar, deslizar, cortina, portas, persianas,
+  relógio, íris, losango, zoom e girar; fades de áudio de potência e de ganho constantes. `Ctrl+D` e
+  `Ctrl+Shift+D` põem a padrão no corte mais perto do cursor; as bordas da transição mudam a duração.
+- **Áudio**: forma de onda nos clipes, linha amarela de volume (arrastar; Ctrl+clique cria quadro-chave),
+  **Mixer** com volume, panorama, mudo e solo por trilha e o mestre, medidores de pico e **loudness EBU R128**
+  (momentâneo, curto, integrado); exportar só o áudio com normalização para -14, -16 ou -23 LUFS.
+- **Legendas e gráficos**: painel Texto com as legendas (criar no cursor, editar, importar e exportar SRT e
+  VTT, copiar o estilo para todas); Gráficos essenciais com modelos (título, terço inferior, créditos subindo,
+  letreiro, formas, cor sólida, camada de ajuste, barras de cinema, vinheta) e o editor de texto e forma.
+- **Projeto**: pastas, ícones ou lista, rótulos de cor, busca, trocar ou reencontrar o arquivo de uma mídia;
+  Navegador de mídia (pastas do aparelho, pela ponte), Metadados, Informações e Histórico (voltar a qualquer passo).
+- **Guardar**: tudo fica no navegador, com **versões automáticas** a cada 3 minutos (Arquivo › Versões);
+  projetos da versão anterior do app são convertidos sozinhos.
 
 ## O que as versões web não fazem (ainda)
 
-São versões leves. Do que os originais têm, ficou de fora, entre outros: no **Vídeo**, edição de três pontos,
-monitor de origem, curvas e rodas de cor, máscaras, chroma key, estabilização, mixer de áudio com automação e
-intercâmbio com outros editores (XML); no **Efeitos**, Lottie, expressões em JavaScript, máscaras, 3D, pinos de
+São versões leves. Do que os originais têm, ficou de fora, entre outros: no **Vídeo**, máscaras desenhadas
+à mão e rastreamento, estabilização, remapeamento de tempo (velocidade variável) e tocar ao contrário,
+várias sequências e sequências aninhadas, multicâmera, proxies, LUTs `.cube`, trajetória de movimento
+desenhada no monitor, gravação da automação do mixer, transcrição automática da fala e intercâmbio com
+outros editores (XML/EDL/AAF); no **Efeitos**, Lottie, expressões em JavaScript, máscaras, 3D, pinos de
 marionete e parentesco entre camadas; no **Som**, MIDI e instrumentos, automação, mais de 3 bandas de EQ,
-gravação com punch-in e plugins. A exportação de vídeo é gravada enquanto toca (por isso leva o tempo do vídeo
-e pede a aba aberta na frente).
+gravação com punch-in e plugins. A exportação de vídeo (WebM/MP4) é gravada enquanto toca (por isso leva o
+tempo do vídeo e pede a aba aberta na frente); GIF, PNG e áudio são feitos quadro a quadro, sem tocar.
 
 ## Para quem mexe no código
 
@@ -125,6 +175,8 @@ comum/lnux.js         temas, layouts, menus, atalhos, paleta, diálogos, desfaze
 comum/zip.js          ZIP (salvar e abrir projetos)
 comum/gif.js          codificador de GIF animado
 apps/<id>/            cada app: index.html, CSS, motor e interface
+apps/video/           catalogo.js (efeitos e quadros-chave), edicao.js (inserir, ondulação, slip...), render.js
+                      (compositor WebGL2), audio.js (Web Audio, LUFS), linha.js, controles.js, paineis.js, video.js
 servidor/lnux_apps.py servidor + ponte local
 tests/                testes
 ```
@@ -134,6 +186,7 @@ Um app novo: crie `apps/<id>/index.html` com `comum/lnux.css` e `comum/lnux.js`,
 
 ```bash
 python3 tests/testar_servidor.py     # a ponte: chave, DNS rebinding, pastas liberadas, Range, ffmpeg... (só Python)
+node tests/testar_edicao.js          # a álgebra de edição do Vídeo (inserir, extrair, ondulação, rolante, slip, slide...)
 python3 tests/testar_navegador.py    # os apps no Chromium de verdade (precisa do Node + Playwright e do ffmpeg)
 ```
 

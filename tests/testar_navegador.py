@@ -12,7 +12,7 @@ Precisa de: Node.js com o Playwright (npm i -g playwright; npx playwright instal
 para conferir os GIF/PNG, o Pillow do Python (pip install pillow).
 
 Uso:
-    python3 tests/testar_navegador.py              # os três apps
+    python3 tests/testar_navegador.py              # todos (som, vídeo, compositor e áudio do vídeo, efeitos)
     python3 tests/testar_navegador.py som video    # só alguns
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-APPS = ["som", "video", "efeitos"]
+APPS = ["som", "video", "render", "audio", "efeitos"]  # render e audio: partes do Vídeo testadas sozinhas
 
 
 def porta_livre() -> int:
