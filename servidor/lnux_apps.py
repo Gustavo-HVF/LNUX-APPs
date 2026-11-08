@@ -85,6 +85,16 @@ PERFIS = {
     "m4a": (["-vn", "-c:a", "aac", "-b:a", "192k"], "m4a"),
     "flac": (["-vn", "-c:a", "flac"], "flac"),
     "wav": (["-vn", "-c:a", "pcm_s16le"], "wav"),
+    # Para TOCAR no navegador o que ele não abre (o VLC-Web usa): "faixa" escolhe a faixa de áudio (0, 1...)
+    # tocar-copia: copia a imagem (H.264, HEVC, VP9, AV1) e só converte o som para AAC — bem rápido
+    "tocar-copia": (["-map", "0:v:0?", "-map", "0:a:{faixa}?", "-sn", "-dn", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+                     "-ac", "2", "-movflags", "+faststart"], "mp4"),
+    # tocar: converte tudo (MPEG-2, VC-1, WMV, XviD...) para H.264 + AAC
+    "tocar": (["-map", "0:v:0?", "-map", "0:a:{faixa}?", "-sn", "-dn", "-c:v", "libx264", "-preset", "veryfast", "-crf", "{crf}",
+               "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k", "-ac", "2", "-movflags", "+faststart"], "mp4"),
+    # só uma faixa de áudio (para tocar junto com o vídeo, trocando o idioma) e uma legenda embutida em WebVTT
+    "faixa-audio": (["-vn", "-sn", "-dn", "-map", "0:a:{faixa}", "-c:a", "aac", "-b:a", "192k", "-ac", "2"], "m4a"),
+    "legenda-vtt": (["-vn", "-an", "-dn", "-map", "0:s:{faixa}", "-c:s", "webvtt"], "vtt"),
 }
 
 MAX_TAREFAS_JUNTAS = 2
@@ -161,6 +171,8 @@ class Ponte:
         self.token = self.config.get("token", "")
         self.comandos = bool(permitir_comandos or self.config.get("comandos"))
         self.temporarios = DADOS / "tmp"
+        if ligada:  # antes de montar a lista: na primeira vez a pasta ainda não existe e ficaria de fora
+            self.temporarios.mkdir(parents=True, exist_ok=True)
         candidatos = [HOME, self.temporarios]
         if TERMUX or Path("/storage/emulated/0").is_dir():
             candidatos += [Path("/storage/emulated/0"), Path("/sdcard")]
@@ -174,7 +186,6 @@ class Ponte:
         self.trava = threading.Lock()
         self.vagas = threading.Semaphore(MAX_TAREFAS_JUNTAS)
         if ligada:
-            self.temporarios.mkdir(parents=True, exist_ok=True)
             self.limpar_temporarios()
 
     def limpar_temporarios(self, horas: float = 24):
@@ -335,7 +346,20 @@ def info_da_midia(caminho: Path) -> dict:
     if r.returncode != 0:
         raise ErroPonte(422, "O ffprobe não reconheceu este arquivo como mídia.")
     dados = json.loads(r.stdout or "{}")
-    saida: dict = {"duracao": float(dados.get("format", {}).get("duration") or 0), "formato": dados.get("format", {}).get("format_name")}
+    saida: dict = {"duracao": float(dados.get("format", {}).get("duration") or 0), "formato": dados.get("format", {}).get("format_name"),
+                   "audios": [], "legendas": []}
+    # Todas as faixas de áudio e de legenda, na ordem de "0:a:N" e "0:s:N" (o "faixa" dos perfis de tocar)
+    textuais = {"subrip", "srt", "ass", "ssa", "webvtt", "mov_text", "text", "microdvd", "subviewer", "subviewer1", "sami", "realtext", "stl", "jacosub", "mpl2", "pjs", "vplayer"}
+    for s in dados.get("streams", []):
+        tags = s.get("tags") or {}
+        if s.get("codec_type") == "audio":
+            saida["audios"].append({"indice": len(saida["audios"]), "codec": s.get("codec_name"), "canais": s.get("channels"),
+                                    "idioma": tags.get("language"), "titulo": tags.get("title"),
+                                    "padrao": bool((s.get("disposition") or {}).get("default"))})
+        elif s.get("codec_type") == "subtitle":
+            saida["legendas"].append({"indice": len(saida["legendas"]), "codec": s.get("codec_name"), "idioma": tags.get("language"),
+                                      "titulo": tags.get("title"), "texto": s.get("codec_name") in textuais,
+                                      "forcada": bool((s.get("disposition") or {}).get("forced"))})
     for s in dados.get("streams", []):
         if s.get("codec_type") == "video" and "video" not in saida:
             fps = 0.0
@@ -370,7 +394,8 @@ class Tarefa:
         self.criada = time.time()
         args, _ = PERFIS[perfil]
         valores = {"crf": _inteiro(opcoes, "crf", 23, 0, 51), "crf_vp9": _inteiro(opcoes, "crf", 32, 0, 63),
-                   "fps": _inteiro(opcoes, "fps", 12, 1, 60), "largura": _inteiro(opcoes, "largura", 480, 16, 7680)}
+                   "fps": _inteiro(opcoes, "fps", 12, 1, 60), "largura": _inteiro(opcoes, "largura", 480, 16, 7680),
+                   "faixa": _inteiro(opcoes, "faixa", 0, 0, 99)}
         self.argumentos = [a.format(**valores) if "{" in a else a for a in args]
 
     def resumo(self) -> dict:

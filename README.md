@@ -9,9 +9,10 @@ transferência.
 |---|---|---|
 | 🎬 **Vídeo** | Editor de vídeo no jeito do Premiere: espaços de trabalho (Edição, Montagem, Cor, Efeitos, Áudio, Legendas, Celular), monitor de Origem com entrada/saída, Inserir e Sobrescrever, 11 ferramentas (ondulação, rolante, slip, slide, navalha, esticar...), 31 efeitos de vídeo e 11 de áudio com quadros-chave e gráfico de velocidade, Cor (Lumetri) com curvas, rodas, HSL e escopos, 14 transições, mixer com loudness (LUFS), legendas SRT/VTT, gráficos prontos; exporta WebM, GIF, PNG, WAV, e MP4/MP3 pela ponte | [FilmCraft](https://github.com/storytold/filmcraft) |
 | ✨ **Efeitos** | Animação de títulos e gráficos: camadas de texto, forma, partículas, imagem e vídeo; quadros-chave com suavização (freando, quicando, elástico...); 12 animações prontas, 7 modelos, "tremer", desfoque, brilho, sombra e modos de mistura; exporta GIF e PNG (no navegador), WebM, ou MP4 pela ponte | [EffectCraft](https://github.com/storytold/effectcraft) |
+| ▶️ **VLC-Web** | Player de vídeo e música completo (o [VLC Web](https://github.com/Gustavo-HVF/VLC-WEB), do mesmo autor): lista de reprodução, legendas em 10 formatos com busca online e tradução, equalizador de 10 bandas e efeitos de áudio, filtros de vídeo em WebGL, faixas de áudio, A→B, capítulos, gravação, conversão, transmissão, rádios e podcasts, 31 temas e 9 layouts. **Com a ponte**: toca direto das pastas do aparelho e usa o ffmpeg dele para AVI, WMV, MKV com AC-3/DTS, outras faixas de áudio e legendas embutidas | [VLC media player](https://www.videolan.org/vlc/) (projeto independente, sem código do VLC) |
 | 🎚️ **Som** | Estúdio de áudio multipistas: gravar pelo microfone, importar, cortar, aparar, fades, normalizar, inverter; mixer com volume, pan, mudo e solo; EQ de 3 bandas, compressor, eco e reverb por trilha; BPM, grade e metrônomo; loop; exporta WAV (16/24 bits) e, pela ponte, MP3, OGG, Opus, FLAC e M4A, ou uma trilha por arquivo | [SoundCraft](https://github.com/storytold/soundcraft) |
 
-Vêm mais: editor de código (Monaco), VLC-Web, dois sites de mensagens, escritório (texto, planilha,
+Vêm mais: editor de código (Monaco), dois sites de mensagens, escritório (texto, planilha,
 apresentação, PDF), imagem (foto, vetor, revelação, animação), design e técnico (diagramação, interface, CAD,
 texturas e materiais 3D) e um estúdio de IA. A página inicial mostra os prontos e os que estão por vir
 (lista completa em [`apps.json`](apps.json)).
@@ -53,7 +54,7 @@ padrão do Python) faz isso pelos apps, numa API em `/api/`:
 | O que | Para quê |
 |---|---|
 | Pastas e arquivos | Abrir e salvar direto nas pastas (Downloads, Músicas, Vídeos...), com uma janela de pastas própria; ler com Range (vídeos grandes tocam sem baixar inteiros) |
-| ffmpeg | Converter em segundo plano, com progresso: MP4, WebM, GIF, MP3, OGG, Opus, M4A, FLAC, WAV; e ler as informações de uma mídia (ffprobe) |
+| ffmpeg | Converter em segundo plano, com progresso: MP4, WebM, GIF, MP3, OGG, Opus, M4A, FLAC, WAV; preparar para tocar o que o navegador não abre (copiando a imagem quando dá), separar uma faixa de áudio ou uma legenda embutida; e ler as informações de uma mídia, com todas as faixas de áudio e legenda (ffprobe) |
 | Aparelho | Bateria, área de transferência, notificação, falar um texto, vibrar e dados do sistema (Termux:API no celular; /sys, wl-copy/xclip, notify-send e espeak-ng nas distros) |
 | Comandos | Rodar um programa e devolver a saída: **desligado**, a não ser que você ligue |
 
@@ -154,6 +155,31 @@ Legendas e gráficos; no celular, o espaço Celular, com abas embaixo).
 - **Guardar**: tudo fica no navegador, com **versões automáticas** a cada 3 minutos (Arquivo › Versões);
   projetos da versão anterior do app são convertidos sozinhos.
 
+### O VLC-Web e a ponte
+
+O VLC-Web é o [VLC Web](https://github.com/Gustavo-HVF/VLC-WEB) inteiro (o README dele, com todos os recursos e
+atalhos, está em [`apps/vlc-web/README.md`](apps/vlc-web/README.md)). Ele vem do repositório próprio dele sem
+mudar o código: `python3 tools/importar_vlc_web.py` copia a versão mais nova (sem o app Android) e só acrescenta
+ao `index.html` as três linhas que carregam a integração, que fica à parte em `apps/vlc-web/lnux/`. Sem a ponte, ele funciona exatamente como no site dele.
+Com a ponte (aberto pelo LNUX):
+
+- **Mídia › Abrir das pastas do aparelho** (`Ctrl+Alt+O`, ou o botão na tela inicial): navega nas pastas e toca
+  direto do aparelho, sem copiar para o navegador; dá para avançar em filmes grandes (pedidos parciais). As
+  legendas com o mesmo nome entram junto, e listas `.m3u`, `.pls` e `.xspf` da pasta também abrem.
+- **O que o navegador não toca** (AVI, WMV, FLV, MPEG-2, VOB, TS, WMA, APE...) o ffmpeg do aparelho prepara
+  antes de tocar. Em MKV e MP4 com H.264, HEVC, VP9 ou AV1 ele só troca o "envelope" e converte o som: leva
+  segundos, mesmo em filme longo. Som em AC-3, E-AC-3 ou DTS: só a faixa de áudio é convertida, e o vídeo segue.
+- **Áudio › Faixa de áudio**: as outras faixas (outro idioma, comentários) saem pelo ffmpeg do aparelho, sem
+  baixar o arquivo (no navegador puro, o VLC Web precisa baixar o arquivo inteiro e usar o FFmpeg WebAssembly).
+- **Legenda › Legendas embutidas**: separa as legendas de texto de dentro do MKV/MP4 (as de imagem, como PGS e
+  VobSub, não dá).
+- **Mídia › Converter pelo ffmpeg do aparelho**: MP4 (normal ou rápido, copiando a imagem), WebM, MP3, M4A,
+  OGG, Opus, FLAC, WAV e GIF, salvando na pasta que você escolher.
+- **Salvar** (capturas de imagem, gravações, conversões, legendas, listas) pergunta a pasta do aparelho; o
+  "Baixar pelo navegador" continua lá.
+- Na primeira vez, o tema segue o do LNUX-APPs (escuro, claro, sépia, oceano, alto contraste); depois vale o
+  que você escolher entre os 31 temas do VLC Web. *Mídia › Todos os apps* volta para a página inicial.
+
 ## O que as versões web não fazem (ainda)
 
 São versões leves. Do que os originais têm, ficou de fora, entre outros: no **Vídeo**, máscaras desenhadas
@@ -175,9 +201,11 @@ comum/lnux.js         temas, layouts, menus, atalhos, paleta, diálogos, desfaze
 comum/zip.js          ZIP (salvar e abrir projetos)
 comum/gif.js          codificador de GIF animado
 apps/<id>/            cada app: index.html, CSS, motor e interface
+apps/vlc-web/         cópia do VLC Web (não editar: tools/importar_vlc_web.py atualiza) + lnux/ (integração)
 apps/video/           catalogo.js (efeitos e quadros-chave), edicao.js (inserir, ondulação, slip...), render.js
                       (compositor WebGL2), audio.js (Web Audio, LUFS), linha.js, controles.js, paineis.js, video.js
 servidor/lnux_apps.py servidor + ponte local
+tools/                importar_vlc_web.py (traz a versão mais nova do VLC Web)
 tests/                testes
 ```
 

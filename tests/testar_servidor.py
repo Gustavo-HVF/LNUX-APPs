@@ -252,6 +252,54 @@ def _():
     assert S.json("POST", "/api/converter", json_corpo={"entrada": "~/tom.wav", "perfil": "ogg", "saida": "~/tom.ogg"})[0] == 409
 
 
+@caso("ffmpeg: lista as faixas e prepara para tocar (copiar a imagem, outra faixa de áudio, legenda embutida)")
+def _():
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        return "pulado (sem o ffmpeg)"
+    srt = CASA / "leg.srt"
+    srt.write_text("1\n00:00:00,500 --> 00:00:01,500\nOlá, legenda\n", "utf-8")
+    f = ["ffmpeg", "-loglevel", "error", "-y"]
+    # MKV com H.264, duas faixas de áudio (português em AC-3 e inglês em MP3) e uma legenda SRT
+    subprocess.run([*f, "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=2", "-f", "lavfi", "-i", "sine=frequency=300:duration=2",
+                    "-f", "lavfi", "-i", "sine=frequency=900:duration=2", "-i", str(srt), "-map", "0", "-map", "1", "-map", "2", "-map", "3",
+                    "-c:v", "libx264", "-c:a:0", "ac3", "-c:a:1", "libmp3lame", "-c:s", "srt",
+                    "-metadata:s:a:0", "language=por", "-metadata:s:a:1", "language=eng", "-metadata:s:s:0", "language=por",
+                    str(CASA / "filme.mkv")], check=True)
+    status, info, _ = S.json("GET", "/api/midia?caminho=" + q(CASA / "filme.mkv"))
+    assert status == 200 and info["video"]["codec"] == "h264", info
+    assert [a["idioma"] for a in info["audios"]] == ["por", "eng"] and info["audios"][0]["codec"] == "ac3", info["audios"]
+    assert len(info["legendas"]) == 1 and info["legendas"][0]["texto"] and info["legendas"][0]["idioma"] == "por"
+
+    def converter(perfil, opcoes):
+        status, t, _ = S.json("POST", "/api/converter", json_corpo={"entrada": "~/filme.mkv", "perfil": perfil, "opcoes": opcoes})
+        assert status == 202, t
+        for _ in range(300):
+            _, t, _ = S.json("GET", "/api/tarefas/" + t["id"])
+            if t["estado"] in ("pronto", "erro"):
+                break
+            time.sleep(0.1)
+        assert t["estado"] == "pronto", t
+        return Path(t["saida"])
+
+    def sonda(caminho):
+        r = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(caminho)], capture_output=True, text=True)
+        return json.loads(r.stdout)["streams"]
+
+    mp4 = converter("tocar-copia", {"faixa": 1})
+    fluxos = sonda(mp4)
+    assert mp4.suffix == ".mp4" and [x["codec_name"] for x in fluxos] == ["h264", "aac"], fluxos
+    assert fluxos[1]["channels"] == 2
+    m4a = converter("faixa-audio", {"faixa": 0})
+    assert [x["codec_name"] for x in sonda(m4a)] == ["aac"]
+    vtt = converter("legenda-vtt", {"faixa": 0})
+    texto = vtt.read_text("utf-8")
+    assert vtt.suffix == ".vtt" and texto.startswith("WEBVTT") and "Olá, legenda" in texto, texto
+    status, _, dados = S.pedir("GET", "/api/arquivo?caminho=" + q(vtt) + "&filename=x.vtt")
+    assert status == 200 and b"WEBVTT" in dados, (status, dados[:200])   # parâmetros a mais no endereço são ignorados
+
+
 @caso("ffmpeg: recusa formato desconhecido e entrada fora das pastas liberadas")
 def _():
     import shutil

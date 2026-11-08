@@ -28,11 +28,26 @@ Os próximos lotes vão acrescentar aqui os créditos de WordCraft, GridCraft, D
 VectorCraft, LightCraft, AniCraft, DesignCraft, FigCraft, CADCraft, TextureCraft, MaterialCraft e ArtCraft,
 conforme cada versão ficar pronta (a lista dos planejados está em `apps.json`).
 
+## VLC-Web
+
+- **Código** (`apps/vlc-web/`, menos `lnux/`): o [VLC Web](https://github.com/Gustavo-HVF/VLC-WEB), de
+  Gustavo-HVF, copiado sem mudanças por `tools/importar_vlc_web.py` (o commit de origem fica em
+  `apps/vlc-web/ORIGEM.json`). A integração com a ponte (`apps/vlc-web/lnux/`) foi escrita aqui.
+- É um projeto independente, **inspirado** no VLC media player: não usa código do VLC e não é afiliado nem
+  endossado pela VideoLAN. "VLC" e o cone são marcas da VideoLAN.
+- **Bibliotecas que vêm junto** (em `apps/vlc-web/vendor/`): [hls.js](https://github.com/video-dev/hls.js)
+  (Apache-2.0), [dash.js](https://github.com/Dash-Industry-Forum/dash.js) (BSD-3-Clause) e o carregador do
+  [ffmpeg.wasm](https://github.com/ffmpegwasm/ffmpeg.wasm) (MIT). O núcleo do FFmpeg em WebAssembly (LGPL/GPL)
+  só é baixado de cdn.jsdelivr.net quando usado sem a ponte; com a ponte, usa o `ffmpeg` do aparelho.
+- **Serviços que ele pode usar** (só quando você pede): diretório de rádios [radio-browser.info](https://www.radio-browser.info/),
+  busca de legendas no OpenSubtitles, SubDL e SubSource (com a sua chave), tradução pelo MyMemory ou
+  LibreTranslate, e fontes do Google Fonts em alguns temas (SIL OFL/Apache).
+
 ## O resto
 
 - **Código do LNUX-APPs** (`comum/`, `apps/`, `servidor/`, `tests/`): licença MIT (arquivo `LICENSE`).
 - **Ícones**: desenhos próprios, em `comum/lnux.js` (traço de 24×24).
-- **Bibliotecas de terceiros**: nenhuma no lote 1. Os apps usam só o que o navegador já tem (Canvas, WebGL2,
+- **Bibliotecas de terceiros**: nenhuma nos apps do lote 1 (as do VLC-Web estão na seção dele). Os apps usam só o que o navegador já tem (Canvas, WebGL2,
   Web Audio, MediaRecorder, IndexedDB). O codificador de GIF (`comum/gif.js`) e o ZIP (`comum/zip.js`) foram escritos
   aqui, seguindo as especificações públicas dos formatos (GIF89a e o APPNOTE do ZIP).
 - **ffmpeg** (opcional, na ponte local): não é distribuído com o LNUX-APPs; a ponte só chama o `ffmpeg`
