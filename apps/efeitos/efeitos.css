@@ -1,0 +1,90 @@
+/* Efeitos — estilo da tela */
+
+:root { --altura-linha: 30px; --largura-nomes: 230px; }
+:root[data-densidade="compacta"] { --altura-linha: 24px; }
+:root[data-densidade="confortavel"] { --altura-linha: 38px; }
+
+.area { flex: 1; min-height: 0; display: flex; }
+.visor { flex: 1; min-width: 0; background: var(--fundo); }
+.palco { flex: 1; min-height: 0; display: grid; place-items: center; padding: 12px; overflow: hidden; }
+.quadros { position: relative; }
+.quadros canvas { display: block; }
+#quadro {
+  background-color: #fff;
+  background-image: linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 20px 20px; background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  box-shadow: 0 2px 14px rgba(0,0,0,.35);
+}
+#alcas { position: absolute; inset: 0; touch-action: none; }
+.controles { display: flex; align-items: center; gap: 4px; padding: 4px 8px; border-top: 1px solid var(--borda); background: var(--painel); flex-wrap: wrap; }
+.controles .tempo { font-size: 1.15em; padding: 0 6px 0 10px; }
+.controles .espaco { flex: 1; }
+.propriedades { width: 320px; flex: 0 0 320px; }
+
+.linha { height: 260px; flex: 0 0 260px; border-top: 1px solid var(--borda); }
+.linha-grade { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--largura-nomes) 1fr; grid-template-rows: 26px 1fr; }
+.linha-topo-nomes { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-right: 1px solid var(--borda); border-bottom: 1px solid var(--borda); font-size: .85em; font-weight: 600; color: var(--texto-2); text-transform: uppercase; letter-spacing: .04em; }
+.linha-topo-nomes .espaco { flex: 1; }
+.linha-regua-caixa { overflow: hidden; border-bottom: 1px solid var(--borda); background: var(--painel); position: relative; }
+#regua { display: block; height: 26px; cursor: pointer; touch-action: none; }
+.linha-nomes { overflow: hidden; border-right: 1px solid var(--borda); background: var(--painel); }
+.linha-faixas { position: relative; overflow: auto; background: var(--trilha); outline: none; }
+.faixas-conteudo { position: relative; min-height: 100%; }
+.cabecote { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--cabecote); pointer-events: none; z-index: 3; }
+
+.nome-camada, .nome-prop { display: flex; align-items: center; gap: 4px; height: var(--altura-linha); padding: 0 6px; border-bottom: 1px solid var(--borda); cursor: pointer; user-select: none; }
+.nome-camada.escolhida { background: var(--destaque-suave); }
+.nome-camada .texto { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nome-camada .tipo { width: 18px; height: 18px; display: grid; place-items: center; color: var(--texto-3); }
+.nome-camada .tipo svg { width: 15px; height: 15px; }
+.nome-camada button, .nome-prop button { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--texto-3); cursor: pointer; display: grid; place-items: center; flex-shrink: 0; }
+.nome-camada button:hover, .nome-prop button:hover { background: var(--painel-3); color: var(--texto); }
+.nome-camada button svg, .nome-prop button svg { width: 14px; height: 14px; }
+.nome-camada .seta { transition: transform .12s; }
+.nome-camada .seta.aberta { transform: rotate(90deg); }
+.nome-prop { padding-left: 34px; color: var(--texto-2); font-size: .9em; background: var(--painel-2); }
+.nome-prop .texto { flex: 1; }
+.nome-prop .valor { font-variant-numeric: tabular-nums; color: var(--texto-3); }
+
+.faixa { position: relative; height: var(--altura-linha); border-bottom: 1px solid var(--borda); }
+.faixa.prop { background: rgba(127,127,127,.05); }
+.barra { position: absolute; top: 4px; bottom: 4px; border-radius: 5px; background: var(--cor-camada, var(--clipe-video)); opacity: .75; cursor: grab; touch-action: none; }
+.barra.escolhida { opacity: 1; box-shadow: 0 0 0 2px var(--texto); }
+.barra::before, .barra::after { content: ""; position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize; }
+.barra::before { left: 0; } .barra::after { right: 0; }
+.chave { position: absolute; top: 50%; width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; transform: rotate(45deg); background: var(--aviso); border: 1px solid rgba(0,0,0,.4); cursor: ew-resize; z-index: 2; touch-action: none; }
+.chave.resumo { width: 8px; height: 8px; margin: -4px 0 0 -4px; background: var(--texto-2); cursor: default; }
+.chave.escolhida { background: var(--destaque); box-shadow: 0 0 0 2px var(--texto); }
+
+.prop-linha { display: grid; grid-template-columns: 24px minmax(70px, 1fr) 92px auto; align-items: center; gap: 4px; min-height: 30px; }
+.prop-linha .relogio { width: 24px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--texto-3); cursor: pointer; display: grid; place-items: center; }
+.prop-linha .relogio.ligado { color: var(--aviso); }
+.prop-linha .relogio svg { width: 15px; height: 15px; }
+.prop-linha label { cursor: ew-resize; user-select: none; color: var(--texto-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; touch-action: none; }
+.prop-linha .lnux-entrada { min-height: 26px; padding: 2px 6px; }
+.prop-linha .navegar { display: flex; }
+.prop-linha .navegar button { width: 20px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--texto-3); cursor: pointer; font-size: 11px; }
+.prop-linha .navegar button:hover { color: var(--texto); }
+.prop-linha .navegar button.na-chave { color: var(--aviso); }
+
+.lista-prontas { display: grid; gap: 4px; }
+
+.abas-celular { display: none; }
+
+/* Layouts */
+:root[data-layout="animacao"] .linha { height: 46vh; flex-basis: 46vh; }
+:root[data-layout="visor"] .linha { height: 170px; flex-basis: 170px; }
+:root[data-layout="visor"] .propriedades { width: 280px; flex-basis: 280px; }
+:root[data-layout="celular"] { --largura-nomes: 132px; }
+:root[data-layout="celular"] .area { flex: 0 0 auto; flex-direction: column; }
+:root[data-layout="celular"] .area > .lnux-divisor, :root[data-layout="celular"] #divisor-linha { display: none; }
+:root[data-layout="celular"] .palco { height: 32vh; flex: 0 0 auto; padding: 4px; }
+:root[data-layout="celular"] .abas-celular { display: flex; }
+:root[data-layout="celular"] .propriedades { display: none; width: auto; flex: 1; }
+:root[data-layout="celular"] .linha { display: none; height: auto; flex: 1; }
+:root[data-layout="celular"][data-aba="linha"] .linha, :root[data-layout="celular"][data-aba="propriedades"] .propriedades { display: flex; }
+:root[data-layout="celular"][data-aba="propriedades"] .area { flex: 1; }
+:root[data-layout="celular"] .controles label { display: none; }
+:root[data-layout="celular"] .nome-camada .trava { display: none; }
+:root[data-layout="celular"] #ferramentas .lnux-botao.pequeno:not(.primario) { padding: 0 6px; }
