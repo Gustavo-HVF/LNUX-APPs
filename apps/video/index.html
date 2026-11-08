@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Vídeo · LNUX</title>
-  <meta name="description" content="Editor de vídeo no navegador: linha do tempo, cor, transições, títulos, legendas e exportação.">
+  <meta name="description" content="Editor de vídeo no navegador: linha do tempo, ferramentas de edição, efeitos com quadros-chave, cor, áudio, legendas e exportação.">
   <link rel="stylesheet" href="../../comum/lnux.css">
   <link rel="stylesheet" href="video.css">
 </head>
@@ -13,68 +13,126 @@
     <header class="lnux-topo">
       <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span>Vídeo</a>
       <nav class="lnux-menubar" aria-label="Menus"></nav>
+      <nav class="espacos" id="espacos" aria-label="Espaços de trabalho"></nav>
       <div class="lnux-titulo-doc" id="titulo-doc">Projeto sem nome</div>
       <div class="lnux-topo-acoes"></div>
     </header>
 
-    <div class="area-cima" id="area-cima">
-      <aside class="lnux-painel midias" id="painel-midias" aria-label="Mídias">
-        <div class="lnux-painel-cabeca">Mídias<span class="espaco"></span>
-          <button class="lnux-botao pequeno" id="botao-importar" type="button">Importar</button>
-          <button class="lnux-botao pequeno" id="botao-texto" type="button" title="Novo título (T)">+ Texto</button>
-        </div>
-        <div class="lnux-painel-corpo lista-midias" id="lista-midias"></div>
-      </aside>
-      <div class="lnux-divisor" data-divisor="vertical" data-alvo="#painel-midias" data-min="170" data-max="480"></div>
+    <div class="mesa" id="mesa">
+      <!-- linha de cima: painel da esquerda, programa, painel da direita -->
+      <div class="fileira cima" id="fileira-cima">
+        <section class="lnux-painel abas" id="painel-esq" data-painel="esq">
+          <div class="lnux-abas" role="tablist">
+            <button type="button" data-aba="origem">Origem</button>
+            <button type="button" data-aba="controles">Controles de efeito</button>
+            <button type="button" data-aba="mixer">Mixer de áudio</button>
+            <button type="button" data-aba="metadados">Metadados</button>
+          </div>
+          <div class="aba-corpo" data-aba="origem" id="aba-origem"></div>
+          <div class="aba-corpo" data-aba="controles" id="aba-controles"></div>
+          <div class="aba-corpo" data-aba="mixer" id="aba-mixer"></div>
+          <div class="aba-corpo" data-aba="metadados" id="aba-metadados"></div>
+        </section>
+        <div class="lnux-divisor" data-divisor="vertical" data-alvo="#painel-esq" data-min="240" data-max="900"></div>
 
-      <section class="lnux-painel monitor" aria-label="Monitor">
-        <div class="tela" id="tela">
-          <canvas id="quadro" width="1280" height="720" aria-label="Imagem do vídeo"></canvas>
-        </div>
-        <div class="controles" id="controles">
-          <span id="botoes-transporte"></span>
-          <span class="mono tempo" id="tempo">00:00:00:00</span>
-          <span class="mono fraco" id="duracao">/ 00:00:00:00</span>
-          <span class="espaco"></span>
-          <label class="lnux-alternar" title="Mostrar as áreas seguras"><input type="checkbox" id="guias"> Guias</label>
-        </div>
-      </section>
+        <section class="lnux-painel programa" id="programa" aria-label="Monitor de programa">
+          <div class="lnux-painel-cabeca">Programa<span class="espaco"></span>
+            <select class="lnux-selecao pequena" id="zoom-programa" title="Tamanho da imagem no monitor">
+              <option value="ajustar">Ajustar</option><option value="0.25">25%</option><option value="0.5">50%</option><option value="0.75">75%</option><option value="1">100%</option><option value="1.5">150%</option><option value="2">200%</option>
+            </select>
+            <select class="lnux-selecao pequena" id="resolucao" title="Resolução da reprodução (menor = mais leve)">
+              <option value="1">Completa</option><option value="0.5">1/2</option><option value="0.25">1/4</option>
+            </select>
+          </div>
+          <div class="tela" id="tela"><div class="tela-dentro" id="tela-dentro"><canvas id="quadro" width="1280" height="720" aria-label="Imagem do vídeo"></canvas><canvas id="sobreposicao" aria-hidden="true"></canvas></div></div>
+          <div class="monitor-tempos">
+            <span class="mono tempo-programa" id="tempo-programa" title="Clique para digitar um tempo">00:00:00:00</span>
+            <span class="espaco"></span>
+            <span class="mono fraco" id="duracao-programa">00:00:00:00</span>
+          </div>
+          <canvas class="regua-monitor" id="regua-programa" height="18"></canvas>
+          <div class="controles-monitor" id="controles-programa"></div>
+        </section>
 
-      <div class="lnux-divisor" data-divisor="vertical" data-alvo="#propriedades" data-lado="depois" data-min="230" data-max="520"></div>
-      <aside class="lnux-painel propriedades" id="propriedades" aria-label="Propriedades">
-        <div class="lnux-painel-cabeca" id="titulo-propriedades">Propriedades</div>
-        <div class="lnux-painel-corpo" id="corpo-propriedades"></div>
-      </aside>
+        <div class="lnux-divisor" data-divisor="vertical" data-alvo="#painel-dir" data-lado="depois" data-min="250" data-max="620"></div>
+        <section class="lnux-painel abas" id="painel-dir" data-painel="dir">
+          <div class="lnux-abas" role="tablist">
+            <button type="button" data-aba="propriedades">Propriedades</button>
+            <button type="button" data-aba="cor">Cor</button>
+            <button type="button" data-aba="graficos">Gráficos essenciais</button>
+            <button type="button" data-aba="texto">Texto</button>
+            <button type="button" data-aba="escopos">Escopos</button>
+          </div>
+          <div class="aba-corpo" data-aba="propriedades" id="aba-propriedades"></div>
+          <div class="aba-corpo" data-aba="cor" id="aba-cor"></div>
+          <div class="aba-corpo" data-aba="graficos" id="aba-graficos"></div>
+          <div class="aba-corpo" data-aba="texto" id="aba-texto"></div>
+          <div class="aba-corpo" data-aba="escopos" id="aba-escopos"></div>
+        </section>
+      </div>
+
+      <div class="lnux-divisor" data-divisor="horizontal" data-alvo="#fileira-baixo" data-lado="depois" data-min="160" data-max="900" id="divisor-meio"></div>
+
+      <!-- linha de baixo: projeto, ferramentas, linha do tempo, medidores -->
+      <div class="fileira baixo" id="fileira-baixo">
+        <section class="lnux-painel abas" id="painel-proj" data-painel="proj">
+          <div class="lnux-abas" role="tablist">
+            <button type="button" data-aba="projeto">Projeto</button>
+            <button type="button" data-aba="navegador">Navegador de mídia</button>
+            <button type="button" data-aba="efeitos">Efeitos</button>
+            <button type="button" data-aba="marcadores">Marcadores</button>
+            <button type="button" data-aba="info">Informações</button>
+            <button type="button" data-aba="historico">Histórico</button>
+          </div>
+          <div class="aba-corpo" data-aba="projeto" id="aba-projeto"></div>
+          <div class="aba-corpo" data-aba="navegador" id="aba-navegador"></div>
+          <div class="aba-corpo" data-aba="efeitos" id="aba-efeitos"></div>
+          <div class="aba-corpo" data-aba="marcadores" id="aba-marcadores"></div>
+          <div class="aba-corpo" data-aba="info" id="aba-info"></div>
+          <div class="aba-corpo" data-aba="historico" id="aba-historico"></div>
+        </section>
+        <div class="lnux-divisor" data-divisor="vertical" data-alvo="#painel-proj" data-min="220" data-max="800"></div>
+        <nav class="ferramentas" id="ferramentas" aria-label="Ferramentas"></nav>
+        <section class="lnux-painel linha-do-tempo" id="linha-do-tempo" aria-label="Linha do tempo">
+          <div class="linha-topo">
+            <span class="mono tempo-linha" id="tempo-linha">00:00:00:00</span>
+            <span id="botoes-linha"></span>
+            <span class="espaco"></span>
+            <span id="zoom-linha"></span>
+          </div>
+          <div class="editor">
+            <div class="canto"></div>
+            <canvas id="regua" class="regua"></canvas>
+            <div class="cabecalhos" id="cabecalhos"></div>
+            <div class="rolagem" id="rolagem" tabindex="0" aria-label="Clipes">
+              <div class="espaco-rolagem" id="espaco"></div>
+              <canvas id="pistas" class="pistas"></canvas>
+            </div>
+          </div>
+        </section>
+        <section class="medidores" id="medidores" aria-label="Medidores de áudio"></section>
+      </div>
     </div>
 
     <div class="abas-celular lnux-abas" id="abas-celular" role="tablist">
-      <button type="button" data-aba="linha" aria-selected="true">Linha do tempo</button>
-      <button type="button" data-aba="midias" aria-selected="false">Mídias</button>
-      <button type="button" data-aba="propriedades" aria-selected="false">Propriedades</button>
+      <button type="button" data-movel="linha" aria-selected="true">Linha do tempo</button>
+      <button type="button" data-movel="projeto" aria-selected="false">Projeto</button>
+      <button type="button" data-movel="controles" aria-selected="false">Efeitos do clipe</button>
+      <button type="button" data-movel="efeitos" aria-selected="false">Efeitos</button>
+      <button type="button" data-movel="cor" aria-selected="false">Cor</button>
     </div>
-
-    <div class="lnux-divisor" data-divisor="horizontal" data-alvo="#linha-do-tempo" data-lado="depois" data-min="140" data-max="640" id="divisor-linha"></div>
-    <section class="lnux-painel linha-do-tempo" id="linha-do-tempo" aria-label="Linha do tempo">
-      <div class="lnux-ferramentas barra-linha">
-        <span id="botoes-edicao"></span>
-        <span class="espaco"></span>
-        <span id="botoes-zoom"></span>
-      </div>
-      <div class="editor">
-        <div class="canto"></div>
-        <canvas id="regua" class="regua"></canvas>
-        <div class="cabecalhos" id="cabecalhos"></div>
-        <div class="rolagem" id="rolagem" tabindex="0" aria-label="Clipes">
-          <div class="espaco-rolagem" id="espaco"></div>
-          <canvas id="pistas" class="pistas"></canvas>
-        </div>
-      </div>
-    </section>
   </div>
 
   <script src="../../comum/lnux.js"></script>
   <script src="../../comum/zip.js"></script>
-  <script src="motor.js"></script>
+  <script src="../../comum/gif.js"></script>
+  <script src="catalogo.js"></script>
+  <script src="edicao.js"></script>
+  <script src="render.js"></script>
+  <script src="audio.js"></script>
+  <script src="linha.js"></script>
+  <script src="controles.js"></script>
+  <script src="paineis.js"></script>
   <script src="video.js"></script>
 </body>
 </html>

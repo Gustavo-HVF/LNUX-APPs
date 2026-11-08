@@ -911,16 +911,20 @@
     const escolhidos = new Set();
     let ocultos = false;
 
+    let pedido = 0; // só vale a resposta do último pedido (respostas atrasadas não trocam a pasta)
     const ir = async (caminho) => {
+      const meu = ++pedido;
       try {
         const r = await ponte.listar(caminho, ocultos);
+        if (meu !== pedido) return;
         atual = r.caminho;
         itens = r.itens;
         escolhidos.clear();
-        campoCaminho.value = atual;
+        // não apaga o que a pessoa está digitando no campo (a primeira listagem pode chegar depois)
+        if (!digitando) campoCaminho.value = atual;
         gravarPreferencia("lnux.ponte.ultima-pasta", atual);
         desenhar();
-      } catch (e) { LNUX.erro(e); }
+      } catch (e) { if (meu === pedido) LNUX.erro(e); }
     };
     const desenhar = () => {
       const linhas = [];
@@ -948,7 +952,9 @@
       lista.replaceChildren(...linhas);
     };
     const r_pai = () => atual.replace(/\/[^/]+\/?$/, "") || "/";
-    campoCaminho.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); ir(campoCaminho.value); } });
+    let digitando = false;
+    campoCaminho.addEventListener("input", () => { digitando = true; });
+    campoCaminho.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); digitando = false; ir(campoCaminho.value); } });
 
     const atalhosPastas = el("div", { class: "atalhos" });
     for (const [rotulo, caminho] of Object.entries(estado.pastas || {})) {
@@ -967,7 +973,7 @@
       }, "Nova pasta"));
     }
 
-    raiz.append(el("div", { class: "caminho" }, campoCaminho, el("button", { class: "lnux-botao", type: "button", onclick: () => ir(campoCaminho.value) }, "Ir")), atalhosPastas, lista);
+    raiz.append(el("div", { class: "caminho" }, campoCaminho, el("button", { class: "lnux-botao", type: "button", onclick: () => { digitando = false; ir(campoCaminho.value); } }, "Ir")), atalhosPastas, lista);
     if (campoNome) raiz.append(el("label", { class: "lnux-campo" }, el("span", {}, "Nome do arquivo"), campoNome));
     ir(atual);
     return {
