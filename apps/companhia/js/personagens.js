@@ -148,6 +148,7 @@
 
   C.apagarPersonagem = async function (id) {
     await LNUX.guardado.apagar(chave(id));
+    for (const k of await LNUX.guardado.chaves("companhia:tex:" + id + ":")) await LNUX.guardado.apagar(k); // cópias reduzidas das texturas
     await LNUX.guardado.gravar(LISTA, (await lista()).filter((x) => x.id !== id));
   };
 
