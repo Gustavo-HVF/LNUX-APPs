@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Companhia · LNUX</title>
+  <meta name="description" content="Converse com personagens Live2D (como os do VTube Studio): chat com IA, voz, expressões, toques e memória no aparelho.">
+  <link rel="stylesheet" href="../../comum/lnux.css">
+  <link rel="stylesheet" href="companhia.css">
+</head>
+<body>
+  <div class="lnux-app">
+    <header class="lnux-topo">
+      <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span>Companhia</a>
+      <nav class="lnux-menubar" aria-label="Menus"></nav>
+      <div class="lnux-titulo-doc" id="titulo-doc">Sem personagem</div>
+      <div class="lnux-topo-acoes"></div>
+    </header>
+
+    <div class="area" id="area">
+      <section class="palco-area sem-personagem" id="palco-area" aria-label="Personagem">
+        <div class="palco" id="palco" aria-label="Personagem: toque para interagir"></div>
+        <svg class="zonas" id="zonas" aria-hidden="true"></svg>
+        <div class="efeitos" id="efeitos" aria-hidden="true"></div>
+
+        <div class="palco-topo">
+          <span class="chip" id="chip-emocao" title="Emoção agora">Neutra</span>
+          <span class="chip afeto" id="chip-afeto" title="Afeto (sobe com carinho e conversa, desce com provocação)"><span class="coracao">♥</span><span class="barra"><span id="afeto-barra"></span></span></span>
+          <span class="espaco"></span>
+          <div class="lnux-segmentos pequeno" id="enquadramento" role="group" aria-label="Enquadramento">
+            <button type="button" data-modo="rosto">Rosto</button><button type="button" data-modo="busto">Busto</button><button type="button" data-modo="corpo">Corpo</button>
+          </div>
+        </div>
+
+        <div class="balao" id="balao" role="status" hidden></div>
+        <div class="atalhos" id="atalhos" role="toolbar" aria-label="Expressões"></div>
+
+        <div class="palco-vazio" id="palco-vazio">
+          <div class="cartao">
+            <h2>Sua companhia</h2>
+            <p>Importe uma personagem Live2D: o <b>ZIP</b> (ou a pasta) de um modelo do <b>VTube Studio</b> ou de qualquer modelo Cubism 3/4 (<code>.model3.json</code>).</p>
+            <div class="botoes">
+              <button class="lnux-botao primario" type="button" id="vazio-zip">Importar ZIP...</button>
+              <button class="lnux-botao" type="button" id="vazio-pasta">Importar pasta...</button>
+            </div>
+            <p class="fraco pequeno" id="vazio-dica">Dá para arrastar o ZIP para cá. A personagem fica guardada só neste aparelho.</p>
+            <div class="nucleo" id="nucleo-aviso" hidden></div>
+          </div>
+        </div>
+        <div class="palco-carregando" id="palco-carregando" hidden>Carregando...</div>
+      </section>
+
+      <div class="lnux-divisor" data-divisor="vertical" data-alvo="#conversa" data-lado="depois" data-min="260" data-max="900" id="divisor-conversa"></div>
+
+      <aside class="conversa lnux-painel" id="conversa" aria-label="Conversa">
+        <div class="lnux-painel-cabeca">
+          <span id="conversa-titulo">Conversa</span>
+          <span class="espaco"></span>
+          <span class="selo-ia" id="selo-ia" title="De onde vêm as respostas"></span>
+          <span id="botoes-conversa"></span>
+        </div>
+        <div class="mensagens" id="mensagens" aria-live="polite" tabindex="0"></div>
+        <div class="digitando" id="digitando" hidden><span></span><span></span><span></span></div>
+        <form class="entrada" id="form-entrada" autocomplete="off">
+          <button class="lnux-botao icone" type="button" id="botao-mic" title="Falar (microfone)" aria-label="Falar pelo microfone"></button>
+          <textarea class="lnux-area" id="texto" rows="1" placeholder="Escreva para ela..." aria-label="Mensagem" data-enter-proprio="1"></textarea>
+          <button class="lnux-botao primario icone" type="submit" id="botao-enviar" title="Enviar (Enter)" aria-label="Enviar"></button>
+        </form>
+        <div class="conversa-rodape">
+          <label class="lnux-alternar" title="A personagem fala as respostas"><input type="checkbox" id="opcao-falar"> Falar</label>
+          <label class="lnux-alternar" title="Depois que ela fala, o microfone abre sozinho"><input type="checkbox" id="opcao-maos-livres"> Mãos livres</label>
+          <span class="espaco"></span>
+          <span class="fraco mono" id="gasto" title="Tokens estimados nesta sessão"></span>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- comum -->
+  <script src="../../comum/lnux.js"></script>
+  <script src="../../comum/zip.js"></script>
+  <!-- desenho (o pixi-live2d-display e o núcleo do Live2D carregam depois, em C.prepararLive2D) -->
+  <script src="vendor/pixi.min.js"></script>
+  <!-- Companhia -->
+  <script src="js/live2d.js"></script>
+  <script src="js/personagens.js"></script>
+  <script src="js/ia.js"></script>
+  <script src="js/voz.js"></script>
+  <script src="js/memoria.js"></script>
+  <script src="js/reacoes.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

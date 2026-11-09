@@ -10,11 +10,12 @@ transferência.
 | 🎬 **Vídeo** | Editor de vídeo no jeito do Premiere: espaços de trabalho (Edição, Montagem, Cor, Efeitos, Áudio, Legendas, Celular), monitor de Origem com entrada/saída, Inserir e Sobrescrever, 11 ferramentas (ondulação, rolante, slip, slide, navalha, esticar...), 31 efeitos de vídeo e 11 de áudio com quadros-chave e gráfico de velocidade, Cor (Lumetri) com curvas, rodas, HSL e escopos, 14 transições, mixer com loudness (LUFS), legendas SRT/VTT, gráficos prontos; exporta WebM, GIF, PNG, WAV, e MP4/MP3 pela ponte | [FilmCraft](https://github.com/storytold/filmcraft) |
 | ✨ **Efeitos** | Animação de títulos e gráficos: camadas de texto, forma, partículas, imagem e vídeo; quadros-chave com suavização (freando, quicando, elástico...); 12 animações prontas, 7 modelos, "tremer", desfoque, brilho, sombra e modos de mistura; exporta GIF e PNG (no navegador), WebM, ou MP4 pela ponte | [EffectCraft](https://github.com/storytold/effectcraft) |
 | ▶️ **VLC-Web** | Player de vídeo e música completo (o [VLC Web](https://github.com/Gustavo-HVF/VLC-WEB), do mesmo autor): lista de reprodução, legendas em 10 formatos com busca online e tradução, equalizador de 10 bandas e efeitos de áudio, filtros de vídeo em WebGL, faixas de áudio, A→B, capítulos, gravação, conversão, transmissão, rádios e podcasts, 31 temas e 9 layouts. **Com a ponte**: toca direto das pastas do aparelho e usa o ffmpeg dele para AVI, WMV, MKV com AC-3/DTS, outras faixas de áudio e legendas embutidas | [VLC media player](https://www.videolan.org/vlc/) (projeto independente, sem código do VLC) |
+| 💬 **Companhia** | Converse com personagens **Live2D** (os modelos do **VTube Studio**: importe o ZIP e troque quando quiser): chat com **ChatGPT, Claude, Gemini**, OpenRouter, Groq, DeepSeek, Mistral, **IA local** (Ollama, LM Studio, llama.cpp) ou o **claude-code-router**, com rotas que economizam tokens e um motor local que responde o simples sem IA; **voz** (navegador, ElevenLabs, OpenAI, **VoiceStudio** no aparelho) com a boca sincronizada; 15 emoções e 12 gestos que seguem a conversa; **toques** (cafuné, cutucar, puxar a orelha, cócegas); **memória** guardada no aparelho e relida ao abrir. Detalhes em [`apps/companhia/README.md`](apps/companhia/README.md) | [AIRI](https://github.com/moeru-ai/airi), [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) e [claude-code-router](https://github.com/musistudio/claude-code-router) (só ideias) |
 | 🎚️ **Som** | Estúdio de áudio multipistas: gravar pelo microfone, importar, cortar, aparar, fades, normalizar, inverter; mixer com volume, pan, mudo e solo; EQ de 3 bandas, compressor, eco e reverb por trilha; BPM, grade e metrônomo; loop; exporta WAV (16/24 bits) e, pela ponte, MP3, OGG, Opus, FLAC e M4A, ou uma trilha por arquivo | [SoundCraft](https://github.com/storytold/soundcraft) |
 
 Vêm mais: editor de código (Monaco), dois sites de mensagens, escritório (texto, planilha,
 apresentação, PDF), imagem (foto, vetor, revelação, animação), design e técnico (diagramação, interface, CAD,
-texturas e materiais 3D) e um estúdio de IA. A página inicial mostra os prontos e os que estão por vir
+texturas e materiais 3D) e um estúdio de IA de imagem. A página inicial mostra os prontos e os que estão por vir
 (lista completa em [`apps.json`](apps.json)).
 
 Os apps inspirados nos Crafting Apps da storytold são reescritas próprias e **bem mais simples** que os
@@ -57,6 +58,7 @@ padrão do Python) faz isso pelos apps, numa API em `/api/`:
 | ffmpeg | Converter em segundo plano, com progresso: MP4, WebM, GIF, MP3, OGG, Opus, M4A, FLAC, WAV; preparar para tocar o que o navegador não abre (copiando a imagem quando dá), separar uma faixa de áudio ou uma legenda embutida; e ler as informações de uma mídia, com todas as faixas de áudio e legenda (ffprobe) |
 | Aparelho | Bateria, área de transferência, notificação, falar um texto, vibrar e dados do sistema (Termux:API no celular; /sys, wl-copy/xclip, notify-send e espeak-ng nas distros) |
 | Comandos | Rodar um programa e devolver a saída: **desligado**, a não ser que você ligue |
+| IA (Companhia) | Guardar as chaves das APIs de IA e voz no aparelho (`~/.lnux-apps/ia.json`, permissão 600) e repassar os pedidos com a chave, ao vivo (streaming): só para provedores conhecidos (OpenAI, Anthropic, Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Fireworks, Cerebras, ElevenLabs), programas do próprio aparelho (`127.0.0.1`, como Ollama e VoiceStudio) e endereços da rede que você liberar. A chave só vai para o endereço em que foi cadastrada e nunca volta ao navegador. Também guarda o núcleo do Live2D (baixado do site oficial uma vez) |
 
 **Segurança.** Escuta só no próprio aparelho (`127.0.0.1`), a não ser que você peça `--endereco 0.0.0.0`.
 Cada pedido precisa da chave guardada em `~/.lnux-apps/ponte.json` (permissão 600). Recusa nomes de domínio no
@@ -188,7 +190,8 @@ várias sequências e sequências aninhadas, multicâmera, proxies, LUTs `.cube`
 desenhada no monitor, gravação da automação do mixer, transcrição automática da fala e intercâmbio com
 outros editores (XML/EDL/AAF); no **Efeitos**, Lottie, expressões em JavaScript, máscaras, 3D, pinos de
 marionete e parentesco entre camadas; no **Som**, MIDI e instrumentos, automação, mais de 3 bandas de EQ,
-gravação com punch-in e plugins. A exportação de vídeo (WebM/MP4) é gravada enquanto toca (por isso leva o
+gravação com punch-in e plugins; na **Companhia**, modelos Live2D Cubism 2, IA rodando dentro do navegador
+(WebLLM), rastreamento pela câmera e os movimentos `.motion3.json` além do movimento parado. A exportação de vídeo (WebM/MP4) é gravada enquanto toca (por isso leva o
 tempo do vídeo e pede a aba aberta na frente); GIF, PNG e áudio são feitos quadro a quadro, sem tocar.
 
 ## Para quem mexe no código
@@ -201,6 +204,8 @@ comum/lnux.js         temas, layouts, menus, atalhos, paleta, diálogos, desfaze
 comum/zip.js          ZIP (salvar e abrir projetos)
 comum/gif.js          codificador de GIF animado
 apps/<id>/            cada app: index.html, CSS, motor e interface
+apps/companhia/       live2d.js (palco), personagens.js, ia.js (provedores, roteador, motor local), voz.js,
+                      memoria.js, reacoes.js, app.js — vendor/ tem pixi.js e pixi-live2d-display (MIT)
 apps/vlc-web/         cópia do VLC Web (não editar: tools/importar_vlc_web.py atualiza) + lnux/ (integração)
 apps/video/           catalogo.js (efeitos e quadros-chave), edicao.js (inserir, ondulação, slip...), render.js
                       (compositor WebGL2), audio.js (Web Audio, LUFS), linha.js, controles.js, paineis.js, video.js
@@ -216,6 +221,8 @@ Um app novo: crie `apps/<id>/index.html` com `comum/lnux.css` e `comum/lnux.js`,
 python3 tests/testar_servidor.py     # a ponte: chave, DNS rebinding, pastas liberadas, Range, ffmpeg... (só Python)
 node tests/testar_edicao.js          # a álgebra de edição do Vídeo (inserir, extrair, ondulação, rolante, slip, slide...)
 python3 tests/testar_navegador.py    # os apps no Chromium de verdade (precisa do Node + Playwright e do ffmpeg)
+# a Companhia precisa de um modelo e do núcleo do Live2D (não vêm no repositório):
+LNUX_TESTE_MODELO=modelo.zip LNUX_TESTE_NUCLEO=live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
 ```
 
 ## Licença

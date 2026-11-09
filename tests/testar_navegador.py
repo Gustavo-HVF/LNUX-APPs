@@ -12,8 +12,12 @@ Precisa de: Node.js com o Playwright (npm i -g playwright; npx playwright instal
 para conferir os GIF/PNG, o Pillow do Python (pip install pillow).
 
 Uso:
-    python3 tests/testar_navegador.py              # todos (som, vídeo, compositor e áudio do vídeo, efeitos, VLC-Web)
+    python3 tests/testar_navegador.py              # todos (som, vídeo, compositor e áudio do vídeo, efeitos, VLC-Web, Companhia)
     python3 tests/testar_navegador.py som video    # só alguns
+
+A Companhia precisa de um modelo Live2D e do núcleo do Live2D, que não vêm no repositório (licenças); sem eles,
+o teste dela é pulado:
+    LNUX_TESTE_MODELO=modelo.zip LNUX_TESTE_NUCLEO=live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
 """
 from __future__ import annotations
 
@@ -28,7 +32,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-APPS = ["som", "video", "render", "audio", "efeitos", "vlc"]  # render e audio: partes do Vídeo testadas sozinhas
+APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia"]  # render e audio: partes do Vídeo testadas sozinhas
 
 
 def porta_livre() -> int:
