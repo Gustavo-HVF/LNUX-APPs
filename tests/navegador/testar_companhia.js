@@ -10,7 +10,8 @@
 // parâmetros, piscar, boca, expressões sem acumular, motor local (0 tokens), memória (nome), provedor e chave
 // pela tela (a chave não vai para o navegador), resposta ao vivo com marcas [emoção][gesto], roteador (leve /
 // padrão), toques (carinho, cutucar, puxar), voz frase a frase com cache, reanálise da memória ao recarregar,
-// exportar memória, trocar de personagem, perfil, celular e sem a ponte (núcleo escolhido pela pessoa).
+// exportar memória, trocar de personagem (liberando a textura), perfil, placa de vídeo que não aguenta a textura
+// grande (a personagem ficava preta), celular e sem a ponte (núcleo escolhido pela pessoa).
 const { chromium, devices } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -24,6 +25,14 @@ const NUCLEO = process.env.LNUX_TESTE_NUCLEO || "";
 const erros = [];
 let passos = 0;
 const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { erros.push(m); console.log("  ✖ " + m); } };
+
+/** Brilho médio dos pixels opacos do palco (0 = personagem toda preta). */
+const brilho = (pg) => pg.evaluate(async () => {
+  const b = await window.Companhia.palco.foto(); const img = await createImageBitmap(b); const c = new OffscreenCanvas(img.width, img.height); const g = c.getContext("2d"); g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, img.width, img.height).data; let n = 0, s = 0;
+  for (let i = 0; i < d.length; i += 16) if (d[i + 3] > 200) { n++; s += d[i] + d[i + 1] + d[i + 2]; }
+  return n ? Math.round(s / n / 3) : 0;
+});
 
 // ── IA e voz de mentira ───────────────────────────────────────────────
 
@@ -126,6 +135,10 @@ const mock = http.createServer((req, res) => {
     ok(Object.keys(info.emocoes).length > 0, "emoções ligadas às expressões pelo nome: " + Object.entries(info.emocoes).map(([e, x]) => e + "→" + x.join("+")).join(", "));
     const pixels = await ev(async () => { const b = await window.Companhia.palco.foto(); const img = await createImageBitmap(b); const c = new OffscreenCanvas(img.width, img.height); const g = c.getContext("2d"); g.drawImage(img, 0, 0); const d = g.getImageData(0, 0, img.width, img.height).data; let n = 0; for (let i = 3; i < d.length; i += 16) if (d[i] > 0) n++; return n; });
     ok(pixels > 5000, `a personagem aparece no palco (${pixels} pixels desenhados)`);
+    const cor = await brilho(pagina);
+    ok(cor > 30, `a personagem tem cor (brilho médio ${cor}; preta seria 0)`);
+    const tex = await ev(() => ({ limite: window.Companhia.palco.limiteUsado, t: window.Companhia.palco.texturas, gpu: window.Companhia.palco.modelo.textures.map((x) => [x.baseTexture.realWidth, x.baseTexture.realHeight]) }));
+    ok(tex.gpu.every((d) => Math.max(...d) <= tex.limite), `texturas dentro do limite automático (${tex.limite} px): ` + tex.t.map((x) => x.original.join("×") + (x.usada[0] !== x.original[0] ? " → " + x.usada.join("×") : "")).join(", "));
     await pagina.screenshot({ path: path.join(PASTA, "companhia-1.png") });
 
     // ── emoções e boca nos parâmetros ──
@@ -164,7 +177,7 @@ const mock = http.createServer((req, res) => {
 
     // ── motor local (sem IA, 0 tokens) e memória ──
     let r = await enviar("oi");
-    ok(/oi/i.test(r) && !/\[/.test(r), `motor local responde "oi": ${r}`);
+    ok(/\boi|bom dia|boa tarde|boa noite/i.test(r) && !/\[/.test(r), `motor local responde "oi" (o cumprimento muda com a hora): ${r}`);
     r = await enviar("meu nome é Gustavo");
     ok(/Gustavo/.test(r), `aprende o nome: ${r}`);
     ok(await ev(() => window.Companhia.estado.pessoa) === "Gustavo", "o nome fica na memória");
@@ -317,6 +330,7 @@ const mock = http.createServer((req, res) => {
     await pagina.waitForSelector('.lnux-dialogo footer button:text-is("Importar")', { timeout: 15000 }).then(() => pagina.click('.lnux-dialogo footer button:text-is("Importar")')).catch(() => {});
     await pagina.waitForFunction(() => window.Companhia.atual && window.Companhia.atual.perfil.nome !== "Lili" && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 30000 });
     const segunda = await ev(() => ({ id: window.Companhia.atual.id, msgs: document.querySelectorAll("#mensagens .msg.eu").length }));
+    await ev(() => { window.__texturaAnterior = window.Companhia.palco.modelo.textures[0].baseTexture; });
     ok(segunda.msgs === 0, "a segunda personagem tem a própria conversa (vazia)");
     await menu("Personagem", "Trocar de personagem...");
     await pagina.waitForSelector(".cartao-personagem");
@@ -324,8 +338,55 @@ const mock = http.createServer((req, res) => {
     await pagina.click('.lnux-dialogo .cartao-personagem:has-text("Lili")');
     await pagina.waitForFunction(() => window.Companhia.atual && window.Companhia.atual.perfil.nome === "Lili" && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 30000 });
     ok(await ev(() => document.querySelectorAll("#mensagens .msg.eu").length) > 3, "voltou para a Lili, com a conversa dela");
+    ok(await ev(() => window.__texturaAnterior.destroyed === true), "trocar de personagem libera a textura da anterior (memória de vídeo)");
 
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
+
+    // ── aparelho cuja placa de vídeo não aguenta a textura grande (a personagem ficava preta) ──
+    // A placa diz aceitar 8192 px, mas falha acima de 2048 (como num celular sem memória de vídeo): a textura não
+    // sobe e fica preta. A Companhia tem de perceber, refazer com texturas menores e guardar o tamanho que funcionou.
+    const fraco = await navegador.newContext({ viewport: { width: 1100, height: 760 } });
+    await fraco.addInitScript(() => {
+      for (const P of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
+        const gp = P.getParameter, tx = P.texImage2D;
+        P.getParameter = function (q) { return q === this.MAX_TEXTURE_SIZE ? 8192 : gp.call(this, q); };
+        P.texImage2D = function (...a) {
+          const f = a[a.length - 1], w = a.length === 9 ? a[3] : f && f.width, h = a.length === 9 ? a[4] : f && f.height;
+          if (w > 2048 || h > 2048) { window.__falhasTextura = (window.__falhasTextura || 0) + 1; return; }
+          return tx.apply(this, a);
+        };
+      }
+    });
+    const pf = await fraco.newPage();
+    await pf.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pf.waitForFunction(() => window.Companhia && window.Companhia.live2d, null, { timeout: 15000 });
+    await pf.click('.lnux-menubar > button:text-is("Personagem")');
+    await pf.click('.lnux-menu button:has(.rotulo:text-is("Importar ZIP..."))');
+    await pf.waitForSelector(".lnux-dialogo");
+    const [esf] = await Promise.all([pf.waitForEvent("filechooser"), pf.click('.lnux-dialogo footer button:text-is("Escolher pelo navegador...")')]);
+    await esf.setFiles(MODELO);
+    await pf.waitForSelector('.lnux-dialogo footer button:text-is("Importar")', { timeout: 15000 }).then(() => pf.click('.lnux-dialogo footer button:text-is("Importar")')).catch(() => {});
+    await pf.waitForFunction(() => window.Companhia.atual && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 90000 });
+    await pf.waitForTimeout(800);
+    const r1 = await pf.evaluate(() => ({ limite: window.Companhia.palco.limiteUsado, qualidade: window.Companhia.atual.qualidade, falhas: window.__falhasTextura || 0,
+      aviso: [...document.querySelectorAll(".lnux-aviso")].map((a) => a.textContent).join(" ") }));
+    const corFraco = await brilho(pf);
+    const maiorOriginal = await pf.evaluate(() => Math.max(...window.Companhia.palco.texturas.map((t) => Math.max(...t.original))));
+    if (maiorOriginal > 2048) {
+      ok(r1.falhas > 0 && corFraco > 30, `textura grande demais: percebeu o preto e refez menor (${r1.limite} px, brilho ${corFraco})`);
+      ok(/grandes demais/.test(r1.aviso) && r1.qualidade === String(r1.limite), "avisa e guarda o tamanho que funcionou");
+      await pf.screenshot({ path: path.join(PASTA, "companhia-placa-fraca.png") });
+      await pf.reload();
+      await pf.waitForFunction(() => window.Companhia && window.Companhia.atual && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 60000 });
+      const r2 = await pf.evaluate(() => ({ falhas: window.__falhasTextura || 0, limite: window.Companhia.palco.limiteUsado }));
+      ok(r2.falhas === 0 && r2.limite === r1.limite && (await brilho(pf)) > 30, "ao abrir de novo, já usa o tamanho certo (sem preto e sem tentar de novo)");
+      await pf.click('.lnux-menubar > button:text-is("Exibir")');
+      await pf.click('.lnux-menu button:has(.rotulo:text-is("Qualidade das texturas..."))');
+      await pf.waitForSelector(".diag");
+      const diag = await pf.textContent(".diag");
+      ok(/8192 px/.test(diag) && /texturas ok/.test(diag), "a janela de qualidade mostra o limite da placa e a conferência");
+    } else ok(true, "(modelo de teste com texturas pequenas: o caso da placa fraca não se aplica)");
+    await fraco.close();
 
     // ── celular ──
     const cel = await navegador.newContext({ ...devices["Pixel 7"] });

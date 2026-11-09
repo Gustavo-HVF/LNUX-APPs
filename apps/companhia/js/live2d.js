@@ -150,6 +150,37 @@
     return origem;
   };
 
+  // ── Texturas: tamanho que a placa de vídeo do aparelho aguenta ─────────
+
+  /**
+   * Muitos modelos vêm com texturas enormes (o do VTube Studio, por exemplo, 4096×8192 px = 128 MB na placa de
+   * vídeo). Vários celulares só aceitam até 4096 px, ou não têm memória de vídeo para isso: a textura não sobe e a
+   * personagem aparece toda preta. As coordenadas de textura do Live2D vão de 0 a 1, então uma cópia menor da
+   * mesma imagem serve no lugar — na tela do celular a diferença quase não aparece.
+   */
+  C.QUALIDADES = [["auto", "Automática (recomendada)"], ["original", "Original (o tamanho do modelo)"], ["4096", "Alta (até 4096 px)"], ["2048", "Média (até 2048 px)"], ["1024", "Leve (até 1024 px)"]];
+  const ehCelular = () => (window.matchMedia && matchMedia("(pointer: coarse)").matches) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+
+  /** Largura e altura de uma imagem (lê só o cabeçalho, no caso do PNG). */
+  async function dimensoes(blob) {
+    const b = new Uint8Array(await blob.slice(0, 32).arrayBuffer());
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) { const v = new DataView(b.buffer); return [v.getUint32(16), v.getUint32(20)]; }
+    try { const bmp = await createImageBitmap(blob); const d = [bmp.width, bmp.height]; bmp.close(); return d; } catch (e) { return null; }
+  }
+  /** Uma cópia PNG da imagem com o lado maior = limite (mantém a proporção). */
+  async function reduzirImagem(blob, limite, [w, h]) {
+    const k = limite / Math.max(w, h), nw = Math.max(1, Math.round(w * k)), nh = Math.max(1, Math.round(h * k));
+    let bmp;
+    try { bmp = await createImageBitmap(blob, { resizeWidth: nw, resizeHeight: nh, resizeQuality: "high", premultiplyAlpha: "none" }); }
+    catch (e) { bmp = await createImageBitmap(blob); }
+    const tela = typeof OffscreenCanvas !== "undefined" ? new OffscreenCanvas(nw, nh) : Object.assign(document.createElement("canvas"), { width: nw, height: nh });
+    const g = tela.getContext("2d");
+    g.imageSmoothingQuality = "high";
+    g.drawImage(bmp, 0, 0, nw, nh);
+    bmp.close();
+    return tela.convertToBlob ? tela.convertToBlob({ type: "image/png" }) : new Promise((ok) => tela.toBlob(ok, "image/png"));
+  }
+
   // ── O palco ──────────────────────────────────────────────────────────
 
   class Palco {
@@ -178,6 +209,9 @@
       this.app = new PIXI.Application({ resizeTo: conteiner, backgroundAlpha: 0, antialias: true, autoDensity: true, resolution: Math.min(2, window.devicePixelRatio || 1), preserveDrawingBuffer: true });
       conteiner.append(this.app.view);
       this.app.view.classList.add("palco-canvas");
+      // se a placa de vídeo do aparelho reiniciar (falta de memória), o app recarrega a personagem com texturas menores
+      this.app.view.addEventListener("webglcontextlost", (e) => { e.preventDefault(); this.emit("placa-perdida"); });
+      this.app.view.addEventListener("webglcontextrestored", () => this.emit("placa-voltou"));
       new ResizeObserver(() => { this.app.resize(); this.enquadrar(); }).observe(conteiner);
     }
 
@@ -189,9 +223,20 @@
      * expressoes: [{nome, caminho}], idle: caminho do movimento parado, emocoes: {emoção: [nomes]}, ativas: [nomes],
      * enquadramento, zonas}
      */
-    async carregar(p) {
+    /** O maior lado de textura que a placa de vídeo deste aparelho aceita. */
+    maxTextura() { const gl = this.app.renderer.gl; return (gl && gl.getParameter(gl.MAX_TEXTURE_SIZE)) || 4096; }
+    /** O lado máximo das texturas para a qualidade escolhida ("auto", "original" ou um número), sem passar do limite da placa. */
+    limiteTextura(qualidade = "auto") {
+      const max = this.maxTextura();
+      if (qualidade === "original") return max;
+      if (+qualidade) return Math.min(max, +qualidade);
+      return Math.min(max, ehCelular() ? 2048 : 4096);
+    }
+
+    async carregar(p, { limite = null, tentativa = 0 } = {}) {
       this.descarregar();
       this.personagem = p;
+      limite = limite || this.limiteTextura(p.qualidade || "auto");
       const PIXI = window.PIXI;
       if (!Palco.relogio) { PIXI.live2d.Live2DModel.registerTicker(PIXI.Ticker); Palco.relogio = true; }
       const base = p.modelo.includes("/") ? p.modelo.replace(/[^/]+$/, "") : "";
@@ -202,20 +247,49 @@
       delete cfg.FileReferences.Expressions;
       if (!cfg.FileReferences.Motions && p.idle && p.arquivos.has(p.idle)) cfg.FileReferences.Motions = { Idle: [{ File: relativo(p.idle) }] };
       for (const chave of ["DisplayInfo", "UserData"]) if (cfg.FileReferences[chave] && !p.arquivos.has(base + cfg.FileReferences[chave])) delete cfg.FileReferences[chave];
+      // texturas maiores que o limite viram cópias menores (guardadas no navegador para a próxima vez)
+      const trocadas = new Map();
+      this.texturas = [];
+      const chaveCopia = p.id ? `companhia:tex:${p.id}:${limite}` : null;
+      let copias = null;
+      for (const t of cfg.FileReferences.Textures || []) {
+        const c = base + t, b = p.arquivos.get(c);
+        if (!b) continue;
+        const dim = await dimensoes(b);
+        if (!dim || Math.max(...dim) <= limite) { this.texturas.push({ arquivo: c, original: dim, usada: dim }); continue; }
+        if (copias === null) copias = (chaveCopia && (await LNUX.guardado.ler(chaveCopia))) || {};
+        if (!copias[c]) { this.emit("preparando", `Ajustando a textura ${t} (${dim.join("×")} px) para este aparelho...`); copias[c] = await reduzirImagem(b, limite, dim); copias.novas = true; }
+        trocadas.set(c, copias[c]);
+        const k = limite / Math.max(...dim);
+        this.texturas.push({ arquivo: c, original: dim, usada: dim.map((x) => Math.round(x * k)) });
+      }
+      if (copias && copias.novas && chaveCopia) { delete copias.novas; LNUX.guardado.gravar(chaveCopia, copias).catch(() => {}); }
+      this.limiteUsado = limite;
       const arquivos = [];
       const fm = new File([JSON.stringify(cfg)], p.modelo.split("/").pop());
       Object.defineProperty(fm, "webkitRelativePath", { value: p.modelo });
       arquivos.push(fm);
       for (const [c, b] of p.arquivos) {
         if (c === p.modelo) continue;
-        const f = new File([b], c.split("/").pop());
+        const f = new File([trocadas.get(c) || b], c.split("/").pop());
         Object.defineProperty(f, "webkitRelativePath", { value: c });
         arquivos.push(f);
       }
       const modelo = await PIXI.live2d.Live2DModel.from(arquivos, { autoInteract: false });
-      if (this.personagem !== p) { modelo.destroy(); return null; } // trocou de personagem no meio
+      if (this.personagem !== p) { modelo.destroy({ texture: true, baseTexture: true }); return null; } // trocou de personagem no meio
       this.modelo = modelo;
       this.app.stage.addChild(modelo);
+      // confere se as texturas subiram para a placa de vídeo; se vierem pretas, tenta de novo com cópias menores
+      this.enquadramento = Object.assign({ modo: "busto", zoom: 1, dx: 0, dy: 0 }, p.enquadramento || {});
+      this.enquadrar();
+      this.app.renderer.render(this.app.stage);
+      const maior = Math.max(0, ...this.texturas.map((t) => Math.max(...(t.usada || [0]))));
+      if (this.texturasPretas() && maior > 1024 && tentativa < 3) {
+        const menor = Math.max(1024, Math.min(limite, maior) / 2);
+        console.warn(`Companhia: as texturas (${maior} px) não subiram para a placa de vídeo; tentando com ${menor} px.`);
+        this.emit("texturas-reduzidas", { de: maior, para: menor });
+        return this.carregar(p, { limite: menor, tentativa: tentativa + 1 });
+      }
       const core = modelo.internalModel.coreModel;
       const ids = core._model.parameters.ids;
       this.faixa.clear();
@@ -242,16 +316,49 @@
       // antes do movimento: as expressões partem do valor padrão a cada quadro (senão "Add" acumularia)
       im.on("beforeMotionUpdate", () => { for (const id of this.idsExpressoes) core.setParameterValueById(id, this.faixa.get(id).def); });
       im.on("afterMotionUpdate", () => this.aplicar());
-      this.enquadramento = Object.assign({ modo: "busto", zoom: 1, dx: 0, dy: 0 }, p.enquadramento || {});
-      this.enquadrar();
       this.toques.zonas = p.zonas && p.zonas.length ? p.zonas : zonasPadrao(im.originalWidth, im.originalHeight);
       this.definirEmocao("neutra");
       this.emit("carregado", this);
       return modelo;
     }
 
+    /**
+     * As texturas ficaram pretas na placa de vídeo? (Quando a textura não sobe — grande demais ou sem memória —, a
+     * placa devolve preto opaco em todo ponto.) Desenha cada textura em 16×16 e confere.
+     */
+    texturasPretas() {
+      const PIXI = window.PIXI, r = this.app.renderer;
+      if (!this.modelo || !r.plugins.extract) return false;
+      for (const tex of this.modelo.textures) {
+        if (!tex.valid) continue;
+        const s = new PIXI.Sprite(tex);
+        s.width = 16; s.height = 16;
+        const rt = PIXI.RenderTexture.create({ width: 16, height: 16 });
+        r.render(s, { renderTexture: rt, clear: true });
+        const px = r.plugins.extract.pixels(rt);
+        rt.destroy(true);
+        s.destroy();
+        let preto = true;
+        for (let i = 0; i < px.length; i += 4) if (px[i] || px[i + 1] || px[i + 2] || px[i + 3] !== 255) { preto = false; break; }
+        if (preto) return true;
+      }
+      return false;
+    }
+
+    /** Placa de vídeo, limite de textura e as texturas do modelo (para a janela de diagnóstico). */
+    diagnostico() {
+      const r = this.app.renderer, gl = r.gl;
+      let gpu = "";
+      try { const ext = gl.getExtension("WEBGL_debug_renderer_info"); gpu = gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER); } catch (e) { /* escondido */ }
+      let nucleo = "";
+      try { const v = Live2DCubismCore.Version.csmGetVersion(); nucleo = `${(v >>> 24) & 0xff}.${(v >>> 16) & 0xff}.${v & 0xffff}`; } catch (e) { /* sem núcleo */ }
+      return { webgl: r.context.webGLVersion, gpu, maxTextura: this.maxTextura(), memoria: navigator.deviceMemory || null, celular: !!ehCelular(),
+        limite: this.limiteUsado || null, texturas: this.texturas || [], nucleo, pretas: this.modelo ? this.texturasPretas() : null };
+    }
+
     descarregar() {
-      if (this.modelo) { this.app.stage.removeChild(this.modelo); this.modelo.destroy({ children: true }); this.modelo = null; }
+      // libera também as texturas na placa de vídeo (senão cada troca de personagem acumula dezenas de MB)
+      if (this.modelo) { this.app.stage.removeChild(this.modelo); this.modelo.destroy({ children: true, texture: true, baseTexture: true }); this.modelo = null; }
       this.gestos = [];
       this.personagem = null;
     }

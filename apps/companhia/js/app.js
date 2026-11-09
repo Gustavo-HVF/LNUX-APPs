@@ -291,6 +291,17 @@
   palco.on("tocando", (z) => $("#palco").classList.toggle("tocando", !!z));
   palco.on("emocao", (nome) => { $("#chip-emocao").textContent = C.EMOCOES[nome].nome; desenharAtalhos(); });
   palco.on("enquadrado", () => desenharZonas());
+  // texturas grandes demais para a placa de vídeo do aparelho (a personagem ficaria preta)
+  let reduziuPorFalha = null;
+  palco.on("preparando", (texto) => { $("#palco-carregando").textContent = texto; });
+  palco.on("texturas-reduzidas", (r) => { reduziuPorFalha = r; $("#palco-carregando").textContent = `Texturas grandes demais para este aparelho; tentando com ${r.para} px...`; });
+  palco.on("placa-perdida", () => LNUX.aviso("A placa de vídeo do aparelho reiniciou (pouca memória). Vou recarregar a personagem com texturas menores.", "alerta", 8000));
+  palco.on("placa-voltou", () => {
+    if (!atual) return;
+    atual.qualidade = String(Math.max(1024, (palco.limiteUsado || 4096) / 2));
+    C.salvarPersonagem(atual).catch(() => {});
+    abrirPersonagem(atual.id, { saudar: false });
+  });
 
   // a boca acompanha a voz
   voz.aoNivel = (n) => palco.falar(n);
@@ -348,6 +359,7 @@
   async function abrirPersonagem(id, { saudar = true } = {}) {
     pronto = false;
     if (!live2d) { await mostrarVazio(); LNUX.aviso("Falta o núcleo do Live2D (veja o aviso na tela).", "alerta"); return; }
+    $("#palco-carregando").textContent = "Carregando...";
     $("#palco-carregando").hidden = false;
     try {
       voz.parar();
@@ -355,7 +367,14 @@
       palco.descarregar(); // tira a anterior antes de ler a nova (o desenho e a leitura do ZIP disputam o aparelho)
       const p = await C.lerPersonagem(id);
       if (!p) throw new Error("Essa personagem não está mais guardada.");
+      reduziuPorFalha = null;
       await palco.carregar(p);
+      if (reduziuPorFalha) {
+        // guarda o tamanho que funcionou, para não tentar de novo da próxima vez
+        p.qualidade = String(palco.limiteUsado);
+        C.salvarPersonagem(p).catch(() => {});
+        LNUX.aviso(`As texturas de ${p.perfil.nome} eram grandes demais para a placa de vídeo deste aparelho (a personagem ficaria preta). Usei ${palco.limiteUsado} px — dá para mudar em Exibir › Qualidade das texturas.`, "alerta", 12000);
+      }
       atual = p;
       gravarPref("atual", id);
       voz.daPersonagem = p.voz || null;
@@ -982,6 +1001,33 @@
       el("p", { style: { margin: 0 } }, el("b", {}, "Expressões: "), "os botões embaixo da personagem ligam/desligam as expressões do modelo, como os atalhos do VTube Studio. Personagem › Emoções liga expressões a cada emoção.")),
       botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
   }
+  /** Qualidade das texturas + diagnóstico da placa de vídeo (para quando a personagem aparece preta ou o app fica lento). */
+  async function janelaQualidade() {
+    const d = palco.diagnostico();
+    const linha = (rotulo, valor) => el("div", { class: "linha-diag" }, el("span", { class: "fraco" }, rotulo), el("span", { class: "mono" }, valor));
+    const texturas = d.texturas.map((t) => `${t.arquivo.split("/").pop()}: ${t.original ? t.original.join("×") : "?"}` + (t.usada && t.original && t.usada[0] !== t.original[0] ? ` → ${t.usada.join("×")}` : "") + " px");
+    const sel = seletor(C.QUALIDADES, (atual && atual.qualidade) || "auto");
+    const corpo = el("div", { class: "ajustes" },
+      el("p", { class: "fraco", style: { margin: 0 } }, "Modelos com texturas muito grandes podem aparecer pretos ou deixar o app lento em celulares: a placa de vídeo não aguenta. Com texturas menores a personagem quase não muda na tela e gasta bem menos memória."),
+      atual ? el("label", { class: "lnux-campo" }, el("span", {}, "Qualidade das texturas de " + atual.perfil.nome), sel) : el("p", {}, "Abra uma personagem para escolher a qualidade."),
+      el("div", { class: "diag" },
+        linha("Placa de vídeo", d.gpu || "(o navegador não informa)"),
+        linha("WebGL", String(d.webgl)),
+        linha("Maior textura aceita", d.maxTextura + " px"),
+        linha("Memória do aparelho", d.memoria ? d.memoria + " GB" : "(o navegador não informa)"),
+        linha("Tipo de aparelho", d.celular ? "celular/tablet (automática: até 2048 px)" : "computador (automática: até 4096 px)"),
+        linha("Núcleo do Live2D", d.nucleo || "(não carregado)"),
+        linha("Limite usado agora", d.limite ? d.limite + " px" : "—"),
+        ...texturas.map((t) => linha("Textura", t)),
+        d.pretas === null ? null : linha("Conferência na placa de vídeo", d.pretas ? "✖ textura preta (não subiu)" : "✔ texturas ok")));
+    const r = await LNUX.dialogo({ titulo: "Qualidade das texturas", corpo, largo: true, botoes: atual ? [{ rotulo: "Fechar", valor: null }, { rotulo: "Aplicar", primario: true, valor: "aplicar" }] : [{ rotulo: "Fechar", valor: null }] });
+    if (r !== "aplicar" || !atual) return;
+    atual.qualidade = sel.value === "auto" ? null : sel.value;
+    await C.salvarPersonagem(atual);
+    await abrirPersonagem(atual.id, { saudar: false });
+    LNUX.aviso(`Texturas: ${palco.limiteUsado} px.`, "ok");
+  }
+
   function creditos() {
     const item = (nome, url, txt) => el("li", {}, el("a", { href: url, target: "_blank", rel: "noopener" }, nome), " — ", txt);
     LNUX.dialogo({ titulo: "Créditos e licenças", largo: true, corpo: el("div", { class: "ajustes" },
@@ -1050,6 +1096,7 @@
       { rotulo: "Busto", acao: () => enquadrar("busto"), ativo: comPersonagem, marcado: () => palco.enquadramento.modo === "busto" },
       { rotulo: "Corpo inteiro", acao: () => enquadrar("corpo"), ativo: comPersonagem, marcado: () => palco.enquadramento.modo === "corpo" },
       { rotulo: "Posição e tamanho...", acao: janelaPosicao, ativo: comPersonagem },
+      { rotulo: "Qualidade das texturas...", acao: janelaQualidade },
       "-",
       { rotulo: "Mostrar áreas de toque", marcado: () => mostrarZonas, acao: () => { mostrarZonas = !mostrarZonas; desenharZonas(); } },
       { rotulo: "Mostrar atalhos de expressão", marcado: () => pref("atalhos", "1") === "1", acao: () => { gravarPref("atalhos", pref("atalhos", "1") === "1" ? "0" : "1"); desenharAtalhos(); } },
@@ -1059,6 +1106,7 @@
     ] },
     { rotulo: "Ajuda", itens: [
       { rotulo: "Primeiros passos", acao: ajuda },
+      { rotulo: "Diagnóstico (personagem preta ou lenta)...", acao: janelaQualidade },
       { rotulo: "Núcleo do Live2D...", acao: () => { const c = el("div", { class: "nucleo" }); desenharAvisoNucleo(c); if (live2d) c.prepend(el("p", { style: { margin: "0 0 6px" } }, `✓ Núcleo carregado (${({ ponte: "guardado pela ponte", navegador: "guardado no navegador", vendor: "vendor/", oficial: "site oficial", pronto: "já carregado" })[live2d]}).`)); LNUX.dialogo({ titulo: "Núcleo do Live2D", corpo: c, botoes: [{ rotulo: "Fechar", valor: null }] }); } },
       { rotulo: "Créditos e licenças", acao: creditos },
       { rotulo: "Atalhos de teclado", acao: () => LNUX.ajudaAtalhos() },

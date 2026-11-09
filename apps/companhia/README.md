@@ -132,6 +132,24 @@ de falar. As frases curtas ficam guardadas, para não gastar créditos de novo. 
 - trocar o fundo (inclusive tela verde, para gravar a tela, ou uma imagem sua);
 - salvar uma foto PNG da personagem.
 
+## Texturas grandes (personagem preta ou lenta)
+
+Muitos modelos vêm com texturas enormes. O do VTube Studio usado nos testes, por exemplo, tem uma de
+**4096 × 8192 px**, que ocupa 128 MB na placa de vídeo. Vários celulares só aceitam texturas de até 4096 px, ou não
+têm memória de vídeo para isso. Aí a textura não sobe e a personagem aparece **toda preta**. Para evitar isso:
+
+- **Ao abrir**, as texturas maiores que o limite viram uma cópia menor: até **2048 px no celular** e até
+  **4096 px no computador**, nunca acima do que a placa de vídeo aceita. As coordenadas de textura do Live2D vão
+  de 0 a 1, então a cópia serve no lugar da original, e na tela quase não muda. A cópia fica guardada no
+  navegador, para não refazer a cada vez.
+- **Depois do primeiro desenho**, a Companhia confere se as texturas chegaram à placa de vídeo. Se vierem pretas,
+  ela tenta de novo com metade do tamanho, avisa e guarda o tamanho que funcionou.
+- Se a placa de vídeo reiniciar por falta de memória, a personagem é recarregada com texturas menores.
+- Trocar de personagem libera as texturas da anterior na memória de vídeo.
+- *Exibir › Qualidade das texturas* (ou *Ajuda › Diagnóstico*) mostra a placa de vídeo, o maior tamanho que ela
+  aceita, a memória do aparelho e o tamanho original e o usado de cada textura. Ali dá para escolher **Automática**,
+  **Original**, **Alta (4096)**, **Média (2048)** ou **Leve (1024)** para cada personagem.
+
 ## O núcleo do Live2D (importante)
 
 Os modelos Live2D precisam do **Live2D Cubism Core**, que é da Live2D Inc. e tem licença própria. Por isso ele
@@ -157,7 +175,8 @@ para outro aparelho seu.
 
 ```
 index.html, companhia.css
-js/live2d.js       palco: núcleo, carregar o modelo, sinais → parâmetros, emoções, gestos, piscar, olhar, boca, toques
+js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
+                   emoções, gestos, piscar, olhar, boca, toques
 js/personagens.js  importar (ZIP, pasta, ponte), ler o vtube.json, guardar, trocar, exportar
 js/ia.js           provedores, chaves, transporte (ponte/direto), streaming, roteador, marcas [emoção], motor local
 js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, reconhecimento de fala
