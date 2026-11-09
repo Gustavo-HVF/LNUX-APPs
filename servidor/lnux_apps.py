@@ -219,11 +219,14 @@ def pastas_do_usuario() -> dict:
 class Ponte:
     """O estado da ponte: chave, pastas liberadas, tarefas do ffmpeg."""
 
-    def __init__(self, ligada: bool, raizes_extras: list, permitir_comandos: bool):
+    def __init__(self, ligada: bool, raizes_extras: list, permitir_comandos: bool, hosts_extras: tuple = (), sem_comandos: bool = False):
         self.ligada = ligada
         self.config = carregar_config() if ligada else {}
         self.token = self.config.get("token", "")
-        self.comandos = bool(permitir_comandos or self.config.get("comandos"))
+        # --sem-comandos vale mais que a configuração (ex.: servidor aberto pela internet, por um túnel)
+        self.comandos = bool(permitir_comandos or self.config.get("comandos")) and not sem_comandos
+        # domínios aceitos no Host/Origin além de localhost e IPs: o endereço de um túnel (cloudflared...)
+        self.hosts_extras = tuple(nome_do_host(h) for h in hosts_extras if h)
         self.temporarios = DADOS / "tmp"
         if ligada:  # antes de montar a lista: na primeira vez a pasta ainda não existe e ficaria de fora
             self.temporarios.mkdir(parents=True, exist_ok=True)
@@ -515,13 +518,22 @@ def nome_seguro(nome: str, padrao: str = "arquivo") -> str:
     return nome[:120] or padrao
 
 
-def host_valido(host: str) -> bool:
-    """Só 'localhost' ou um IP: um nome de domínio aqui é sinal de DNS rebinding."""
+def nome_do_host(host: str) -> str:
+    """'exemplo.com:443' → 'exemplo.com' (minúsculas, sem a porta)."""
+    host = (host or "").strip().lower()
+    if host.startswith("["):
+        return host.split("]", 1)[0] + "]"
+    return host.rsplit(":", 1)[0] if ":" in host else host
+
+
+def host_valido(host: str, extras: tuple = ()) -> bool:
+    """Só 'localhost', um IP ou um domínio liberado de propósito (o de um túnel, com --permitir-host): qualquer
+    outro nome de domínio aqui é sinal de DNS rebinding."""
     host = (host or "").strip().lower()
     if host.startswith("["):  # IPv6: [::1]:8095
         return "]" in host
-    nome = host.rsplit(":", 1)[0] if ":" in host else host
-    if nome in ("localhost", "localhost."):
+    nome = nome_do_host(host)
+    if nome in ("localhost", "localhost.") or nome in extras:
         return True
     return bool(re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", nome))
 
@@ -754,7 +766,7 @@ class Manipulador(BaseHTTPRequestHandler):
         return False
 
     def api(self, rota: str):
-        if not host_valido(self.headers.get("Host", "")):
+        if not host_valido(self.headers.get("Host", ""), self.ponte.hosts_extras):
             raise ErroPonte(403, "Endereço não permitido (use localhost ou o IP do aparelho).")
         if not self.ponte.ligada:
             if rota == "estado":
@@ -762,7 +774,9 @@ class Manipulador(BaseHTTPRequestHandler):
             raise ErroPonte(404, "A ponte está desligada neste servidor.")
         origem = self.headers.get("Origin")
         if origem and self.command not in ("GET", "HEAD"):
-            if urllib.parse.urlsplit(origem).netloc.lower() != self.headers.get("Host", "").lower():
+            netloc = urllib.parse.urlsplit(origem).netloc.lower()
+            # atrás de um túnel, o Host pode chegar como localhost e o Origin como o endereço público liberado
+            if netloc != self.headers.get("Host", "").lower() and nome_do_host(netloc) not in self.ponte.hosts_extras:
                 raise ErroPonte(403, "Pedido de outro site recusado.")
         # O cookie só vale para LER arquivos (é o que <video src> e <img src> precisam); o resto exige o cabeçalho
         so_leitura = self.command in ("GET", "HEAD") and rota in ("arquivo", "live2d/core")
@@ -1118,12 +1132,15 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--raiz", action="append", default=[], help="libera mais uma pasta para a ponte (pode repetir)")
     ap.add_argument("--abrir", action="store_true", help="abre a página inicial no navegador")
     ap.add_argument("--mostrar-token", action="store_true", help="mostra a chave da ponte e sai")
+    ap.add_argument("--permitir-host", action="append", default=[], metavar="DOMINIO",
+                    help="aceita este domínio no endereço (o de um túnel, ex.: abc.trycloudflare.com); pode repetir")
+    ap.add_argument("--sem-comandos", action="store_true", help="nunca deixa os apps rodarem programas (mesmo se a configuração deixar)")
     args = ap.parse_args(argv)
 
     if args.mostrar_token:
         print(carregar_config()["token"])
         return 0
-    ponte = Ponte(not args.sem_ponte, args.raiz, args.permitir_comandos)
+    ponte = Ponte(not args.sem_ponte, args.raiz, args.permitir_comandos and not args.sem_comandos, args.permitir_host, args.sem_comandos)
     try:
         servidor = criar_servidor(args.endereco, args.porta, ponte)
     except OSError as e:
@@ -1135,6 +1152,8 @@ def main(argv: list | None = None) -> int:
     print(f"  Abra: {url}")
     if args.endereco == "0.0.0.0":
         print(f"  Na rede: http://{ip_local()}:{args.porta}/  (a ponte ainda exige a chave)")
+    for h in ponte.hosts_extras:
+        print(f"  Aceitando também o endereço https://{h}/ (túnel)" + ("  (a ponte ainda exige a chave)" if ponte.ligada else ""))
     if ponte.ligada:
         print(f"  Ponte ligada · pastas liberadas: {', '.join(str(r) for r in ponte.raizes)}")
         print(f"  ffmpeg: {'sim' if shutil.which('ffmpeg') else 'não instalado'} · comandos: {'LIGADOS' if ponte.comandos else 'desligados'}")

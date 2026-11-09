@@ -73,7 +73,14 @@ python3 servidor/lnux_apps.py --raiz /mnt/hd               # libera mais uma pas
 python3 servidor/lnux_apps.py --sem-ponte                  # só os apps, sem acesso ao aparelho
 python3 servidor/lnux_apps.py --permitir-comandos          # deixa os apps rodarem programas (cuidado)
 python3 servidor/lnux_apps.py --mostrar-token              # mostra a chave e sai
+python3 servidor/lnux_apps.py --permitir-host abc.trycloudflare.com --sem-comandos  # atrás de um túnel
 ```
+
+**Pela internet (túnel).** Por segurança, a ponte recusa nomes de domínio no endereço. Atrás de um túnel
+(`cloudflared`, por exemplo), libere **só** o endereço dele com `--permitir-host`, que pode ser repetido.
+`--sem-comandos` garante que nada rode programas, mesmo que a configuração deixe. Com `--sem-ponte`, só os apps
+ficam disponíveis. No LNUX, isso é o *🧩 Apps Web › 🌍 Compartilhar pela internet*, que liga o túnel e um
+servidor só para ele.
 
 Em `~/.lnux-apps/ponte.json` dá para deixar fixo: `"raizes": ["/mnt/hd"]` e `"comandos": true`. Os arquivos
 temporários das conversões ficam em `~/.lnux-apps/tmp` e são apagados depois de um dia.

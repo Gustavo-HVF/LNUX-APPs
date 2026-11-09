@@ -44,8 +44,8 @@ def caso(nome):
 
 
 class Servidor:
-    def __init__(self, ligada=True, comandos=False):
-        self.ponte = lnux_apps.Ponte(ligada, [], comandos)
+    def __init__(self, ligada=True, comandos=False, hosts=(), sem_comandos=False):
+        self.ponte = lnux_apps.Ponte(ligada, [], comandos, hosts, sem_comandos)
         self.http = lnux_apps.criar_servidor("127.0.0.1", 0, self.ponte)
         self.porta = self.http.server_address[1]
         threading.Thread(target=self.http.serve_forever, daemon=True).start()
@@ -432,6 +432,30 @@ def _():
         assert s2.json("POST", "/api/executar", json_corpo={"comando": ["programa-que-nao-existe-123"]})[0] == 404
     finally:
         s2.parar()
+
+
+@caso("Túnel: --permitir-host aceita só o domínio do túnel (Host e Origin) e --sem-comandos desliga os comandos")
+def _():
+    T = Servidor(comandos=True, hosts=("abc-def.trycloudflare.com",), sem_comandos=True)
+    try:
+        # o endereço do túnel passa (a chave continua obrigatória)
+        status, r, _ = T.json("GET", "/api/estado", cabecalhos={"Host": "abc-def.trycloudflare.com"})
+        assert status == 200 and r["ponte"] is True, (status, r)
+        status, _, _ = T.pedir("GET", "/api/estado", cabecalhos={"Host": "abc-def.trycloudflare.com"}, token=False)
+        assert status == 401, status
+        # outro domínio continua recusado (DNS rebinding)
+        status, _, _ = T.pedir("GET", "/api/estado", cabecalhos={"Host": "outro.trycloudflare.com"})
+        assert status == 403, status
+        # atrás do túnel o Host pode chegar como localhost e o Origin como o endereço público: aceito só se for o liberado
+        status, _, _ = T.pedir("POST", "/api/entrar", json_corpo={}, cabecalhos={"Origin": "https://abc-def.trycloudflare.com"})
+        assert status == 200, status
+        status, _, _ = T.pedir("POST", "/api/entrar", json_corpo={}, cabecalhos={"Origin": "https://malicioso.example"})
+        assert status == 403, status
+        # comandos: pedidos com --permitir-comandos, mas --sem-comandos vale mais
+        status, _, _ = T.pedir("POST", "/api/executar", json_corpo={"comando": ["echo", "oi"]})
+        assert status == 403 and T.ponte.comandos is False, status
+    finally:
+        T.parar()
 
 
 @caso("Aparelho: sistema e bateria respondem (a bateria pode não existir neste computador)")
