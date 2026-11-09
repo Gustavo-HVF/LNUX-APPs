@@ -120,7 +120,7 @@ const mock = http.createServer((req, res) => {
     ok(await pagina.isVisible("#palco-vazio"), "sem personagem: a tela pede para importar");
 
     // ── importar o ZIP pela tela (Personagem › Importar ZIP › Escolher pelo navegador) ──
-    await menu("Personagem", "Importar ZIP...");
+    await menu("Personagem", "Importar ZIP ou .vrm...");
     await pagina.waitForSelector(".lnux-dialogo");
     const [escolha] = await Promise.all([pagina.waitForEvent("filechooser"), pagina.click('.lnux-dialogo footer button:text-is("Escolher pelo navegador...")')]);
     await escolha.setFiles(MODELO);
@@ -323,7 +323,7 @@ const mock = http.createServer((req, res) => {
     await pagina.click('.lnux-dialogo footer button:text-is("Salvar")');
     await esperar(300);
     ok(await pagina.textContent("#titulo-doc") === "Lili", "perfil renomeado");
-    await menu("Personagem", "Importar ZIP...");
+    await menu("Personagem", "Importar ZIP ou .vrm...");
     await pagina.waitForSelector(".lnux-dialogo");
     const [escolha2] = await Promise.all([pagina.waitForEvent("filechooser"), pagina.click('.lnux-dialogo footer button:text-is("Escolher pelo navegador...")')]);
     await escolha2.setFiles(MODELO);
@@ -339,6 +339,22 @@ const mock = http.createServer((req, res) => {
     await pagina.waitForFunction(() => window.Companhia.atual && window.Companhia.atual.perfil.nome === "Lili" && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 30000 });
     ok(await ev(() => document.querySelectorAll("#mensagens .msg.eu").length) > 3, "voltou para a Lili, com a conversa dela");
     ok(await ev(() => window.__texturaAnterior.destroyed === true), "trocar de personagem libera a textura da anterior (memória de vídeo)");
+
+    // ── uma personagem VRoid (.vrm) junto: trocar de uma para a outra (palco 3D ↔ Live2D) ──
+    const VRM = process.env.LNUX_TESTE_VRM || "";
+    if (VRM && fs.existsSync(VRM)) {
+      await menu("Personagem", "Importar ZIP ou .vrm...");
+      await pagina.waitForSelector(".lnux-dialogo");
+      const [escV] = await Promise.all([pagina.waitForEvent("filechooser"), pagina.click('.lnux-dialogo footer button:text-is("Escolher pelo navegador...")')]);
+      await escV.setFiles(VRM);
+      await pagina.waitForFunction(() => window.Companhia.atual && window.Companhia.atual.tipo === "vrm" && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 60000 });
+      ok((await brilho(pagina)) > 30 && await ev(() => getComputedStyle(document.querySelector(".palco-3d")).display !== "none"), "personagem VRoid aberta no palco 3D, ao lado das Live2D");
+      await menu("Personagem", "Trocar de personagem...");
+      await pagina.click('.lnux-dialogo .cartao-personagem:has-text("Lili")');
+      await pagina.waitForFunction(() => window.Companhia.atual && window.Companhia.atual.perfil.nome === "Lili" && window.Companhia.palco.modelo && window.Companhia.pronto, null, { timeout: 60000 });
+      const volta = await ev(() => ({ tipo: window.Companhia.atual.tipo, canvas3d: getComputedStyle(document.querySelector(".palco-3d")).display, l2d: !!window.Companhia.palco.app }));
+      ok(volta.tipo !== "vrm" && volta.canvas3d === "none" && volta.l2d && (await brilho(pagina)) > 30, "de volta à Live2D: o palco 3D some e o Live2D desenha de novo");
+    } else ok(true, "(sem LNUX_TESTE_VRM: a troca VRoid ↔ Live2D fica para o teste companhia_vrm)");
 
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
 
@@ -361,7 +377,7 @@ const mock = http.createServer((req, res) => {
     await pf.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
     await pf.waitForFunction(() => window.Companhia && window.Companhia.live2d, null, { timeout: 15000 });
     await pf.click('.lnux-menubar > button:text-is("Personagem")');
-    await pf.click('.lnux-menu button:has(.rotulo:text-is("Importar ZIP..."))');
+    await pf.click('.lnux-menu button:has(.rotulo:text-is("Importar ZIP ou .vrm..."))');
     await pf.waitForSelector(".lnux-dialogo");
     const [esf] = await Promise.all([pf.waitForEvent("filechooser"), pf.click('.lnux-dialogo footer button:text-is("Escolher pelo navegador...")')]);
     await esf.setFiles(MODELO);

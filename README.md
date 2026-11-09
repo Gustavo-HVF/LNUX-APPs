@@ -10,7 +10,7 @@ transferência.
 | 🎬 **Vídeo** | Editor de vídeo no jeito do Premiere: espaços de trabalho (Edição, Montagem, Cor, Efeitos, Áudio, Legendas, Celular), monitor de Origem com entrada/saída, Inserir e Sobrescrever, 11 ferramentas (ondulação, rolante, slip, slide, navalha, esticar...), 31 efeitos de vídeo e 11 de áudio com quadros-chave e gráfico de velocidade, Cor (Lumetri) com curvas, rodas, HSL e escopos, 14 transições, mixer com loudness (LUFS), legendas SRT/VTT, gráficos prontos; exporta WebM, GIF, PNG, WAV, e MP4/MP3 pela ponte | [FilmCraft](https://github.com/storytold/filmcraft) |
 | ✨ **Efeitos** | Animação de títulos e gráficos: camadas de texto, forma, partículas, imagem e vídeo; quadros-chave com suavização (freando, quicando, elástico...); 12 animações prontas, 7 modelos, "tremer", desfoque, brilho, sombra e modos de mistura; exporta GIF e PNG (no navegador), WebM, ou MP4 pela ponte | [EffectCraft](https://github.com/storytold/effectcraft) |
 | ▶️ **VLC-Web** | Player de vídeo e música completo (o [VLC Web](https://github.com/Gustavo-HVF/VLC-WEB), do mesmo autor): lista de reprodução, legendas em 10 formatos com busca online e tradução, equalizador de 10 bandas e efeitos de áudio, filtros de vídeo em WebGL, faixas de áudio, A→B, capítulos, gravação, conversão, transmissão, rádios e podcasts, 31 temas e 9 layouts. **Com a ponte**: toca direto das pastas do aparelho e usa o ffmpeg dele para AVI, WMV, MKV com AC-3/DTS, outras faixas de áudio e legendas embutidas | [VLC media player](https://www.videolan.org/vlc/) (projeto independente, sem código do VLC) |
-| 💬 **Companhia** | Converse com personagens **Live2D** (os modelos do **VTube Studio**: importe o ZIP e troque quando quiser): chat com **ChatGPT, Claude, Gemini**, OpenRouter, Groq, DeepSeek, Mistral, **IA local** (Ollama, LM Studio, llama.cpp) ou o **claude-code-router**, com rotas que economizam tokens e um motor local que responde o simples sem IA; **voz** (navegador, ElevenLabs, OpenAI, **VoiceStudio** no aparelho) com a boca sincronizada; 15 emoções e 12 gestos que seguem a conversa; **toques** (cafuné, cutucar, puxar a orelha, cócegas); **memória** guardada no aparelho e relida ao abrir. Detalhes em [`apps/companhia/README.md`](apps/companhia/README.md) | [AIRI](https://github.com/moeru-ai/airi), [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) e [claude-code-router](https://github.com/musistudio/claude-code-router) (só ideias) |
+| 💬 **Companhia** | Converse com personagens **Live2D** (os modelos do **VTube Studio**: importe o ZIP e troque quando quiser) ou **VRoid** (`.vrm`, em 3D, com **troca de roupa**: várias roupas, peças e cores): chat com **ChatGPT, Claude, Gemini**, OpenRouter, Groq, DeepSeek, Mistral, **IA local** (Ollama, LM Studio, llama.cpp) ou o **claude-code-router**, com rotas que economizam tokens e um motor local que responde o simples sem IA; **voz** (navegador, ElevenLabs, OpenAI, **VoiceStudio** no aparelho) com a boca sincronizada; 15 emoções e 12 gestos que seguem a conversa; **toques** (cafuné, cutucar, puxar a orelha, cócegas); **memória** guardada no aparelho e relida ao abrir. Detalhes em [`apps/companhia/README.md`](apps/companhia/README.md) | [AIRI](https://github.com/moeru-ai/airi), [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) e [claude-code-router](https://github.com/musistudio/claude-code-router) (só ideias) |
 | 🎚️ **Som** | Estúdio de áudio multipistas: gravar pelo microfone, importar, cortar, aparar, fades, normalizar, inverter; mixer com volume, pan, mudo e solo; EQ de 3 bandas, compressor, eco e reverb por trilha; BPM, grade e metrônomo; loop; exporta WAV (16/24 bits) e, pela ponte, MP3, OGG, Opus, FLAC e M4A, ou uma trilha por arquivo | [SoundCraft](https://github.com/storytold/soundcraft) |
 
 Vêm mais: editor de código (Monaco), dois sites de mensagens, escritório (texto, planilha,
@@ -211,13 +211,14 @@ comum/lnux.js         temas, layouts, menus, atalhos, paleta, diálogos, desfaze
 comum/zip.js          ZIP (salvar e abrir projetos)
 comum/gif.js          codificador de GIF animado
 apps/<id>/            cada app: index.html, CSS, motor e interface
-apps/companhia/       live2d.js (palco), personagens.js, ia.js (provedores, roteador, motor local), voz.js,
-                      memoria.js, reacoes.js, app.js — vendor/ tem pixi.js e pixi-live2d-display (MIT)
+apps/companhia/       live2d.js (palco), vrm.js (palco 3D, VRoid), personagens.js, ia.js (provedores, roteador, motor local), voz.js,
+                      memoria.js, reacoes.js, app.js — vendor/ tem pixi.js, pixi-live2d-display e o pacote
+                      three.js + three-vrm (MIT; tools/montar_vrm.sh monta de novo)
 apps/vlc-web/         cópia do VLC Web (não editar: tools/importar_vlc_web.py atualiza) + lnux/ (integração)
 apps/video/           catalogo.js (efeitos e quadros-chave), edicao.js (inserir, ondulação, slip...), render.js
                       (compositor WebGL2), audio.js (Web Audio, LUFS), linha.js, controles.js, paineis.js, video.js
 servidor/lnux_apps.py servidor + ponte local
-tools/                importar_vlc_web.py (traz a versão mais nova do VLC Web)
+tools/                importar_vlc_web.py (traz a versão mais nova do VLC Web), montar_vrm.sh (pacote do three-vrm)
 tests/                testes
 ```
 
@@ -230,6 +231,7 @@ node tests/testar_edicao.js          # a álgebra de edição do Vídeo (inserir
 python3 tests/testar_navegador.py    # os apps no Chromium de verdade (precisa do Node + Playwright e do ffmpeg)
 # a Companhia precisa de um modelo e do núcleo do Live2D (não vêm no repositório):
 LNUX_TESTE_MODELO=modelo.zip LNUX_TESTE_NUCLEO=live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
+python3 tests/testar_navegador.py companhia_vrm   # personagens VRoid: baixa o modelo de exemplo da pixiv
 ```
 
 ## Licença

@@ -51,6 +51,11 @@ conforme cada versão ficar pronta (a lista dos planejados está em `apps.json`)
   [pixi.js](https://github.com/pixijs/pixijs) 6.5.10 (MIT, Mat Groves / PixiJS) e
   [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) 0.4.0 (MIT, Guan), que traz partes do
   Cubism Framework da Live2D (licença aberta da Live2D para o Framework).
+- **Personagens VRoid** (`vendor/three-vrm-pacote.min.js`, montado por `tools/montar_vrm.sh`): [three.js](https://github.com/mrdoob/three.js)
+  0.180.0 (MIT, autores do three.js) e [@pixiv/three-vrm](https://github.com/pixiv/three-vrm) 3.5.5 (MIT, pixiv Inc.).
+  Os testes usam o modelo de exemplo `VRM1_Constraint_Twist_Sample.vrm` da pixiv, baixado do repositório do
+  three-vrm na hora (redistribuição e modificação permitidas, crédito não exigido); ele não fica no repositório.
+  VRoid e VRM são marcas da pixiv Inc.; o `.vroidcustomitem` é um formato do VRoid Studio e não é lido pela Companhia.
 - **Live2D Cubism Core** (`live2dcubismcore.min.js`): da Live2D Inc., sob a *Live2D Proprietary Software License*.
   **Não é distribuído** com o LNUX-APPs: a Companhia baixa do site oficial da Live2D (ou usa o arquivo que a
   pessoa escolhe). Usar o núcleo significa aceitar a licença da Live2D. Live2D e Cubism são marcas da Live2D Inc.

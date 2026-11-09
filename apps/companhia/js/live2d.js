@@ -128,7 +128,11 @@
       const guardado = await LNUX.guardado.ler("companhia:nucleo");
       if (guardado) { await carregarScript(URL.createObjectURL(guardado)); return "navegador"; }
     } catch (e) { /* segue */ }
-    try { await carregarScript("vendor/live2dcubismcore.min.js"); return "vendor"; } catch (e) { /* não tem */ }
+    try {
+      // só tenta se a pessoa pôs o arquivo lá (sem isso, o navegador reclama do script que não existe)
+      const r = await fetch("vendor/live2dcubismcore.min.js", { method: "HEAD" });
+      if (r.ok && /javascript/.test(r.headers.get("content-type") || "")) { await carregarScript("vendor/live2dcubismcore.min.js"); return "vendor"; }
+    } catch (e) { /* não tem */ }
     if (oficial) { try { await carregarScript(URL_OFICIAL); return "oficial"; } catch (e) { /* sem internet */ } }
     return null;
   };
