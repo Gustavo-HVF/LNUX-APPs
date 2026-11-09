@@ -1,0 +1,186 @@
+# Companhia
+
+Converse com personagens **Live2D** pela tela: o mesmo tipo de modelo que o **VTube Studio** usa. Ela responde
+num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** com a voz que você escolher,
+**reage com o rosto e o corpo** ao que diz, **sente os toques** (cafuné, cutucar, puxar a orelha, cócegas) e
+**lembra** de você, porque as conversas ficam guardadas no próprio aparelho.
+
+Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
+chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
+a memória pode ter uma cópia numa pasta do aparelho.
+
+## Primeiros passos
+
+1. **Importe uma personagem**: *Personagem › Importar ZIP* (ou *Importar pasta*, ou arraste o ZIP para a tela).
+   Vale qualquer modelo Live2D **Cubism 3 ou 4** (`.model3.json` + `.moc3` + texturas). Dos modelos do VTube
+   Studio, a Companhia aproveita também o `.vtube.json`: os **atalhos de expressão** (viram botões embaixo da
+   personagem), o **movimento parado**, o **ícone** e a ligação dos parâmetros extras (sorriso nos olhos, boca
+   de lado, bochecha inflada...). Para **trocar de personagem**, *Personagem › Trocar* (cada uma tem a própria
+   conversa e memória).
+2. **Converse.** Sem configurar nada, o **motor local** responde o básico (cumprimentos, "que horas são",
+   "qual meu nome"...) sem gastar nada. Para uma conversa de verdade, ligue uma IA em *IA › Provedores*.
+3. **Voz**: *Voz › Configurar*. O 🎤 ao lado da caixa de texto escuta você; **Mãos livres** abre o microfone
+   sozinho depois que ela fala, então dá para conversar só por voz.
+
+## IA: provedores e economia de tokens
+
+| Provedor | Como |
+|---|---|
+| **ChatGPT (OpenAI)**, **Claude (Anthropic)**, **Gemini (Google)** | chave da API de cada um |
+| **OpenRouter**, **Groq**, **DeepSeek**, **Mistral**, **xAI (Grok)**, **Together**, **Fireworks**, **Cerebras** | chave da API |
+| **IA local**: **Ollama**, **LM Studio**, **llama.cpp** (`llama-server`) | roda no aparelho/computador; nada sai para a internet |
+| **claude-code-router** | o roteador ([musistudio/claude-code-router](https://github.com/musistudio/claude-code-router)) ligado no aparelho (`ccr start`, porta 3456) vira um provedor: ele escolhe o modelo pelas regras dele |
+| **Outro** | qualquer servidor compatível com a API da OpenAI (ou com a da Anthropic / Gemini) |
+
+*Listar modelos* mostra os modelos do provedor, para não precisar decorar nomes. *Testar* faz um pedido curto.
+
+**Para gastar menos** (a ideia vem do claude-code-router): em *IA › Rotas*, cada tipo de tarefa vai para um
+modelo:
+
+- **Padrão**: a conversa do dia a dia.
+- **Leve**: reações aos toques, saudações e a análise da memória. Use um modelo barato ou local.
+- **Pensar**: perguntas difíceis (explicar, calcular, comparar, código). Pode ser um modelo mais forte.
+- **Contexto longo**: quando o contexto passa do limite que você definir.
+
+E mais: o **motor local** responde o simples sem chamar a IA (0 tokens), e o contexto vai enxuto. Ele leva o
+perfil, o resumo da memória, só os fatos e trechos antigos que têm a ver com a mensagem (busca BM25) e as
+últimas trocas (8, por padrão). As reações a toque pela IA têm um intervalo mínimo; no meio, ela usa falas
+prontas. No Claude, o perfil vai com *prompt caching*. No rodapé da conversa aparece quantos pedidos foram à IA
+e quantos o motor local respondeu.
+
+**Chaves.** Com a ponte, a chave fica em `~/.lnux-apps/ia.json` (permissão 600) e é a ponte que faz o pedido:
+a chave nunca passa pelo navegador. Ela só é enviada para o mesmo endereço em que foi cadastrada. A ponte só
+repassa para os provedores conhecidos, para programas do próprio aparelho (`127.0.0.1`) e para os endereços da
+rede que você liberar. Sem a ponte, a chave fica guardada no navegador e o pedido vai direto ao provedor (a
+tela avisa).
+
+## Emoções, gestos e expressões
+
+A IA escreve marcas no começo das frases, por exemplo `[feliz][acenar] Oi!`, e pode mudar no meio:
+`[surpresa] Sério? [rindo] Que engraçado!`. As marcas não aparecem no chat nem são faladas, e o rosto muda na
+hora em que chegam.
+
+- **15 emoções**: neutra, feliz, rindo, tímida, triste, chorando, brava, surpresa, assustada, pensativa,
+  apaixonada, animada, sonolenta, provocadora, confusa. Cada uma mexe nos parâmetros padrão do Live2D (boca,
+  olhos, sobrancelhas, ângulo da cabeça e do corpo, bochecha corada) dentro dos limites do próprio modelo, então
+  funciona em qualquer modelo. Algumas têm movimento próprio (rir, soluçar, tremer, cochilar).
+- **12 gestos do corpo**: concordar, negar, inclinar, pular, tremer, suspirar, piscar, olhar em volta,
+  encolher, aproximar, acenar, desviar o olhar.
+- **Expressões do modelo** (`.exp3.json`): em *Personagem › Emoções*, cada emoção liga as expressões que você
+  marcar (lágrimas, corações, estrelinhas...); a Companhia já sugere pelo nome. Os botões embaixo da
+  personagem ligam e desligam à mão, várias ao mesmo tempo, como os atalhos do VTube Studio.
+- Se a IA esquecer as marcas, a emoção é adivinhada pelo texto. Ações escritas como `*sorri*` também viram
+  emoção ou gesto.
+- Sempre: piscar, respirar, olhar para o seu dedo ou mouse, e a **boca acompanhando a voz**.
+
+## Toques
+
+Toque, toque duas vezes, segure, faça carinho (vai e volta) ou puxe:
+
+| Área | Por exemplo |
+|---|---|
+| Cabeça | cafuné, bagunçar o cabelo |
+| Chapéu / topo | mexer, tentar tirar |
+| Orelhas | carinho, puxar (provocação) |
+| Rosto e bochechas | cutucar, apertar, carinho |
+| Ombros e braços | chamar a atenção, massagem |
+| Mãos | "toca aqui", segurar a mão |
+| Barriga e pés | cócegas |
+
+Carinho aumenta o **afeto** (o coração no alto da tela), e provocação diminui. Provocar várias vezes seguidas
+deixa ela brava; muito carinho, apaixonada. O afeto muda o jeito dela tratar você. As áreas se ajustam em
+*Personagem › Áreas de toque* (arraste os retângulos) e aparecem em *Exibir › Mostrar áreas de toque*.
+
+## Voz
+
+| Gerador | |
+|---|---|
+| **Voz do navegador** | grátis; a boca mexe no ritmo das palavras |
+| **ElevenLabs** | `eleven_flash_v2_5` (rápido e pela metade do preço), `eleven_multilingual_v2`, `eleven_v3` (entende emoções como `[laughs]`) |
+| **OpenAI TTS** | `gpt-4o-mini-tts` muda o tom conforme a emoção; usa a mesma chave da IA |
+| **VoiceStudio** | o [VoiceStudio](https://github.com/debpalash/VoiceStudio), de debpalash, rodando no aparelho (`http://127.0.0.1:3900`): vozes clonadas e desenhadas, sem internet. A Companhia usa a API dele, compatível com a da OpenAI |
+| **Outro compatível com OpenAI** | Kokoro-FastAPI, openedai-speech... |
+| **Voz do aparelho (ponte)** | `termux-tts-speak` ou `espeak` |
+
+A resposta é falada **frase por frase**: a próxima frase é gerada enquanto a atual toca. A emoção muda o jeito
+de falar. As frases curtas ficam guardadas, para não gastar créditos de novo. Cada personagem pode ter a própria voz
+(*Personagem › Voz desta personagem*). Se o gerador falhar, a voz do navegador fala no lugar.
+
+**Ouvir** usa o reconhecimento de fala do navegador (Chrome, Edge, Safari). No Chrome ele usa a internet.
+
+## Memória
+
+- Todas as conversas e toques ficam no **IndexedDB deste aparelho**, separados por personagem.
+- **Ao abrir o app**, as mensagens que ainda não foram analisadas são relidas:
+  - A **análise local** (sempre, 0 tokens) acha seu nome, idade, onde mora, trabalho, estudo, gostos, o que não
+    gosta, favoritos, aniversário, bichos, pessoas da família e planos ("amanhã tenho prova").
+  - Com uma IA, a **rota leve** atualiza também o **resumo** e o **afeto**, em blocos e só quando há conversa nova
+    suficiente.
+- Ela **cumprimenta** lembrando de você e pergunta dos planos ("e aí, como foi a prova?") quando você volta
+  depois de um tempo.
+- *Conversa › O que ela lembra*: ver e corrigir os fatos, o resumo e o afeto, ensinar algo, reanalisar, apagar.
+  Também dá para **exportar e importar** (JSON) e, com a ponte, **copiar para uma pasta do aparelho**
+  (`~/LNUX/Companhia/`), inclusive sozinho ao sair. *Conversa › Histórico* procura em tudo.
+- *Conversa › Nova conversa* começa um assunto novo: o contexto recente recomeça, e a memória continua.
+
+## Layouts e exibir
+
+**Personagem e conversa** (lado a lado), **Foco na personagem** (a conversa flutua por cima) e **Celular**
+(personagem em cima, conversa embaixo; entra sozinho em tela pequena). Também dá para:
+
+- enquadrar em **Rosto**, **Busto** ou **Corpo**, com zoom pela rodinha do mouse e *Posição e tamanho*;
+- trocar o fundo (inclusive tela verde, para gravar a tela, ou uma imagem sua);
+- salvar uma foto PNG da personagem.
+
+## O núcleo do Live2D (importante)
+
+Os modelos Live2D precisam do **Live2D Cubism Core**, que é da Live2D Inc. e tem licença própria. Por isso ele
+**não vem junto** com o LNUX-APPs. A Companhia carrega o núcleo na primeira fonte que der certo:
+
+1. A cópia guardada pela ponte (`~/.lnux-apps/live2d/`). A ponte baixa do site oficial uma vez e depois funciona
+   sem internet.
+2. O arquivo que você escolheu, guardado no navegador.
+3. `apps/companhia/vendor/live2dcubismcore.min.js`, se você puser lá (está no `.gitignore`).
+4. O site oficial da Live2D (precisa de internet).
+
+Sem internet e sem a ponte, baixe o [Cubism SDK for Web](https://www.live2d.com/en/sdk/download/web/) e escolha
+o `live2dcubismcore.min.js` no aviso da tela. Usar o núcleo significa aceitar a licença da Live2D.
+
+## Os modelos são dos autores deles
+
+Os modelos que você importa ficam **só no seu aparelho**, e nada é enviado. Muitos modelos (como os vendidos no
+BOOTH) proíbem redistribuir. Quando o `.vtube.json` diz "não compartilhar", a Companhia avisa ao importar e ao
+exportar. O ZIP exportado (com um `companhia.json` com perfil, emoções, áreas e voz) é para levar a personagem
+para outro aparelho seu.
+
+## Arquivos
+
+```
+index.html, companhia.css
+js/live2d.js       palco: núcleo, carregar o modelo, sinais → parâmetros, emoções, gestos, piscar, olhar, boca, toques
+js/personagens.js  importar (ZIP, pasta, ponte), ler o vtube.json, guardar, trocar, exportar
+js/ia.js           provedores, chaves, transporte (ponte/direto), streaming, roteador, marcas [emoção], motor local
+js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, reconhecimento de fala
+js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
+js/reacoes.js      reações aos toques (área × gesto)
+js/app.js          a tela: conversa, menus, janelas de ajustes
+vendor/            pixi.js 6 e pixi-live2d-display (MIT) — o Cubism Core não vem junto
+```
+
+Teste no Chromium (precisa de um modelo e do núcleo, que não estão no repositório):
+
+```bash
+LNUX_TESTE_MODELO=/caminho/modelo.zip LNUX_TESTE_NUCLEO=/caminho/live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
+```
+
+## O que ainda não faz
+
+- **Modelos Cubism 2** (`.moc` / `model.json`) não abrem; só Cubism 3 e 4.
+- **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
+  rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
+  computador da rede.
+- **Ouvir** depende do navegador (o Firefox não tem reconhecimento de fala). A transcrição por API (Whisper)
+  ainda não está ligada.
+- **Rastreamento pela câmera** (como no VTube Studio) e **movimentos `.motion3.json`** além do movimento parado
+  ainda não estão incluídos.
+- Os modelos de exemplo e o núcleo do Live2D não vêm junto (licenças).

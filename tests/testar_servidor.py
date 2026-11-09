@@ -300,6 +300,118 @@ def _():
     assert status == 200 and b"WEBVTT" in dados, (status, dados[:200])   # parâmetros a mais no endereço são ignorados
 
 
+def provedor_falso():
+    """Um "provedor de IA" no próprio aparelho: responde em pedaços (SSE) e conta o que recebeu."""
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    recebidos = []
+
+    class Falso(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            corpo = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            recebidos.append({"caminho": self.path, "auth": self.headers.get("Authorization"), "xi": self.headers.get("xi-api-key"), "x_api": self.headers.get("x-api-key"),
+                              "cookie": self.headers.get("Cookie"), "ponte": self.headers.get("X-Ponte-Token"), "corpo": corpo})
+            if self.path.endswith("/erro"):
+                dados = b'{"error": {"message": "chave errada"}}'
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(dados)))
+                self.end_headers()
+                self.wfile.write(dados)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            for pedaco in ("Olá", ", tudo", " bem?"):
+                self.wfile.write(('data: {"choices":[{"delta":{"content":"%s"}}]}\n\n' % pedaco).encode())
+                self.wfile.flush()
+                time.sleep(0.05)
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.close_connection = True
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), Falso)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, recebidos
+
+
+@caso("IA: guarda a chave no aparelho sem mostrá-la e o repasse injeta a chave só no endereço cadastrado, em pedaços")
+def _():
+    srv, recebidos = provedor_falso()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+    try:
+        status, r, _ = S.json("PUT", "/api/ia/chaves", json_corpo={"provedor": "teste", "chave": "sk-segredo-123", "url": base + "/v1"})
+        assert status == 200 and r["provedores"]["teste"]["host"] == f"127.0.0.1:{srv.server_address[1]}", r
+        assert "sk-segredo" not in json.dumps(r)
+        arq = lnux_apps.DADOS / "ia.json"
+        assert arq.stat().st_mode & 0o777 == 0o600 and "sk-segredo-123" in arq.read_text()
+        status, _, dados = S.pedir("POST", "/api/ia/proxy", json_corpo={"url": base + "/v1/chat/completions", "provedor": "teste",
+                                   "cabecalhos": {"Content-Type": "application/json", "Authorization": "Bearer roubada", "Cookie": "x=1"},
+                                   "corpo": {"model": "m", "stream": True}})
+        assert status == 200 and dados.count(b"data:") == 4 and b"[DONE]" in dados, dados
+        ultimo = recebidos[-1]
+        assert ultimo["auth"] == "Bearer sk-segredo-123" and ultimo["cookie"] is None and ultimo["ponte"] is None, ultimo
+        assert json.loads(ultimo["corpo"]) == {"model": "m", "stream": True}
+        # a chave de um provedor não vai para outro endereço
+        srv2, recebidos2 = provedor_falso()
+        try:
+            S.pedir("POST", "/api/ia/proxy", json_corpo={"url": f"http://127.0.0.1:{srv2.server_address[1]}/v1/x", "provedor": "teste", "corpo": "{}"})
+            assert recebidos2[-1]["auth"] is None
+        finally:
+            srv2.shutdown()
+        # erro do provedor chega ao app com o código certo
+        status, _, dados = S.pedir("POST", "/api/ia/proxy", json_corpo={"url": base + "/erro", "provedor": "teste", "corpo": "{}"})
+        assert status == 401 and b"chave errada" in dados
+        # ElevenLabs recebe a chave no cabeçalho próprio
+        S.json("PUT", "/api/ia/chaves", json_corpo={"provedor": "elevenlabs", "chave": "xi-123", "url": base})
+        S.pedir("POST", "/api/ia/proxy", json_corpo={"url": base + "/v1/text-to-speech/x", "provedor": "elevenlabs", "corpo": "{}"})
+        assert recebidos[-1]["xi"] == "xi-123" and recebidos[-1]["auth"] is None
+        # um provedor extra no jeito da Anthropic (ex.: claude-code-router) recebe a chave em x-api-key
+        S.json("PUT", "/api/ia/chaves", json_corpo={"provedor": "ccr", "chave": "ccr-9", "url": base})
+        S.pedir("POST", "/api/ia/proxy", json_corpo={"url": base + "/v1/messages", "provedor": "ccr", "tipo": "anthropic", "corpo": "{}"})
+        assert recebidos[-1]["x_api"] == "ccr-9" and recebidos[-1]["auth"] is None
+        # a ponte avisa que tem o repasse de IA
+        _, estado, _ = S.json("GET", "/api/estado")
+        assert estado["recursos"]["ia"] is True and "live2d_core" in estado["recursos"]
+        # apagar
+        status, r, _ = S.json("PUT", "/api/ia/chaves", json_corpo={"provedor": "teste", "chave": ""})
+        assert "teste" not in r["provedores"]
+    finally:
+        srv.shutdown()
+
+
+@caso("IA: o repasse recusa endereços que não são de IA, sem a chave da ponte e de outro site")
+def _():
+    status, r, _ = S.json("POST", "/api/ia/proxy", json_corpo={"url": "https://example.com/roubar", "corpo": "{}"})
+    assert status == 403 and "não repassa" in r["erro"]
+    assert S.json("POST", "/api/ia/proxy", json_corpo={"url": "http://api.openai.com/v1/x"})[0] == 403  # sem HTTPS
+    assert S.json("POST", "/api/ia/proxy", json_corpo={"url": "file:///etc/passwd"})[0] == 400
+    assert S.json("POST", "/api/ia/proxy", json_corpo={"url": "https://api.openai.com/v1/x"}, token=False)[0] == 401
+    assert S.json("POST", "/api/ia/proxy", json_corpo={"url": "https://api.openai.com/v1/x"}, cabecalhos={"Origin": "http://mal.example"})[0] == 403
+    assert S.json("GET", "/api/ia/chaves", token=False)[0] == 401
+    # endereço extra liberado pela pessoa (ex.: o Ollama de outro computador)
+    status, r, _ = S.json("PUT", "/api/ia/chaves", json_corpo={"hosts": ["192.168.0.10:11434"]})
+    assert status == 200 and r["hosts"] == ["192.168.0.10:11434"]
+    assert lnux_apps.ia_host_permitido("http://192.168.0.10:11434/api/chat", r["hosts"]) and not lnux_apps.ia_host_permitido("http://192.168.0.11:11434/", r["hosts"])
+    assert S.json("PUT", "/api/ia/chaves", json_corpo={"hosts": ["a b"]})[0] == 400
+    S.json("PUT", "/api/ia/chaves", json_corpo={"hosts": []})
+
+
+@caso("Live2D: guarda o núcleo enviado pela pessoa e entrega para o <script> (com o cookie)")
+def _():
+    assert S.pedir("GET", "/api/live2d/core")[0] == 404
+    assert S.pedir("PUT", "/api/live2d/core", corpo=b"alert(1)", cabecalhos={"Content-Type": "text/javascript"})[0] == 400
+    nucleo = b"/* Live2D */ var Live2DCubismCore; (function(){})();"
+    assert S.pedir("PUT", "/api/live2d/core", corpo=nucleo)[0] == 200
+    status, cab, dados = S.pedir("GET", "/api/live2d/core", token=False, cabecalhos={"Cookie": "lnux_ponte=" + S.ponte.token})
+    assert status == 200 and dados == nucleo and cab["Content-Type"].startswith("text/javascript")
+    assert S.pedir("PUT", "/api/live2d/core", corpo=nucleo, token=False, cabecalhos={"Cookie": "lnux_ponte=" + S.ponte.token})[0] == 401
+
+
 @caso("ffmpeg: recusa formato desconhecido e entrada fora das pastas liberadas")
 def _():
     import shutil

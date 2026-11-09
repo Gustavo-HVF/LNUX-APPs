@@ -43,11 +43,40 @@ conforme cada versão ficar pronta (a lista dos planejados está em `apps.json`)
   busca de legendas no OpenSubtitles, SubDL e SubSource (com a sua chave), tradução pelo MyMemory ou
   LibreTranslate, e fontes do Google Fonts em alguns temas (SIL OFL/Apache).
 
+## Companhia
+
+- **Código** (`apps/companhia/`, menos `vendor/`): escrito aqui (MIT). Nenhum código dos projetos abaixo foi
+  copiado; deles vieram ideias.
+- **Bibliotecas que vêm junto** (em `apps/companhia/vendor/`, licenças em `vendor/LICENCAS.md`):
+  [pixi.js](https://github.com/pixijs/pixijs) 6.5.10 (MIT, Mat Groves / PixiJS) e
+  [pixi-live2d-display](https://github.com/guansss/pixi-live2d-display) 0.4.0 (MIT, Guan), que traz partes do
+  Cubism Framework da Live2D (licença aberta da Live2D para o Framework).
+- **Live2D Cubism Core** (`live2dcubismcore.min.js`): da Live2D Inc., sob a *Live2D Proprietary Software License*.
+  **Não é distribuído** com o LNUX-APPs: a Companhia baixa do site oficial da Live2D (ou usa o arquivo que a
+  pessoa escolhe). Usar o núcleo significa aceitar a licença da Live2D. Live2D e Cubism são marcas da Live2D Inc.
+- **Ideias e referências** (todos MIT ou mais livres):
+  - [claude-code-router](https://github.com/musistudio/claude-code-router), de musistudio: rotas por tarefa
+    (default, background, think, longContext), que viraram as rotas Padrão, Leve, Pensar e Contexto longo. Ele
+    também pode ser usado como provedor.
+  - [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber): marcas de emoção no texto da IA
+    ligadas às expressões do modelo.
+  - [AIRI](https://github.com/moeru-ai/airi) (moeru-ai): companheira virtual com Live2D, voz e memória.
+  - [waifu-companion](https://github.com/waifuai/waifu-companion) (MIT-0): companhia só no navegador, com motor
+    local e memória.
+  - [charivo](https://github.com/zeikar/charivo) (zeikar): personagem Live2D com LLM e TTS.
+- **[VoiceStudio](https://github.com/debpalash/VoiceStudio)**, de debpalash (AGPL-3.0): gerador de voz que roda
+  no aparelho. A Companhia **só conversa com a API HTTP dele** (compatível com a da OpenAI). Nenhum código do
+  VoiceStudio é copiado ou distribuído, então a AGPL não se aplica ao LNUX-APPs.
+- **Serviços que ela pode usar** (só os que você configurar, com a sua chave): OpenAI, Anthropic, Google
+  Gemini, OpenRouter, Groq, DeepSeek, Mistral, xAI, Together, Fireworks, Cerebras e ElevenLabs. O formato
+  `.vtube.json` é do VTube Studio (DenchiSoft), sem afiliação.
+- **Modelos Live2D**: nenhum vem junto. Os que você importa são dos autores deles e ficam só no seu aparelho.
+
 ## O resto
 
 - **Código do LNUX-APPs** (`comum/`, `apps/`, `servidor/`, `tests/`): licença MIT (arquivo `LICENSE`).
 - **Ícones**: desenhos próprios, em `comum/lnux.js` (traço de 24×24).
-- **Bibliotecas de terceiros**: nenhuma nos apps do lote 1 (as do VLC-Web estão na seção dele). Os apps usam só o que o navegador já tem (Canvas, WebGL2,
+- **Bibliotecas de terceiros**: nenhuma nos apps do lote 1 (as do VLC-Web e da Companhia estão nas seções deles). Os apps usam só o que o navegador já tem (Canvas, WebGL2,
   Web Audio, MediaRecorder, IndexedDB). O codificador de GIF (`comum/gif.js`) e o ZIP (`comum/zip.js`) foram escritos
   aqui, seguindo as especificações públicas dos formatos (GIF89a e o APPNOTE do ZIP).
 - **ffmpeg** (opcional, na ponte local): não é distribuído com o LNUX-APPs; a ponte só chama o `ffmpeg`

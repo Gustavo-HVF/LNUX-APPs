@@ -48,7 +48,9 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
+import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -98,6 +100,58 @@ PERFIS = {
 }
 
 MAX_TAREFAS_JUNTAS = 2
+
+
+# ── IA: chaves guardadas no aparelho e um repasse seguro ───────────────
+# Os apps de IA (Companhia) falam com provedores de texto e de voz. A chave fica num arquivo do aparelho
+# (~/.lnux-apps/ia.json, permissão 600), nunca volta para o navegador e só é mandada para o endereço em que foi
+# cadastrada. O repasse só vai para provedores conhecidos (HTTPS) ou para programas do próprio aparelho
+# (Ollama, LM Studio, llama.cpp, VoiceStudio, claude-code-router...) e para os endereços que você liberar.
+IA_HOSTS = {"api.openai.com", "api.anthropic.com", "generativelanguage.googleapis.com", "openrouter.ai", "api.groq.com",
+            "api.deepseek.com", "api.mistral.ai", "api.x.ai", "api.together.xyz", "api.fireworks.ai", "api.cerebras.ai",
+            "api.elevenlabs.io"}
+# Como cada provedor recebe a chave (o resto usa "Authorization: Bearer")
+IA_CABECALHO = {"anthropic": ("x-api-key", "{}"), "gemini": ("x-goog-api-key", "{}"), "elevenlabs": ("xi-api-key", "{}")}
+# Cabeçalhos que o app pode mandar adiante (os de autenticação a ponte põe sozinha)
+IA_REPASSAR = {"content-type", "accept", "anthropic-version", "anthropic-beta", "openai-beta", "http-referer", "x-title"}
+LIVE2D_CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"
+
+
+def ia_carregar() -> dict:
+    try:
+        dados = json.loads((DADOS / "ia.json").read_text("utf-8"))
+        return dados if isinstance(dados, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def ia_salvar(dados: dict):
+    DADOS.mkdir(parents=True, exist_ok=True)
+    alvo = DADOS / "ia.json"
+    tmp = alvo.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(dados, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, alvo)
+    os.chmod(alvo, 0o600)
+
+
+def host_do_url(url: str) -> tuple:
+    """(esquema, host:porta em minúsculas, host sem porta) de um endereço http(s)."""
+    partes = urllib.parse.urlsplit(url)
+    if partes.scheme not in ("http", "https") or not partes.hostname:
+        raise ErroPonte(400, "O endereço precisa começar com http:// ou https://.")
+    porta = partes.port or (443 if partes.scheme == "https" else 80)
+    return partes.scheme, f"{partes.hostname.lower()}:{porta}", partes.hostname.lower()
+
+
+def ia_host_permitido(url: str, extras: list) -> bool:
+    esquema, host_porta, host = host_do_url(url)
+    if host in ("127.0.0.1", "localhost", "::1") or host.startswith("127."):
+        return True  # programas do próprio aparelho
+    if host_porta in extras or host in extras:
+        return True  # liberado pela pessoa (ex.: o Ollama de outro computador da casa)
+    return esquema == "https" and host in IA_HOSTS
 
 
 class ErroPonte(Exception):
@@ -225,6 +279,8 @@ class Ponte:
                 "termux_api": bool(shutil.which("termux-battery-status")), "comandos": self.comandos,
                 "area_de_transferencia": bool(comando_area("ler")), "notificacoes": bool(shutil.which("termux-notification") or shutil.which("notify-send")),
                 "voz": bool(comando_voz("teste")), "vibrar": bool(shutil.which("termux-vibrate")),
+                # Companhia: proxy das APIs de IA (com as chaves guardadas aqui) e o núcleo do Live2D já baixado
+                "ia": True, "live2d_core": (DADOS / "live2d" / "live2dcubismcore.min.js").is_file(),
             },
             "perfis": sorted(PERFIS),
         }
@@ -709,7 +765,7 @@ class Manipulador(BaseHTTPRequestHandler):
             if urllib.parse.urlsplit(origem).netloc.lower() != self.headers.get("Host", "").lower():
                 raise ErroPonte(403, "Pedido de outro site recusado.")
         # O cookie só vale para LER arquivos (é o que <video src> e <img src> precisam); o resto exige o cabeçalho
-        so_leitura = self.command in ("GET", "HEAD") and rota == "arquivo"
+        so_leitura = self.command in ("GET", "HEAD") and rota in ("arquivo", "live2d/core")
         if not self.autorizado(permitir_cookie=so_leitura):
             raise ErroPonte(401, "Falta a chave da ponte. Abra o app pelo LNUX (🌐 Apps Web), que já manda a chave.")
 
@@ -784,9 +840,121 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.responder_json({"ok": True})
         if rota == "executar" and m == "POST":
             return self.executar(self.ler_json())
+        if rota == "ia/chaves":
+            return self.ia_chaves(m)
+        if rota == "ia/proxy" and m == "POST":
+            return self.ia_repassar(self.ler_json())
+        if rota == "live2d/core":
+            return self.live2d_core(m)
         raise ErroPonte(404, f"A ponte não conhece /api/{rota} ({m}).")
 
     # ── ações
+
+    def ia_chaves(self, metodo: str):
+        """GET: quais provedores têm chave (sem mostrar a chave). PUT: guarda ou apaga uma chave, ou os endereços extras."""
+        dados = ia_carregar()
+        chaves = dados.setdefault("chaves", {})
+        if metodo == "PUT":
+            d = self.ler_json()
+            if "hosts" in d:
+                hosts = [str(h).strip().lower() for h in (d.get("hosts") or []) if str(h).strip()]
+                if any(not re.fullmatch(r"[a-z0-9.\-]+(:\d{1,5})?", h) for h in hosts):
+                    raise ErroPonte(400, "Endereço extra inválido (use só nome ou IP e porta, ex.: 192.168.0.10:11434).")
+                dados["hosts"] = hosts[:20]
+            if "provedor" in d:
+                provedor = str(d.get("provedor", ""))
+                if not re.fullmatch(r"[a-z0-9\-]{1,40}", provedor):
+                    raise ErroPonte(400, "Nome de provedor inválido.")
+                chave = str(d.get("chave") or "").strip()
+                if not chave:
+                    chaves.pop(provedor, None)
+                else:
+                    if len(chave) > 400 or any(c in chave for c in "\r\n"):
+                        raise ErroPonte(400, "Chave inválida.")
+                    _, host_porta, _ = host_do_url(str(d.get("url", "")))
+                    chaves[provedor] = {"chave": chave, "host": host_porta, "data": time.strftime("%Y-%m-%d")}
+            ia_salvar(dados)
+        elif metodo != "GET":
+            raise ErroPonte(405, "Use GET ou PUT.")
+        return self.responder_json({"provedores": {k: {"host": v.get("host"), "data": v.get("data")} for k, v in chaves.items()},
+                                    "hosts": dados.get("hosts", [])})
+
+    def ia_repassar(self, d: dict):
+        """Repassa um pedido para um provedor de IA/voz, com a chave guardada, devolvendo a resposta em pedaços
+        (as respostas "ao vivo", SSE, chegam ao app enquanto a IA escreve)."""
+        url = str(d.get("url", ""))
+        metodo = str(d.get("metodo") or "POST").upper()
+        if metodo not in ("GET", "POST"):
+            raise ErroPonte(400, "Só GET ou POST.")
+        dados = ia_carregar()
+        if not ia_host_permitido(url, dados.get("hosts", [])):
+            raise ErroPonte(403, f"A ponte não repassa para {host_do_url(url)[2]}: só para provedores de IA conhecidos, "
+                                 "programas do próprio aparelho e os endereços que você liberar (Companhia › IA).")
+        cab = {k: str(v) for k, v in (d.get("cabecalhos") or {}).items() if k.lower() in IA_REPASSAR}
+        cab["User-Agent"] = "LNUX-APPs/" + VERSAO
+        provedor = str(d.get("provedor") or "")
+        guardada = (dados.get("chaves") or {}).get(provedor)
+        if guardada and guardada.get("host") == host_do_url(url)[1]:
+            # o cabeçalho da chave depende do jeito da API (provedores extras dizem o "tipo": anthropic, gemini...)
+            tipo = str(d.get("tipo") or "")
+            nome, modelo = IA_CABECALHO.get(provedor) or IA_CABECALHO.get(tipo) or ("Authorization", "Bearer {}")
+            cab[nome] = modelo.format(guardada["chave"])
+        corpo = d.get("corpo")
+        if corpo is not None and not isinstance(corpo, str):
+            corpo = json.dumps(corpo, ensure_ascii=False)
+        pedido = urllib.request.Request(url, data=corpo.encode("utf-8") if corpo is not None else None, method=metodo, headers=cab)
+        local = host_do_url(url)[2] in ("127.0.0.1", "localhost", "::1") or host_do_url(url)[2].startswith("127.")
+        abridor = urllib.request.build_opener(urllib.request.ProxyHandler({})) if local else urllib.request.build_opener()
+        try:
+            resposta = abridor.open(pedido, timeout=float(d.get("tempo") or 300))
+            status = resposta.status
+        except urllib.error.HTTPError as e:
+            resposta, status = e, e.code
+        except (urllib.error.URLError, OSError) as e:
+            motivo = getattr(e, "reason", e)
+            raise ErroPonte(502, f"Não consegui falar com {host_do_url(url)[1]}: {motivo}. "
+                                 + ("O programa está ligado nesse endereço?" if local else "Tem internet?"))
+        self.send_response(status)
+        self.send_header("Content-Type", resposta.headers.get("Content-Type") or "application/octet-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        ler = getattr(resposta, "read1", None) or resposta.read
+        try:
+            while True:
+                bloco = ler(16384)
+                if not bloco:
+                    break
+                self.wfile.write(b"%x\r\n%s\r\n" % (len(bloco), bloco))
+                self.wfile.flush()
+            self.wfile.write(b"0\r\n\r\n")
+        finally:
+            resposta.close()
+
+    def live2d_core(self, metodo: str):
+        """O núcleo do Live2D (Cubism Core) é da Live2D Inc. e não vem junto: a ponte baixa uma vez do site oficial
+        (ou recebe o arquivo que você baixou) e guarda em ~/.lnux-apps/live2d/."""
+        destino = DADOS / "live2d" / "live2dcubismcore.min.js"
+        if metodo in ("GET", "HEAD"):
+            if not destino.is_file():
+                raise ErroPonte(404, "O núcleo do Live2D ainda não foi baixado.")
+            return self.enviar_arquivo(destino, "text/javascript; charset=utf-8")
+        if metodo == "POST":  # baixar do site oficial
+            try:
+                with urllib.request.urlopen(urllib.request.Request(LIVE2D_CORE_URL, headers={"User-Agent": "LNUX-APPs/" + VERSAO}), timeout=60) as r:
+                    dados = r.read(4 * 1024 * 1024)
+            except (urllib.error.URLError, OSError) as e:
+                raise ErroPonte(502, f"Não consegui baixar o núcleo do Live2D ({getattr(e, 'reason', e)}). Tem internet?")
+        elif metodo == "PUT":  # o arquivo que a pessoa baixou do site da Live2D
+            dados = self.ler_corpo(limite=4 * 1024 * 1024)
+        else:
+            raise ErroPonte(405, "Use GET, POST (baixar) ou PUT (enviar o arquivo).")
+        if b"Live2DCubismCore" not in dados[:200000]:
+            raise ErroPonte(400, "Esse arquivo não é o live2dcubismcore.min.js do Live2D.")
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(dados)
+        return self.responder_json({"ok": True, "tamanho": len(dados)})
 
     def listar(self, caminho: str, ocultos: bool) -> dict:
         pasta = self.ponte.resolver(caminho)

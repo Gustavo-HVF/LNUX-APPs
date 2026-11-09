@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 node_modules/
 .DS_Store
+
+# Companhia: o núcleo do Live2D (licença da Live2D Inc.) e modelos não vão para o repositório
+apps/companhia/vendor/live2dcubismcore*.js
+apps/companhia/modelos/
