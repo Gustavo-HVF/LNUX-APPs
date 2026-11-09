@@ -23,6 +23,13 @@
 }
 .palco-topo > * { pointer-events: auto; }
 .palco-area.sem-personagem .palco-topo { display: none; }
+.botao-roupa { cursor: pointer; font: inherit; font-size: .85em; }
+.botao-roupa:hover { color: var(--texto); border-color: var(--borda-forte); }
+.linha-roupa, .linha-peca { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.linha-roupa .lnux-entrada { flex: 1; min-width: 120px; }
+.linha-roupa.atual .lnux-entrada { border-color: var(--destaque); }
+.linha-peca { justify-content: space-between; padding: 3px 0; border-bottom: 1px solid var(--borda); }
+.linha-peca .lnux-selecao { max-width: 260px; }
 .palco-topo .espaco { flex: 1; pointer-events: none; }
 .chip {
   display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px;

@@ -16,7 +16,35 @@
   voz.carregar();
 
   const palcoArea = $("#palco-area");
-  const palco = new C.Palco($("#palco"));
+  // Dois palcos: Live2D (pixi) e 3D (VRoid/VRM, three.js). "palco" aponta para o da personagem aberta; os
+  // ouvintes (toques, emoção...) valem para os dois. O 3D só é criado quando uma personagem VRoid abre.
+  const palco2d = new C.Palco($("#palco"));
+  let palco3d = null, palcoAtivo = palco2d;
+  const ouvintesPalco = [];
+  const palco = new Proxy({}, {
+    get(_, k) {
+      if (k === "on") return (ev, f) => { ouvintesPalco.push([ev, f]); palco2d.on(ev, f); if (palco3d) palco3d.on(ev, f); };
+      const v = palcoAtivo[k];
+      return typeof v === "function" ? v.bind(palcoAtivo) : v;
+    },
+    set(_, k, v) { palcoAtivo[k] = v; return true; },
+  });
+  async function usarPalco(tipo) {
+    if (tipo === "vrm") {
+      await C.prepararVRM();
+      if (!palco3d) { palco3d = new C.Palco3D($("#palco")); for (const [ev, f] of ouvintesPalco) palco3d.on(ev, f); }
+      palco2d.descarregar();
+      palco2d.pausar();
+      palco2d.app.view.style.display = "none";
+      palco3d.mostrar(true);
+      palcoAtivo = palco3d;
+    } else {
+      if (palco3d) { palco3d.descarregar(); palco3d.mostrar(false); }
+      palco2d.app.view.style.display = "";
+      palco2d.continuar();
+      palcoAtivo = palco2d;
+    }
+  }
   const listaMsgs = $("#mensagens");
   const campo = $("#texto");
   let atual = null;        // personagem aberta (com os arquivos)
@@ -186,8 +214,9 @@
     novasDesdeAnalise++;
     palco.olharPara(null);
     const ctxLocal = { nome: nomeDela(), pessoa: est.pessoa, afeto: est.afeto, fatos: est.fatos };
-    let local = null;
-    if (ia.config.motorLocal === "sempre" || !ia.configurada()) local = C.motorLocal(texto, { ...ctxLocal, forcar: true });
+    let local = await pedidoDeRoupa(texto);
+    if (local) { /* já respondeu: trocou de roupa */ }
+    else if (ia.config.motorLocal === "sempre" || !ia.configurada()) local = C.motorLocal(texto, { ...ctxLocal, forcar: true });
     else if (ia.config.motorLocal === "simples") local = C.motorLocal(texto, ctxLocal);
     if (local) {
       ia.gasto.locais++;
@@ -358,7 +387,6 @@
   let pronto = false; // fim da abertura (histórico, reanálise e saudação) — os testes esperam por ele
   async function abrirPersonagem(id, { saudar = true } = {}) {
     pronto = false;
-    if (!live2d) { await mostrarVazio(); LNUX.aviso("Falta o núcleo do Live2D (veja o aviso na tela).", "alerta"); return; }
     $("#palco-carregando").textContent = "Carregando...";
     $("#palco-carregando").hidden = false;
     try {
@@ -367,6 +395,8 @@
       palco.descarregar(); // tira a anterior antes de ler a nova (o desenho e a leitura do ZIP disputam o aparelho)
       const p = await C.lerPersonagem(id);
       if (!p) throw new Error("Essa personagem não está mais guardada.");
+      if (p.tipo !== "vrm" && !live2d) { await mostrarVazio(); LNUX.aviso("Falta o núcleo do Live2D (veja o aviso na tela). Personagens VRoid (.vrm) abrem sem ele.", "alerta"); return; }
+      await usarPalco(p.tipo === "vrm" ? "vrm" : "live2d");
       reduziuPorFalha = null;
       await palco.carregar(p);
       if (reduziuPorFalha) {
@@ -386,6 +416,7 @@
       for (const b of $("#enquadramento").children) b.setAttribute("aria-pressed", String(b.dataset.modo === palco.enquadramento.modo));
       desenharAtalhos();
       desenharZonas();
+      atualizarChipRoupa();
       est = await mem.estado(id);
       atualizarAfeto();
       await desenharHistorico();
@@ -466,6 +497,7 @@
     });
     caixa.replaceChildren(
       el("b", {}, "Falta o núcleo do Live2D (Cubism Core)."),
+      el("p", { style: { margin: "6px 0 0" } }, "Ele só é preciso para personagens Live2D (VTube Studio). Personagens VRoid (.vrm) abrem sem ele."),
       el("p", { style: { margin: "6px 0 0" } }, "Ele é da Live2D Inc. e não pode vir junto com o app. A Companhia tenta baixar do site oficial; se não der (sem internet), baixe o ",
         el("a", { href: "https://www.live2d.com/en/sdk/download/web/", target: "_blank", rel: "noopener" }, "Cubism SDK for Web"),
         " e escolha o arquivo ", el("code", {}, "live2dcubismcore.min.js"), ". Usar o núcleo significa aceitar a licença da Live2D."),
@@ -487,13 +519,12 @@
     }
     try { live2d = await C.prepararLive2D(); } catch (e) { live2d = null; LNUX.erro(e); }
     if (live2d === "oficial" && LNUX.ponte.disponivel) LNUX.ponte.pedir("POST", "live2d/core", { json: {} }).catch(() => {}); // guarda para usar sem internet
-    if (live2d) {
-      $("#nucleo-aviso").hidden = true;
-      const id = pref("atual", "");
-      const lista = await C.listarPersonagens();
-      const escolhido = lista.find((p) => p.id === id) || lista[0];
-      if (escolhido) await abrirPersonagem(escolhido.id); else await mostrarVazio();
-    } else await mostrarVazio();
+    if (live2d) $("#nucleo-aviso").hidden = true;
+    const id = pref("atual", "");
+    const lista = await C.listarPersonagens();
+    const pode = lista.filter((p) => live2d || p.tipo === "vrm"); // sem o núcleo, só as personagens VRoid abrem
+    const escolhido = pode.find((p) => p.id === id) || pode[0];
+    if (escolhido) await abrirPersonagem(escolhido.id); else await mostrarVazio();
   }
 
   // ── Importar ─────────────────────────────────────────────────────────
@@ -507,9 +538,10 @@
         if (!files.length) return;
         arquivos = C.pacoteDaPasta(files);
       } else {
-        const [a] = await LNUX.arquivos.abrir({ titulo: "Importar personagem (ZIP ou .model3.json)", aceitar: LNUX.ponte.disponivel ? ".zip,.json" : ".zip" });
+        const [a] = await LNUX.arquivos.abrir({ titulo: "Importar personagem (ZIP, .vrm ou .model3.json)", aceitar: LNUX.ponte.disponivel ? ".zip,.vrm,.json" : ".zip,.vrm" });
         if (!a) return;
-        if (/\.json$/i.test(a.nome)) {
+        if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
+        else if (/\.json$/i.test(a.nome)) {
           if (a.origem !== "ponte") throw new Error("Pelo navegador, escolha o ZIP ou use Importar pasta.");
           const prog = LNUX.progresso("Lendo a pasta do modelo");
           try { arquivos = await C.pacoteDaPonte(a.caminho, (f, n) => prog.definir(f, n)); } finally { prog.fechar(); }
@@ -520,25 +552,177 @@
       }
       palco.continuar();
       await importarPacote(arquivos, zip);
-    } catch (e) { LNUX.erro(e); } finally { palco.continuar(); }
+    } catch (e) { erroAoImportar(e); } finally { palco.continuar(); }
   }
   async function importarPacote(arquivos, zip) {
     pronto = false;
     const info = await C.lerPacote(arquivos);
-    if (info.protegido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" marcou o modelo como "não compartilhar" (VTube Studio). Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
+    if (info.protegido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
     const p = await C.importarPacote(arquivos, zip);
-    LNUX.aviso(`${p.nome} importada: ${info.expressoes.length} expressões${info.idle ? ", movimento parado" : ""}${info.vtube ? ", ajustes do VTube Studio" : ""}.`, "ok");
+    if (info.tipo === "vrm") LNUX.aviso(`${p.nome} importada (VRoid): ${p.roupas.length} roupa${p.roupas.length > 1 ? "s" : ""}${p.variacoes.length ? `, ${p.variacoes.length} variações de textura` : ""}. Troque em Personagem › Roupas.`, "ok");
+    else LNUX.aviso(`${p.nome} importada: ${info.expressoes.length} expressões${info.idle ? ", movimento parado" : ""}${info.vtube ? ", ajustes do VTube Studio" : ""}.`, "ok");
     await abrirPersonagem(p.id);
   }
+  /** Erros de importação: o item de roupa do VRoid Studio vira variações de textura da personagem VRoid aberta. */
+  async function erroAoImportar(e) {
+    if (!e.itemVroid) { LNUX.erro(e); return; }
+    const n = (e.variacoes || []).length;
+    if (atual && atual.tipo === "vrm" && n) {
+      const r = await LNUX.dialogo({ titulo: "Item de roupa do VRoid Studio", corpo: e.message + `\n\nO pacote tem ${n} jogo${n > 1 ? "s" : ""} de texturas (${e.variacoes.map((v) => v.nome).join(", ")}). Guardar como variações de cor de ${atual.perfil.nome}?`,
+        botoes: [{ rotulo: "Agora não", valor: false }, { rotulo: "Guardar as texturas", primario: true, valor: true }] });
+      if (r) {
+        atual.variacoes = [...(atual.variacoes || []), ...e.variacoes];
+        await C.salvarPersonagem(atual);
+        LNUX.aviso(`${n} variações guardadas. Use em Personagem › Roupas (Textura de cada peça).`, "ok");
+      }
+      return;
+    }
+    LNUX.dialogo({ titulo: "Item de roupa do VRoid Studio", corpo: e.message, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
+  }
   LNUX.soltarArquivos(palcoArea, async (arqs) => {
-    const a = arqs.find((x) => /\.zip$/i.test(x.nome));
-    if (!a) { LNUX.aviso("Solte o ZIP do modelo (ou use Personagem › Importar pasta).", "alerta"); return; }
+    const a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
+    if (!a) { LNUX.aviso("Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
     palco.pausar();
-    let arquivos, zip;
-    try { zip = await a.blob(); arquivos = await C.pacoteDoZip(zip); } catch (e) { palco.continuar(); LNUX.erro(e); return; }
+    let arquivos, zip = null;
+    try {
+      if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
+      else { zip = await a.blob(); arquivos = await C.pacoteDoZip(zip); }
+    } catch (e) { palco.continuar(); LNUX.erro(e); return; }
     palco.continuar();
-    try { await importarPacote(arquivos, zip); } catch (e) { LNUX.erro(e); }
+    try { await importarPacote(arquivos, zip); } catch (e) { erroAoImportar(e); }
   });
+
+  // ── Roupas ───────────────────────────────────────────────────────────
+
+  const PECA_LIVE2D = /cloth|outfit|costume|dress|hat|coat|jacket|skirt|roupa|chap[eé]u|衣|服|帽/i;
+  const roupaAtual = () => (atual && atual.tipo === "vrm" ? atual.roupas.find((r) => r.id === atual.roupaAtual) || atual.roupas[0] : null);
+  function atualizarChipRoupa() {
+    const b = $("#chip-roupa");
+    const tem = atual && (atual.tipo === "vrm" ? atual.roupas.length > 1 || palco.pecas.length : [...palco.expressoes.keys()].some((n) => PECA_LIVE2D.test(n)));
+    b.hidden = !tem;
+    const r = roupaAtual();
+    b.textContent = "👗 " + (r ? r.nome : "Roupa");
+  }
+  /** Veste outra roupa (outro .vrm da mesma personagem), sem perder a conversa. */
+  async function vestir(roupaId) {
+    if (!atual || atual.tipo !== "vrm" || roupaId === atual.roupaAtual) return;
+    atual.roupaAtual = roupaId;
+    $("#palco-carregando").textContent = "Trocando de roupa...";
+    $("#palco-carregando").hidden = false;
+    try {
+      const emocao = palco.emocao;
+      await palco.carregar(atual, { roupaId });
+      palco.definirEmocao(emocao);
+      await C.salvarPersonagem(atual);
+      desenharAtalhos();
+      atualizarChipRoupa();
+    } catch (e) { LNUX.erro(e); } finally { $("#palco-carregando").hidden = true; }
+  }
+  async function adicionarRoupa() {
+    if (!atual || atual.tipo !== "vrm") return;
+    const arqs = await LNUX.arquivos.abrir({ titulo: "Adicionar roupa (outro .vrm da mesma personagem)", aceitar: ".vrm", multiplos: true });
+    for (const a of arqs) {
+      try { const r = await C.adicionarRoupa(atual, await a.blob(), LNUX.nomeSemExtensao(a.nome)); LNUX.aviso(`Roupa "${r.nome}" adicionada.`, "ok"); }
+      catch (e) { LNUX.erro(e); }
+    }
+    atualizarChipRoupa();
+  }
+  function menuRoupa() {
+    if (!atual) return;
+    const r = $("#chip-roupa").getBoundingClientRect();
+    const itens = atual.tipo === "vrm"
+      ? [...atual.roupas.map((x) => ({ rotulo: x.nome, marcado: () => x.id === atual.roupaAtual, acao: () => vestir(x.id) })), "-",
+        { rotulo: "Peças, cores e mais roupas...", acao: janelaRoupas }]
+      : [...[...palco.expressoes.keys()].filter((n) => PECA_LIVE2D.test(n)).map((n) => ({ rotulo: n, marcado: () => palco.expressoes.get(n).alvo > 0.5,
+        acao: () => { palco.alternarExpressao(n); atual.ativas = palco.expressoesAtivas(); salvarPersonagem(); desenharAtalhos(); } })), "-", { rotulo: "Roupas...", acao: janelaRoupas }];
+    LNUX.abrirMenu(itens, r.left, r.bottom + 4, $("#chip-roupa"));
+  }
+  /** Personagem › Roupas: trocar de roupa, esconder peças, trocar a textura de uma peça, acrescentar roupas. */
+  async function janelaRoupas() {
+    if (!atual) return;
+    const corpo = el("div", { class: "ajustes" });
+    if (atual.tipo !== "vrm") {
+      const pecas = [...palco.expressoes.keys()].filter((n) => PECA_LIVE2D.test(n));
+      corpo.append(el("p", { class: "fraco", style: { margin: 0 } }, "Nos modelos Live2D, as roupas e acessórios que o autor separou ficam nas expressões (como os atalhos do VTube Studio)."),
+        ...(pecas.length ? pecas.map((n) => { const c = el("input", { type: "checkbox", checked: palco.expressoes.get(n).alvo > 0.5 });
+          c.addEventListener("change", () => { palco.alternarExpressao(n, c.checked); atual.ativas = palco.expressoesAtivas(); salvarPersonagem(); desenharAtalhos(); });
+          return el("label", { class: "lnux-alternar" }, c, n); }) : [el("p", {}, "Este modelo não tem expressões de roupa. Todas as expressões ficam nos botões embaixo da personagem.")]));
+      await LNUX.dialogo({ titulo: "Roupas de " + atual.perfil.nome, corpo, largo: true, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
+      return;
+    }
+    const salvar = () => C.salvarPersonagem(atual).catch(LNUX.erro);
+    const desenhar = () => {
+      const r = roupaAtual();
+      const linhasRoupas = atual.roupas.map((x) => {
+        const nome = el("input", { class: "lnux-entrada", value: x.nome, "aria-label": "Nome da roupa" });
+        nome.addEventListener("change", () => { x.nome = nome.value.trim() || x.nome; salvar(); atualizarChipRoupa(); });
+        const vestindo = x.id === atual.roupaAtual;
+        return el("div", { class: "linha-roupa" + (vestindo ? " atual" : "") },
+          el("button", { class: "lnux-botao pequeno" + (vestindo ? " primario" : ""), type: "button", disabled: vestindo, onclick: async () => { await vestir(x.id); desenhar(); } }, vestindo ? "Vestindo" : "Vestir"),
+          nome,
+          atual.roupas.length > 1 ? el("button", { class: "lnux-botao pequeno perigo", type: "button", onclick: async () => {
+            if (!(await LNUX.confirmar("Tirar roupa da lista", `Tirar "${x.nome}" desta personagem?`, { rotulo: "Tirar", perigo: true }))) return;
+            atual.roupas = atual.roupas.filter((y) => y !== x);
+            if (vestindo) await vestir(atual.roupas[0].id);
+            await salvar(); atualizarChipRoupa(); desenhar();
+          } }, "Tirar") : null);
+      });
+      const opcoesTextura = [["", "Textura original"], ["arquivo", "Escolher imagem..."],
+        ...(atual.variacoes || []).flatMap((v, i) => Object.keys(v.imagens).map((n) => [`v:${i}:${n}`, `${v.nome} / ${n}`]))];
+      const linhasPecas = palco.pecas.map((pc) => {
+        const c = el("input", { type: "checkbox", checked: pc.visivel });
+        c.addEventListener("change", () => { palco.mostrarPeca(pc.nome, c.checked); r.ocultas = palco.pecasOcultas(); salvar(); });
+        const sel = el("select", { class: "lnux-selecao", "aria-label": "Textura de " + pc.nome }, opcoesTextura.map(([v, n]) => el("option", { value: v }, n)));
+        if (r.texturas[pc.nome]) sel.prepend(el("option", { value: "manter", selected: true }, "Textura trocada"));
+        sel.addEventListener("change", async () => {
+          try {
+            let blob = null;
+            if (sel.value === "arquivo") { const [a] = await LNUX.arquivos.abrir({ titulo: "Textura para " + pc.nome, aceitar: "image/*" }); if (!a) return; blob = await a.blob(); }
+            else if (sel.value.startsWith("v:")) { const [, i, ...n] = sel.value.split(":"); blob = atual.variacoes[+i].imagens[n.join(":")]; }
+            else if (sel.value === "manter") return;
+            if (blob) { await palco.trocarTextura(pc.nome, blob); r.texturas[pc.nome] = blob; }
+            else { palco.voltarTextura(pc.nome); delete r.texturas[pc.nome]; }
+            await salvar();
+          } catch (e) { LNUX.erro(e); }
+        });
+        return el("div", { class: "linha-peca" }, el("label", { class: "lnux-alternar" }, c, pc.nome), sel);
+      });
+      corpo.replaceChildren(
+        el("div", { class: "lnux-rotulo" }, "Roupas (cada uma é um .vrm da mesma personagem)"), ...linhasRoupas,
+        el("div", { class: "linha" }, el("button", { class: "lnux-botao", type: "button", onclick: async () => { await adicionarRoupa(); desenhar(); } }, "Adicionar roupa (.vrm)...")),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "No VRoid Studio, vista outra roupa na mesma personagem e exporte de novo como VRM; depois adicione aqui. Pela conversa também dá: \"troca de roupa\"."),
+        el("div", { class: "lnux-rotulo" }, `Peças de "${r.nome}"`),
+        ...(linhasPecas.length ? linhasPecas : [el("p", { class: "fraco", style: { margin: 0 } }, "Este modelo não tem peças de roupa separadas.")]),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Esconder uma peça pode mostrar o corpo sem acabamento (o VRoid apaga a pele que a roupa cobre). A textura nova precisa ser do mesmo molde da peça, como as cores que vêm nos pacotes de roupa do VRoid; se o modelo foi exportado com as texturas juntas num atlas, ela não encaixa."),
+        el("div", { class: "linha" }, el("button", { class: "lnux-botao", type: "button", onclick: async () => {
+          const arqs = await LNUX.arquivos.abrir({ titulo: "Texturas (um ZIP de roupa do VRoid ou imagens)", aceitar: ".zip,image/*", multiplos: true });
+          if (!arqs.length) return;
+          const mapa = new Map();
+          for (const a of arqs) {
+            if (/\.zip$/i.test(a.nome)) for (const [c, b] of await C.pacoteDoZip(await a.blob())) mapa.set(c, b);
+            else mapa.set("Imagens/" + a.nome, await a.blob());
+          }
+          const novas = C.variacoesDoPacote(mapa);
+          atual.variacoes = [...(atual.variacoes || []), ...novas];
+          await salvar();
+          LNUX.aviso(`${novas.length} jogo(s) de texturas guardado(s).`, "ok");
+          desenhar();
+        } }, "Guardar texturas para trocar (ZIP ou imagens)..."),
+        (atual.variacoes || []).length ? el("span", { class: "fraco pequeno" }, `${atual.variacoes.length} jogo(s): ${atual.variacoes.map((v) => v.nome).join(", ")}`) : null));
+    };
+    desenhar();
+    await LNUX.dialogo({ titulo: "Roupas de " + atual.perfil.nome, corpo, largo: true, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
+  }
+  /** "Troca de roupa" na conversa: veste a próxima (sem gastar tokens). */
+  async function pedidoDeRoupa(texto) {
+    if (!atual || atual.tipo !== "vrm") return null;
+    if (!/\b(troc|mud|vist|veste|coloc|bot|põe|poe)\w*\b.{0,25}\b(roupa|outfit|look|vestido|traje|figurino)\b/i.test(texto)) return null;
+    if (atual.roupas.length < 2) return "[pensativa] Por enquanto eu só tenho esta roupa... Dá para me dar outra em Personagem › Roupas (um .vrm meu, exportado do VRoid com outra roupa).";
+    const i = atual.roupas.findIndex((r) => r.id === atual.roupaAtual);
+    const prox = atual.roupas[(i + 1) % atual.roupas.length];
+    await vestir(prox.id);
+    return `[feliz][pular] Pronto, troquei! Agora estou com "${prox.nome}". Gostou?`;
+  }
 
   // ── Janelas: personagem ──────────────────────────────────────────────
 
@@ -553,7 +737,7 @@
     const corpo = el("div", { class: "ajustes" });
     const desenhar = (itens) => corpo.replaceChildren(
       itens.length ? el("div", { class: "lista-personagens", style: { display: "flex", flexWrap: "wrap", gap: "8px" } }, itens.map((p) => cartaoPersonagem(p, () => { d.fechar(); abrirPersonagem(p.id); }, atual && atual.id))) : el("p", { class: "fraco" }, "Nenhuma personagem ainda."),
-      el("div", { class: "linha" }, el("button", { class: "lnux-botao", type: "button", onclick: () => { d.fechar(); importar("zip"); } }, "Importar ZIP..."), el("button", { class: "lnux-botao", type: "button", onclick: () => { d.fechar(); importar("pasta"); } }, "Importar pasta...")));
+      el("div", { class: "linha" }, el("button", { class: "lnux-botao", type: "button", onclick: () => { d.fechar(); importar("zip"); } }, "Importar ZIP ou .vrm..."), el("button", { class: "lnux-botao", type: "button", onclick: () => { d.fechar(); importar("pasta"); } }, "Importar pasta...")));
     desenhar(lista);
     const d = LNUX.dialogo({ titulo: "Trocar de personagem", corpo, largo: true, botoes: [{ rotulo: "Fechar", valor: null }] });
   }
@@ -608,6 +792,7 @@
   /** Editor das áreas de toque: arrastar para mover, a alça para mudar o tamanho. */
   function editarZonas() {
     if (!atual || !palco.modelo) return;
+    if (atual.tipo === "vrm") { mostrarZonas = true; desenharZonas(); LNUX.aviso("Nas personagens VRoid as áreas de toque seguem o corpo sozinhas (cabeça, mãos, pés...). Agora elas estão aparecendo; desligue em Exibir › Mostrar áreas de toque.", "info", 9000); return; }
     const original = JSON.parse(JSON.stringify(palco.toques.zonas));
     const editor = { escolhida: palco.toques.zonas[0] && palco.toques.zonas[0].id };
     palco.toques.editando = true;
@@ -1035,6 +1220,7 @@
       el("ul", { style: { margin: 0, paddingLeft: "18px", display: "grid", gap: "4px" } },
         item("pixi.js 6", "https://github.com/pixijs/pixijs", "desenho (MIT), em vendor/."),
         item("pixi-live2d-display", "https://github.com/guansss/pixi-live2d-display", "carregar e animar modelos Live2D (MIT, guansss), em vendor/."),
+        item("three.js e three-vrm", "https://github.com/pixiv/three-vrm", "personagens VRoid (.vrm) em 3D (MIT; three.js e pixiv), em vendor/."),
         item("Live2D Cubism Core", "https://www.live2d.com/en/sdk/download/web/", "núcleo da Live2D Inc. — licença própria; NÃO vem junto: é baixado do site oficial ou escolhido por você."),
         item("claude-code-router", "https://github.com/musistudio/claude-code-router", "ideia das rotas por tarefa para economizar tokens (MIT); também dá para usá-lo como provedor."),
         item("VoiceStudio", "https://github.com/debpalash/VoiceStudio", "gerador de voz local (AGPL-3.0, debpalash) — a Companhia só chama a API dele; nenhum código foi copiado."),
@@ -1052,7 +1238,7 @@
   const comPersonagem = () => !!atual;
   const menus = [
     { rotulo: "Personagem", itens: [
-      { rotulo: "Importar ZIP...", atalho: "Ctrl+O", acao: () => importar("zip") },
+      { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },
       "-",
@@ -1060,6 +1246,7 @@
       { rotulo: "Emoções e expressões...", acao: janelaEmocoes, ativo: comPersonagem },
       { rotulo: "Áreas de toque...", acao: editarZonas, ativo: comPersonagem },
       { rotulo: "Voz desta personagem...", acao: () => janelaVoz(true), ativo: comPersonagem },
+      { rotulo: "Roupas...", acao: janelaRoupas, ativo: comPersonagem },
       "-",
       { rotulo: "Exportar personagem (ZIP)...", acao: exportarPersonagem, ativo: comPersonagem },
       { rotulo: "Apagar esta personagem...", acao: apagarPersonagem, ativo: comPersonagem },
@@ -1137,6 +1324,7 @@
     LNUX.botaoIcone("mais", "Nova conversa", novaConversa),
     LNUX.botaoIcone("info", "O que ela lembra", janelaMemoria));
   $("#marca-icone").innerHTML = LNUX.icone("ia");
+  $("#chip-roupa").addEventListener("click", menuRoupa);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.querySelector(".lnux-fundo-modal") && (voz.falando() || pedido)) { voz.parar(); if (pedido) pedido.abort(); } });
   // destrava o som no primeiro toque em qualquer lugar
   document.addEventListener("pointerdown", () => voz.destravar(), { once: true });
@@ -1168,7 +1356,7 @@
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas,
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
   };
 })();

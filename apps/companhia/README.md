@@ -1,6 +1,6 @@
 # Companhia
 
-Converse com personagens **Live2D** pela tela: o mesmo tipo de modelo que o **VTube Studio** usa. Ela responde
+Converse com personagens **Live2D** (o mesmo tipo de modelo que o **VTube Studio** usa) ou **VRoid** (`.vrm`, em 3D). Ela responde
 num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** com a voz que você escolher,
 **reage com o rosto e o corpo** ao que diz, **sente os toques** (cafuné, cutucar, puxar a orelha, cócegas) e
 **lembra** de você, porque as conversas ficam guardadas no próprio aparelho.
@@ -21,6 +21,41 @@ a memória pode ter uma cópia numa pasta do aparelho.
    "qual meu nome"...) sem gastar nada. Para uma conversa de verdade, ligue uma IA em *IA › Provedores*.
 3. **Voz**: *Voz › Configurar*. O 🎤 ao lado da caixa de texto escuta você; **Mãos livres** abre o microfone
    sozinho depois que ela fala, então dá para conversar só por voz.
+
+## Personagens VRoid (.vrm) e troca de roupa
+
+Personagens feitas no **VRoid Studio** (ou qualquer modelo **VRM 0.x / 1.0**) abrem num palco 3D, com o
+[three.js](https://threejs.org) e o [three-vrm](https://github.com/pixiv/three-vrm), a biblioteca oficial da pixiv.
+Basta *Personagem › Importar ZIP ou .vrm* (ou arrastar o arquivo). No VRoid Studio, use **Exportar como VRM**.
+O núcleo do Live2D não é preciso para elas.
+
+- **Tudo que as Live2D fazem:** conversa, voz, memória, as 15 emoções (nas expressões do VRM: happy, sad, angry,
+  relaxed, surprised...), boca acompanhando a voz, piscar, olhar, gestos no esqueleto (concordar, negar, acenar,
+  pular...) e toques. Aqui as áreas de toque seguem o corpo sozinhas (cabeça, orelhas, rosto, ombros, mãos, barriga
+  e pés).
+- **Troca de roupa** (o botão 👗 no palco, ou *Personagem › Roupas*):
+  - **Várias roupas:** cada roupa é um `.vrm` da mesma personagem. No VRoid Studio, vista outra roupa e exporte de
+    novo; depois use *Adicionar roupa (.vrm)*. Um ZIP com vários `.vrm` vira uma personagem com várias roupas.
+    Pela conversa também dá: "troca de roupa" (sem gastar tokens).
+  - **Peças:** as peças de roupa do modelo (Tops, Bottoms, Onepiece, Shoes, acessórios...) podem ser escondidas.
+    O VRoid apaga a pele que a roupa cobre, então pode aparecer um buraco.
+  - **Cores e estampas:** a textura de uma peça pode ser trocada por outra imagem no mesmo molde, como as versões
+    de cor que vêm nos pacotes de roupa do VRoid (ex.: `Black.female/Dress.Black.png` e
+    `White.female/Dress.White.png`). Guarde essas texturas em *Roupas › Guardar texturas para trocar* e escolha em
+    cada peça. Se o modelo foi exportado com as texturas juntas num atlas, a imagem não encaixa.
+  - Tudo fica guardado: ao abrir de novo, a roupa, as peças e as texturas continuam como estavam. *Exportar
+    personagem* gera um ZIP com as roupas e as texturas, que dá para importar em outro aparelho.
+- **Item de roupa do VRoid Studio (`.vroidcustomitem`):** não é uma personagem. Ele guarda ajustes das roupas que
+  só existem dentro do VRoid Studio, então **só abre lá**. Aplique o item na personagem no VRoid Studio e exporte
+  como VRM. Se você importar o pacote do item com uma personagem VRoid aberta, a Companhia explica isso e oferece
+  guardar as texturas PNG do pacote como variações de cor.
+- **Licença:** o `.vrm` traz a licença do autor. Se ela não deixa redistribuir, a Companhia avisa ao importar e ao
+  exportar.
+- O pacote do three.js com o three-vrm (`vendor/three-vrm-pacote.min.js`, ~0,9 MB) só carrega quando uma
+  personagem VRoid abre. Para montar de novo: `sh tools/montar_vrm.sh`.
+
+Nos modelos **Live2D**, as roupas e os acessórios que o autor separou ficam nas expressões (como os atalhos do
+VTube Studio). Quando o nome parece roupa (clothe, outfit, hat...), elas também aparecem no botão 👗.
 
 ## IA: provedores e economia de tokens
 
@@ -175,6 +210,7 @@ para outro aparelho seu.
 
 ```
 index.html, companhia.css
+js/vrm.js          palco 3D para personagens VRoid (.vrm): expressões, gestos nos ossos, toques, peças e texturas
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
                    emoções, gestos, piscar, olhar, boca, toques
 js/personagens.js  importar (ZIP, pasta, ponte), ler o vtube.json, guardar, trocar, exportar
@@ -183,7 +219,8 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
-vendor/            pixi.js 6 e pixi-live2d-display (MIT) — o Cubism Core não vem junto
+vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm (MIT, three-vrm-pacote.min.js)
+                   — o Cubism Core não vem junto
 ```
 
 Teste no Chromium (precisa de um modelo e do núcleo, que não estão no repositório):
@@ -192,9 +229,18 @@ Teste no Chromium (precisa de um modelo e do núcleo, que não estão no reposit
 LNUX_TESTE_MODELO=/caminho/modelo.zip LNUX_TESTE_NUCLEO=/caminho/live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
 ```
 
+As personagens VRoid têm um teste próprio, que baixa o modelo de exemplo da pixiv (ou usa `LNUX_TESTE_VRM`):
+
+```bash
+python3 tests/testar_navegador.py companhia_vrm
+```
+
 ## O que ainda não faz
 
 - **Modelos Cubism 2** (`.moc` / `model.json`) não abrem; só Cubism 3 e 4.
+- **Itens de roupa do VRoid Studio** (`.vroidcustomitem`) só abrem no VRoid Studio. Aqui entram a personagem
+  exportada (`.vrm`) e as texturas do pacote.
+- **Animações `.vrma`** e as físicas de roupa além das do próprio VRM (spring bones) ainda não estão incluídas.
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.
