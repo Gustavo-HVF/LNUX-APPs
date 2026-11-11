@@ -46,6 +46,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import tarfile
 import threading
 import time
 import urllib.error
@@ -115,6 +116,44 @@ IA_CABECALHO = {"anthropic": ("x-api-key", "{}"), "gemini": ("x-goog-api-key", "
 # Cabeçalhos que o app pode mandar adiante (os de autenticação a ponte põe sozinha)
 IA_REPASSAR = {"content-type", "accept", "anthropic-version", "anthropic-beta", "openai-beta", "http-referer", "x-title"}
 LIVE2D_CORE_URL = "https://cubism.live2d.com/sdk-web/cubismcore/live2dcubismcore.min.js"
+# Companhia, captura de movimento: o WebAssembly e os modelos do MediaPipe Tasks Vision (Google, Apache-2.0) somam
+# ~30 MB e não vêm no repositório. A ponte baixa uma vez das fontes oficiais (o pacote do npm e os modelos
+# publicados pelo Google) e guarda em ~/.lnux-apps/mediapipe/<versão>/; depois a captura funciona sem internet.
+MEDIAPIPE_VERSAO = "1.2.2"
+MEDIAPIPE_PACOTE = f"https://registry.npmjs.org/@mediapipe/tasks-vision/-/tasks-vision-{MEDIAPIPE_VERSAO}.tgz"
+MEDIAPIPE_MODELOS = "https://storage.googleapis.com/mediapipe-models/"
+MEDIAPIPE_ARQUIVOS = {  # nome → ("pacote", caminho dentro do .tgz) ou ("modelo", caminho no endereço dos modelos)
+    "vision_wasm_internal.js": ("pacote", "package/wasm/vision_wasm_internal.js"),
+    "vision_wasm_internal.wasm": ("pacote", "package/wasm/vision_wasm_internal.wasm"),
+    "face_landmarker.task": ("modelo", "face_landmarker/face_landmarker/float16/1/face_landmarker.task"),
+    "pose_landmarker_lite.task": ("modelo", "pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task"),
+    "pose_landmarker_full.task": ("modelo", "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"),
+    "hand_landmarker.task": ("modelo", "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"),
+}
+MEDIAPIPE_TRAVA = threading.Lock()
+
+
+def baixar_para(url: str, destino: Path, limite: int):
+    """Baixa um arquivo grande aos pedaços (para um temporário, que só vira o destino quando termina)."""
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    tmp = destino.with_name(destino.name + ".baixando")
+    total = 0
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "LNUX-APPs/" + VERSAO}), timeout=120) as r, open(tmp, "wb") as f:
+            while True:
+                bloco = r.read(256 * 1024)
+                if not bloco:
+                    break
+                total += len(bloco)
+                if total > limite:
+                    raise ErroPonte(502, "O arquivo baixado é maior do que o esperado.")
+                f.write(bloco)
+        os.replace(tmp, destino)
+    except (urllib.error.URLError, OSError) as e:
+        raise ErroPonte(502, f"Não consegui baixar {url.rsplit('/', 1)[-1]} ({getattr(e, 'reason', e)}). Tem internet?")
+    finally:
+        if tmp.exists():
+            tmp.unlink()
 
 
 def ia_carregar() -> dict:
@@ -284,6 +323,8 @@ class Ponte:
                 "voz": bool(comando_voz("teste")), "vibrar": bool(shutil.which("termux-vibrate")),
                 # Companhia: proxy das APIs de IA (com as chaves guardadas aqui) e o núcleo do Live2D já baixado
                 "ia": True, "live2d_core": (DADOS / "live2d" / "live2dcubismcore.min.js").is_file(),
+                # Companhia: guarda os arquivos do rastreamento pela câmera (MediaPipe)
+                "mediapipe": MEDIAPIPE_VERSAO,
             },
             "perfis": sorted(PERFIS),
         }
@@ -860,6 +901,8 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.ia_repassar(self.ler_json())
         if rota == "live2d/core":
             return self.live2d_core(m)
+        if rota == "mediapipe" or rota.startswith("mediapipe/"):
+            return self.mediapipe(m, rota[10:])
         raise ErroPonte(404, f"A ponte não conhece /api/{rota} ({m}).")
 
     # ── ações
@@ -969,6 +1012,50 @@ class Manipulador(BaseHTTPRequestHandler):
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_bytes(dados)
         return self.responder_json({"ok": True, "tamanho": len(dados)})
+
+    def mediapipe(self, metodo: str, nome: str):
+        """Os arquivos do rastreamento pela câmera (Companhia): GET /api/mediapipe diz quais já estão guardados,
+        GET /api/mediapipe/<nome> entrega um, POST /api/mediapipe {"arquivos": [...]} baixa os que faltam."""
+        pasta = DADOS / "mediapipe" / MEDIAPIPE_VERSAO
+        if metodo in ("GET", "HEAD") and nome:
+            if nome not in MEDIAPIPE_ARQUIVOS:
+                raise ErroPonte(404, "A ponte não tem esse arquivo do rastreamento.")
+            alvo = pasta / nome
+            if not alvo.is_file():
+                raise ErroPonte(404, "Esse arquivo do rastreamento ainda não foi baixado.")
+            return self.enviar_arquivo(alvo, TIPOS.get(alvo.suffix.lower()) or "application/octet-stream")
+        if metodo == "POST" and not nome:
+            pedidos = [str(n) for n in (self.ler_json().get("arquivos") or [])]
+            if not pedidos or any(n not in MEDIAPIPE_ARQUIVOS for n in pedidos):
+                raise ErroPonte(400, "Diga quais arquivos do rastreamento baixar: " + ", ".join(MEDIAPIPE_ARQUIVOS))
+            with MEDIAPIPE_TRAVA:  # um pedido de cada vez (o pacote do npm traz dois arquivos)
+                faltam = [n for n in pedidos if not (pasta / n).is_file()]
+                if any(MEDIAPIPE_ARQUIVOS[n][0] == "pacote" for n in faltam):
+                    pacote = pasta / "pacote.tgz"
+                    baixar_para(MEDIAPIPE_PACOTE, pacote, 80 * 1024 * 1024)
+                    try:
+                        with tarfile.open(pacote, "r:gz") as tgz:
+                            for n, (origem, dentro) in MEDIAPIPE_ARQUIVOS.items():
+                                if origem != "pacote":
+                                    continue
+                                membro = tgz.extractfile(dentro)
+                                if membro is None:
+                                    raise ErroPonte(502, f"O pacote do MediaPipe veio sem {dentro}.")
+                                tmp = pasta / (n + ".baixando")
+                                with open(tmp, "wb") as f:
+                                    shutil.copyfileobj(membro, f)
+                                os.replace(tmp, pasta / n)
+                    except (tarfile.TarError, KeyError, OSError) as e:
+                        raise ErroPonte(502, f"O pacote do MediaPipe veio com defeito ({e}).")
+                    finally:
+                        pacote.unlink(missing_ok=True)
+                for n in faltam:
+                    if MEDIAPIPE_ARQUIVOS[n][0] == "modelo":
+                        baixar_para(MEDIAPIPE_MODELOS + MEDIAPIPE_ARQUIVOS[n][1], pasta / n, 60 * 1024 * 1024)
+        elif not (metodo == "GET" and not nome):
+            raise ErroPonte(405, "Use GET (ver ou pegar) ou POST (baixar).")
+        return self.responder_json({"versao": MEDIAPIPE_VERSAO,
+                                    "arquivos": {n: ((pasta / n).stat().st_size if (pasta / n).is_file() else None) for n in MEDIAPIPE_ARQUIVOS}})
 
     def listar(self, caminho: str, ocultos: bool) -> dict:
         pasta = self.ponte.resolver(caminho)
