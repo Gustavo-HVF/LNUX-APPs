@@ -29,24 +29,49 @@
     },
     set(_, k, v) { palcoAtivo[k] = v; return true; },
   });
+  // Captura de movimento (câmera), pacotes de movimento, cenário e esqueleto: só para as personagens VRoid (3D)
+  const captura = new C.Captura({ conteiner: palcoArea, aoEstado: (texto, tipo) => {
+    if (tipo === "erro") { LNUX.aviso(texto, "erro", 9000); return; }
+    $("#palco-carregando").textContent = texto || "";
+    $("#palco-carregando").hidden = !texto;
+  } });
   async function usarPalco(tipo) {
     if (tipo === "vrm") {
       await C.prepararVRM();
-      if (!palco3d) { palco3d = new C.Palco3D($("#palco")); for (const [ev, f] of ouvintesPalco) palco3d.on(ev, f); }
+      if (!palco3d) {
+        palco3d = new C.Palco3D($("#palco"));
+        for (const [ev, f] of ouvintesPalco) palco3d.on(ev, f);
+        palco3d.captura = captura;
+      }
+      captura.palco = palco3d;
       palco2d.descarregar();
       palco2d.pausar();
       palco2d.app.view.style.display = "none";
       palco3d.mostrar(true);
       palcoAtivo = palco3d;
     } else {
-      if (palco3d) { palco3d.descarregar(); palco3d.mostrar(false); }
+      estudio.fechar();
+      captura.desligar(); // as personagens Live2D não têm esqueleto para a captura comandar
+      captura.palco = null;
+      if (palco3d) { if (palco3d.mundo) palco3d.mundo.sair(); palco3d.descarregar(); palco3d.mostrar(false); }
       palco2d.app.view.style.display = "";
       palco2d.continuar();
       palcoAtivo = palco2d;
     }
+    palcoArea.classList.toggle("palco-vrm", tipo === "vrm");
   }
   const listaMsgs = $("#mensagens");
   const campo = $("#texto");
+  // Os painéis do menu Movimento (js/estudio.js)
+  const estudio = C.Estudio({ area: palcoArea, captura, get palco() { return palcoAtivo; }, atual: () => atual, salvar: () => salvarPersonagem(), aoMudar: () => atualizarChipMovimento() });
+  function atualizarChipMovimento() {
+    const b = $("#chip-movimento"), vrm = !!(atual && atual.tipo === "vrm");
+    b.hidden = !vrm;
+    const andando = vrm && palco3d && palco3d.mundo && palco3d.mundo.andando;
+    b.textContent = "🎬 Movimento" + (captura.ligada ? " · câmera" : "") + (andando ? " · andando" : "");
+    b.classList.toggle("ligado", captura.ligada || !!andando);
+    palcoArea.classList.toggle("andando", !!andando);
+  }
   let atual = null;        // personagem aberta (com os arquivos)
   let est = null;          // memória (estado) dela
   let live2d = null;       // de onde veio o núcleo do Live2D (null = não carregou)
@@ -417,6 +442,8 @@
       desenharAtalhos();
       desenharZonas();
       atualizarChipRoupa();
+      atualizarChipMovimento();
+      await estudio.aoAbrirPersonagem(); // o cenário e os movimentos de andar em uso (só personagens VRoid)
       est = await mem.estado(id);
       atualizarAfeto();
       await desenharHistorico();
@@ -464,6 +491,9 @@
 
   async function mostrarVazio() {
     atual = null;
+    estudio.fechar();
+    captura.desligar();
+    atualizarChipMovimento();
     palco.descarregar();
     $("#palco-vazio").hidden = false;
     palcoArea.classList.add("sem-personagem");
@@ -581,7 +611,9 @@
   }
   LNUX.soltarArquivos(palcoArea, async (arqs) => {
     const a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
-    if (!a) { LNUX.aviso("Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
+    const outros = arqs.filter((x) => /\.(vrma|bvh|fbx|glb|gltf|obj|unitypackage|vrcw)$/i.test(x.nome));
+    if (outros.length && atual && atual.tipo === "vrm") { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
+    if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
     palco.pausar();
     let arquivos, zip = null;
     try {
@@ -589,8 +621,25 @@
       else { zip = await a.blob(); arquivos = await C.pacoteDoZip(zip); }
     } catch (e) { palco.continuar(); LNUX.erro(e); return; }
     palco.continuar();
+    // um ZIP só de movimentos (ou só com um cenário) solto com uma personagem VRoid aberta
+    const nomes = [...arquivos.keys()];
+    if (zip && atual && atual.tipo === "vrm" && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem)$/i.test(n))) {
+      if (nomes.some((n) => /\.(vrma|bvh)$/i.test(n)) || (nomes.some((n) => /\.fbx$/i.test(n)) && !nomes.some((n) => /\.(png|jpe?g)$/i.test(n)))) { estudio.receberMovimentos(new Map([[a.nome, zip]])).catch(LNUX.erro); return; }
+      if (nomes.some((n) => C.mapas.MODELO.test(n))) { estudio.receberMapa(new Map([[a.nome, zip]]), LNUX.nomeSemExtensao(a.nome)).catch(LNUX.erro); return; }
+    }
     try { await importarPacote(arquivos, zip); } catch (e) { erroAoImportar(e); }
   });
+  /** Arquivos soltos sobre uma personagem VRoid: movimentos (.vrma, .bvh) ou cenário; .fbx e .glb podem ser os dois. */
+  async function soltarNoPalco3D(arqs) {
+    const mapa = new Map();
+    for (const x of arqs) mapa.set(x.nome, await x.blob());
+    const nomes = [...mapa.keys()];
+    let destino = nomes.every((n) => /\.(vrma|bvh)$/i.test(n)) ? "movimento" : nomes.some((n) => /\.(obj|unitypackage|vrcw)$/i.test(n)) ? "cenario" : null;
+    if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem) ou um cenário (um mapa para ela andar).`,
+      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
+    if (destino === "movimento") await estudio.receberMovimentos(mapa);
+    else if (destino === "cenario") await estudio.receberMapa(mapa, LNUX.nomeSemExtensao(nomes[0]));
+  }
 
   // ── Roupas ───────────────────────────────────────────────────────────
 
@@ -1117,6 +1166,7 @@
 
   function enquadrar(modo) {
     if (!atual) return;
+    if (palco.mundo && palco.mundo.andando) estudio.alternarAndar(false); // Rosto/Busto/Corpo voltam ao retrato
     palco.definirEnquadramento({ modo, zoom: 1, dx: 0, dy: 0 });
     for (const b of $("#enquadramento").children) b.setAttribute("aria-pressed", String(b.dataset.modo === modo));
     atual.enquadramento = { ...palco.enquadramento };
@@ -1139,6 +1189,7 @@
   $("#palco").addEventListener("wheel", (e) => {
     if (!atual) return;
     e.preventDefault();
+    if (palco.mundo && palco.mundo.andando) { palco.mundo.zoom(e.deltaY < 0 ? 1 / 1.1 : 1.1); return; } // andando: a rodinha aproxima a câmera
     palco.definirEnquadramento({ zoom: LNUX.limitar(palco.enquadramento.zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08), 0.4, 3) });
     atual.enquadramento = { ...palco.enquadramento };
     salvarPersonagem();
@@ -1183,7 +1234,8 @@
       el("p", { style: { margin: 0 } }, el("b", {}, "4. Voz: "), "Voz › Configurar: voz do navegador (grátis), ElevenLabs, OpenAI, VoiceStudio (no aparelho) ou outro servidor compatível. O microfone ao lado da caixa de texto escuta você; \"Mãos livres\" deixa a conversa toda por voz."),
       el("p", { style: { margin: 0 } }, el("b", {}, "5. Toques: "), "Toque, toque duas vezes, segure, faça carinho (vai e volta) ou puxe: cabeça (cafuné), chapéu, orelhas, bochechas, ombros, mãos, barriga e pés (cócegas). Exibir › Mostrar áreas de toque; Personagem › Áreas de toque para ajustar."),
       el("p", { style: { margin: 0 } }, el("b", {}, "6. Memória: "), "As conversas ficam neste aparelho. Ao abrir, ela relê o que ficou e lembra de você (nome, gostos, planos). Conversa › O que ela lembra, para ver, corrigir, exportar ou copiar para uma pasta do aparelho."),
-      el("p", { style: { margin: 0 } }, el("b", {}, "Expressões: "), "os botões embaixo da personagem ligam/desligam as expressões do modelo, como os atalhos do VTube Studio. Personagem › Emoções liga expressões a cada emoção.")),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Expressões: "), "os botões embaixo da personagem ligam/desligam as expressões do modelo, como os atalhos do VTube Studio. Personagem › Emoções liga expressões a cada emoção."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Movimento (personagens VRoid): "), "o menu Movimento (ou o botão 🎬 no palco) tem a captura de movimento pela câmera (rosto, olhos, tronco, braços, mãos, dedos e pernas), os pacotes de movimento (.vrma, .fbx do Mixamo, .bvh), o cenário para andar (W A S D, Shift corre, Espaço pula) e o ajuste do esqueleto.")),
       botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
   }
   /** Qualidade das texturas + diagnóstico da placa de vídeo (para quando a personagem aparece preta ou o app fica lento). */
@@ -1220,7 +1272,10 @@
       el("ul", { style: { margin: 0, paddingLeft: "18px", display: "grid", gap: "4px" } },
         item("pixi.js 6", "https://github.com/pixijs/pixijs", "desenho (MIT), em vendor/."),
         item("pixi-live2d-display", "https://github.com/guansss/pixi-live2d-display", "carregar e animar modelos Live2D (MIT, guansss), em vendor/."),
-        item("three.js e three-vrm", "https://github.com/pixiv/three-vrm", "personagens VRoid (.vrm) em 3D (MIT; three.js e pixiv), em vendor/."),
+        item("three.js e three-vrm", "https://github.com/pixiv/three-vrm", "personagens VRoid (.vrm) em 3D e movimentos .vrma (MIT; three.js e pixiv), em vendor/."),
+        item("MediaPipe Tasks Vision", "https://ai.google.dev/edge/mediapipe/solutions/guide", "captura de movimento pela câmera: rosto, corpo e mãos (Apache-2.0, Google). O código vem em vendor/; o WebAssembly e os modelos são baixados na primeira vez."),
+        item("three-mesh-bvh", "https://github.com/gkjohnson/three-mesh-bvh", "colisão com o cenário ao andar (MIT, Garrett Johnson), em vendor/."),
+        item("Kalidokit", "https://github.com/yeemachine/kalidokit", "referência da ideia de passar os pontos do MediaPipe para um VRM (MIT, yeemachine); o cálculo daqui é próprio."),
         item("Live2D Cubism Core", "https://www.live2d.com/en/sdk/download/web/", "núcleo da Live2D Inc. — licença própria; NÃO vem junto: é baixado do site oficial ou escolhido por você."),
         item("claude-code-router", "https://github.com/musistudio/claude-code-router", "ideia das rotas por tarefa para economizar tokens (MIT); também dá para usá-lo como provedor."),
         item("VoiceStudio", "https://github.com/debpalash/VoiceStudio", "gerador de voz local (AGPL-3.0, debpalash) — a Companhia só chama a API dele; nenhum código foi copiado."),
@@ -1278,6 +1333,7 @@
       { rotulo: "Ouvir (microfone)", atalho: "Ctrl+Shift+M", acao: ouvir, ativo: comPersonagem },
       { rotulo: "Testar a voz", acao: () => { voz.destravar(); voz.parar(); voz.falar("Oi! Tudo bem? Essa é a minha voz.", "feliz"); } },
     ] },
+    { rotulo: "Movimento", itens: estudio.itensDoMenu() },
     { rotulo: "Exibir", itens: [
       { rotulo: "Rosto", acao: () => enquadrar("rosto"), ativo: comPersonagem, marcado: () => palco.enquadramento.modo === "rosto" },
       { rotulo: "Busto", acao: () => enquadrar("busto"), ativo: comPersonagem, marcado: () => palco.enquadramento.modo === "busto" },
@@ -1325,6 +1381,9 @@
     LNUX.botaoIcone("info", "O que ela lembra", janelaMemoria));
   $("#marca-icone").innerHTML = LNUX.icone("ia");
   $("#chip-roupa").addEventListener("click", menuRoupa);
+  $("#chip-movimento").addEventListener("click", () => { const r = $("#chip-movimento").getBoundingClientRect(); LNUX.abrirMenu(estudio.itensDoMenu(), r.left, r.bottom + 4, $("#chip-movimento")); });
+  palco.on("mundo", () => atualizarChipMovimento());
+  palco.on("movimento-terminou", () => estudio.atualizar());
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.querySelector(".lnux-fundo-modal") && (voz.falando() || pedido)) { voz.parar(); if (pedido) pedido.abort(); } });
   // destrava o som no primeiro toque em qualquer lugar
   document.addEventListener("pointerdown", () => voz.destravar(), { once: true });
@@ -1338,7 +1397,7 @@
 
   LNUX.iniciar({
     app: "companhia", nome: "Companhia",
-    descricao: "Converse com personagens Live2D (como os do VTube Studio): chat com IA ou motor local, voz, expressões, toques e memória no aparelho.",
+    descricao: "Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA ou motor local, voz, expressões, toques e memória no aparelho; nas VRoid, captura de movimento pela câmera, pacotes de movimento e cenários para andar.",
     layouts: [
       { id: "lado", nome: "Personagem e conversa", descricao: "A personagem e a conversa lado a lado", icone: "layout" },
       { id: "foco", nome: "Foco na personagem", descricao: "A personagem grande, a conversa flutuando", icone: "imagem" },
@@ -1356,7 +1415,7 @@
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio,
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
   };
 })();

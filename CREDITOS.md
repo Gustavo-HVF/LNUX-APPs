@@ -56,6 +56,25 @@ conforme cada versão ficar pronta (a lista dos planejados está em `apps.json`)
   Os testes usam o modelo de exemplo `VRM1_Constraint_Twist_Sample.vrm` da pixiv, baixado do repositório do
   three-vrm na hora (redistribuição e modificação permitidas, crédito não exigido); ele não fica no repositório.
   VRoid e VRM são marcas da pixiv Inc.; o `.vroidcustomitem` é um formato do VRoid Studio e não é lido pela Companhia.
+- **Movimento das personagens VRoid** (captura, pacotes de movimento, cenário), no mesmo pacote
+  `three-vrm-pacote.min.js`: [@pixiv/three-vrm-animation](https://github.com/pixiv/three-vrm) 3.5.5 (MIT, pixiv
+  Inc.), para os movimentos `.vrma`; os carregadores do three.js para `.fbx`, `.bvh`, `.obj` e glTF com Draco e
+  Meshopt (MIT, autores do three.js; o FBXLoader traz o [fflate](https://github.com/101arrowz/fflate), MIT, Arjun
+  Barrett; o decodificador [meshoptimizer](https://github.com/zeux/meshoptimizer), MIT, Arseny Kapoulkine); e o
+  [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) 0.9.1 (MIT, Garrett Johnson), para a colisão com
+  o cenário. Em `vendor/draco/` fica o decodificador [Draco](https://github.com/google/draco) (Apache-2.0, Google),
+  copiado do three.js.
+- **Captura de movimento pela câmera**: [MediaPipe Tasks Vision](https://github.com/google-ai-edge/mediapipe)
+  1.2.2 (Apache-2.0, The MediaPipe Authors / Google). O código JavaScript vem em `vendor/mediapipe-visao.min.js`
+  (montado por `tools/montar_vrm.sh`); o WebAssembly e os modelos (rosto, corpo e mãos) **não vêm no repositório**:
+  são baixados na primeira vez do pacote oficial no npm e de `storage.googleapis.com/mediapipe-models`. O cálculo
+  que passa os pontos do MediaPipe para os ossos do VRM foi escrito aqui; a ideia vem do
+  [Kalidokit](https://github.com/yeemachine/kalidokit) (MIT, yeemachine) e do VSeeFace/VTube Studio, sem código deles.
+  O jeito de passar animações do Mixamo para o VRM segue o exemplo do three-vrm (MIT), generalizado aqui para
+  outros esqueletos; o jeito de a cápsula colidir com o cenário segue o exemplo do three-mesh-bvh (MIT).
+  Os testes usam, baixados na hora e fora do repositório, o `test.vrma` do three-vrm e a foto `pose.jpg` dos
+  arquivos de teste do MediaPipe. VRChat e Unity são marcas dos seus donos; a Companhia não abre mundos
+  publicados do VRChat nem usa código ou arquivos deles. Mixamo é marca da Adobe.
 - **Live2D Cubism Core** (`live2dcubismcore.min.js`): da Live2D Inc., sob a *Live2D Proprietary Software License*.
   **Não é distribuído** com o LNUX-APPs: a Companhia baixa do site oficial da Live2D (ou usa o arquivo que a
   pessoa escolhe). Usar o núcleo significa aceitar a licença da Live2D. Live2D e Cubism são marcas da Live2D Inc.

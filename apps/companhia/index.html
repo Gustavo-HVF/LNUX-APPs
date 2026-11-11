@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Companhia · LNUX</title>
-  <meta name="description" content="Converse com personagens Live2D (como os do VTube Studio): chat com IA, voz, expressões, toques e memória no aparelho.">
+  <meta name="description" content="Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA, voz, expressões, toques, memória no aparelho, captura de movimento pela câmera, pacotes de movimento e cenários para andar.">
   <link rel="stylesheet" href="../../comum/lnux.css">
   <link rel="stylesheet" href="companhia.css">
 </head>
@@ -27,6 +27,7 @@
           <span class="chip" id="chip-emocao" title="Emoção agora">Neutra</span>
           <span class="chip afeto" id="chip-afeto" title="Afeto (sobe com carinho e conversa, desce com provocação)"><span class="coracao">♥</span><span class="barra"><span id="afeto-barra"></span></span></span>
           <button class="chip botao-roupa" id="chip-roupa" type="button" title="Trocar de roupa" hidden>👗 Roupa</button>
+          <button class="chip botao-roupa" id="chip-movimento" type="button" title="Captura de movimento, pacotes de movimento, cenário e esqueleto" hidden>🎬 Movimento</button>
           <span class="espaco"></span>
           <div class="lnux-segmentos pequeno" id="enquadramento" role="group" aria-label="Enquadramento">
             <button type="button" data-modo="rosto">Rosto</button><button type="button" data-modo="busto">Busto</button><button type="button" data-modo="corpo">Corpo</button>
@@ -84,12 +85,16 @@
   <script src="vendor/pixi.min.js"></script>
   <!-- Companhia -->
   <script src="js/live2d.js"></script>
+  <script src="js/mundo.js"></script>
   <script src="js/vrm.js"></script>
+  <script src="js/captura.js"></script>
+  <script src="js/movimentos.js"></script>
   <script src="js/personagens.js"></script>
   <script src="js/ia.js"></script>
   <script src="js/voz.js"></script>
   <script src="js/memoria.js"></script>
   <script src="js/reacoes.js"></script>
+  <script src="js/estudio.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

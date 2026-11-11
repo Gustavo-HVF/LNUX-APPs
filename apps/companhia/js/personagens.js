@@ -238,7 +238,7 @@
       roupaAtual: info.roupas[0].id, variacoes: info.variacoes,
       perfil: Object.assign(C.perfilPadrao(info.nome), cfg.perfil || {}),
       emocoes: cfg.emocoes || {}, ativas: cfg.ativas || [], enquadramento: cfg.enquadramento || null,
-      voz: cfg.voz || null, reacoes: cfg.reacoes || null, qualidade: null,
+      voz: cfg.voz || null, reacoes: cfg.reacoes || null, qualidade: null, esqueleto: cfg.esqueleto || null,
     };
     await LNUX.guardado.gravar(chave(id), p);
     const l = await lista();
@@ -276,7 +276,7 @@
     });
     for (const v of r.variacoes || []) for (const [n, b] of Object.entries(v.imagens)) z.adicionar(`variacoes/${v.nome}/${n}`, b);
     z.adicionar("companhia.json", JSON.stringify({ versao: 1, app: "LNUX Companhia", tipo: "vrm", perfil: r.perfil, emocoes: r.emocoes, ativas: r.ativas,
-      enquadramento: r.enquadramento, voz: r.voz, reacoes: r.reacoes, roupas }, null, 2));
+      enquadramento: r.enquadramento, voz: r.voz, reacoes: r.reacoes, esqueleto: r.esqueleto || null, roupas }, null, 2));
     return z.gerar();
   }
 
