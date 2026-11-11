@@ -118,8 +118,13 @@
       this.erros = 0;
     }
     salvarCfg() { LNUX.preferencia.gravar("companhia.captura", JSON.stringify(this.cfg)); }
-    /** Vale na pose? (ligada e com um palco 3D) */
-    get ativa() { return this.ligada && !!this.palco; }
+    /** Vale na pose? (ligada, ou recebendo resultados de fora, e com um palco 3D) */
+    get ativa() { return (this.ligada || this.simulando) && !!this.palco; }
+    /**
+     * Recebe um resultado pronto, sem a câmera: {rosto: {formas, matriz}, corpo: {mundo, imagem}, maos: [{lado, mundo,
+     * imagem}]}, no formato do Worker. Serve para os testes e para ligar outro rastreador. desligar() encerra.
+     */
+    simular(resultado) { this.simulando = true; this.processar(resultado); }
 
     // ── ligar e desligar ────────────────────────────────────────────
     async ligar() {
@@ -197,6 +202,7 @@
     }
     desligar() {
       this.ligada = false;
+      this.simulando = false;
       if (this.pedido && this.video) {
         if (this.video.cancelVideoFrameCallback && this.pedidoVideo) this.video.cancelVideoFrameCallback(this.pedido); else cancelAnimationFrame(this.pedido);
       }

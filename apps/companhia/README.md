@@ -5,6 +5,10 @@ num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** 
 **reage com o rosto e o corpo** ao que diz, **sente os toques** (cafuné, cutucar, puxar a orelha, cócegas) e
 **lembra** de você, porque as conversas ficam guardadas no próprio aparelho.
 
+Nas personagens VRoid há ainda o menu **Movimento**: **captura de movimento** pela câmera (rosto, olhos, tronco,
+braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bvh`), **cenários** para andar
+(W A S D, Espaço pula) e **ajuste do esqueleto**.
+
 Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
 chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
 a memória pode ter uma cópia numa pasta do aparelho.
@@ -51,11 +55,124 @@ O núcleo do Live2D não é preciso para elas.
   guardar as texturas PNG do pacote como variações de cor.
 - **Licença:** o `.vrm` traz a licença do autor. Se ela não deixa redistribuir, a Companhia avisa ao importar e ao
   exportar.
-- O pacote do three.js com o three-vrm (`vendor/three-vrm-pacote.min.js`, ~0,9 MB) só carrega quando uma
+- O pacote do three.js com o three-vrm (`vendor/three-vrm-pacote.min.js`, ~1 MB) só carrega quando uma
   personagem VRoid abre. Para montar de novo: `sh tools/montar_vrm.sh`.
+- Abrem os modelos **VRM 0.x** (VRoid Studio estável) e **VRM 1.0**.
 
 Nos modelos **Live2D**, as roupas e os acessórios que o autor separou ficam nas expressões (como os atalhos do
 VTube Studio). Quando o nome parece roupa (clothe, outfit, hat...), elas também aparecem no botão 👗.
+
+## Movimento: captura, pacotes de movimento, cenário e esqueleto (personagens VRoid)
+
+O menu **Movimento** (ou o botão 🎬 no palco) vale para as personagens VRoid, que têm esqueleto. Os painéis abrem ao
+lado da personagem, para ver o resultado enquanto você mexe.
+
+### Captura de movimento (câmera)
+
+*Movimento › Captura de movimento* liga a câmera do aparelho e a personagem passa a fazer o que você faz:
+
+| O que rastreia | Como aparece na personagem |
+|---|---|
+| **Rosto e expressões** | piscar (cada olho), boca (aa, ih, ou, ee, oh), sorriso, sobrancelhas, olhos arregalados e a cabeça (virar, inclinar, abaixar). Nos modelos do VRoid, o sorriso e as sobrancelhas usam as formas separadas do rosto (`Fcl_BRW_*`, `Fcl_MTH_*`, `Fcl_EYE_*`), então sorrir não fecha os olhos. Modelos com as 52 formas do ARKit ("perfect sync") recebem as 52 direto |
+| **Olhos** | para onde você olha (os olhos da personagem acompanham) |
+| **Corpo** | tronco (inclinar e girar), ombros (subir, um mais alto que o outro) e braços (ombro, cotovelo e pulso) |
+| **Mãos e dedos** | o pulso e cada falange dos cinco dedos, das duas mãos |
+| **Pernas e postura inteira** | quadril, joelhos e pés, com os pés mantidos no chão (agachar desce o quadril). Precisa do corpo inteiro na câmera; fica desligado por padrão |
+
+- **Espelhar** (ligado por padrão): como num espelho, sua mão direita mexe a mão do lado direito da tela.
+  Desligado, sua mão direita mexe a mão direita da personagem.
+- **Suavizar** tira o tremido; **Calibrar** faz da posição atual da cabeça o "olhando para a frente".
+- A janelinha no canto mostra a câmera com os pontos achados (dá para esconder).
+- Em *Câmera e desempenho*: qual câmera, precisão do corpo (leve ou completa), processar pela placa de vídeo ou
+  pelo processador e quantos quadros por segundo. No celular, desligue o que não usar (as mãos pesam mais).
+- **A imagem não sai do aparelho.** O rastreamento é o [MediaPipe Tasks Vision](https://ai.google.dev/edge/mediapipe/solutions/guide)
+  (Google, Apache-2.0), rodando no próprio navegador, num Worker (o desenho da personagem não trava). Nada é enviado
+  nem gravado.
+- **Arquivos do rastreamento.** O WebAssembly e os modelos do MediaPipe somam uns 30 MB (uns 25 MB com tudo ligado
+  no modo leve) e não vêm no repositório. Na primeira vez eles são buscados nesta ordem: na cópia guardada no
+  navegador; na **ponte** (que baixa das fontes oficiais uma vez e guarda em `~/.lnux-apps/mediapipe/`); ou direto da
+  internet (e aí ficam guardados no navegador). Depois disso a captura funciona sem internet.
+- A câmera só abre em **endereço seguro**: `http://127.0.0.1` / `localhost` (como o LNUX abre) ou `https` (o túnel).
+- Com a captura ligada a personagem continua conversando: a boca soma a voz dela com a sua, e as emoções da
+  conversa continuam valendo no rosto.
+
+### Pacotes de movimento
+
+*Movimento › Pacotes de movimento › Importar* (ou arraste o arquivo para o palco):
+
+| Formato | |
+|---|---|
+| **`.vrma`** | VRM Animation, o formato oficial de movimentos do VRM (os pacotes da pixiv/VRoid vêm assim). Pode trazer expressões do rosto |
+| **`.fbx`** | animações do [Mixamo](https://www.mixamo.com) e de outros programas, com ou sem a malha junto |
+| **`.bvh`** | captura de movimento |
+| **`.glb` / `.gltf`** | modelos com animação: cada animação do arquivo vira um movimento |
+| **`.zip`** | um pacote com vários desses |
+
+- Cada movimento serve para **qualquer personagem** VRoid (e para todas as roupas dela): ele é guardado como
+  rotação de cada osso do VRM a partir da pose em T, e o quadril em "alturas do quadril".
+- Nos `.fbx`, `.bvh` e `.glb`, o esqueleto do arquivo é reconhecido pelos **nomes dos ossos** (Mixamo, Unity/VRM,
+  VRoid, Unreal, Blender, BVH da CMU...). A Companhia corrige sozinha para onde o esqueleto do arquivo olha e se
+  ele descansa em T ou em A. Se um membro mexer errado, **⋯ › Ossos...** deixa ligar à mão cada osso da
+  personagem a um osso do arquivo.
+- **Repetir**, **velocidade** e **parar**; a emoção e a boca continuam funcionando por cima do movimento.
+- **No cenário:** em ⋯ dá para usar um movimento ao **ficar parada, andar, correr ou pular**. Os nomes `idle`,
+  `walk`, `run` e `jump` já são ligados sozinhos ao importar.
+- Não abre: `.vmd` (MikuMikuDance) e `.anim` do Unity (que guarda "músculos" do Unity, não ossos).
+
+### Cenário e andar
+
+*Movimento › Cenário (mapa)* abre um modelo 3D como lugar: **`.glb` / `.gltf`** (com Draco e Meshopt), **`.fbx`**,
+**`.obj`**, um **ZIP** com o modelo e as texturas, ou um **`.unitypackage`** (a Companhia abre o pacote e lista os
+modelos de dentro). No retrato o cenário aparece atrás da personagem; em **Andar pelo cenário** ela anda por ele:
+
+| | |
+|---|---|
+| **W A S D** ou as setas | andar (em relação à câmera) |
+| **Shift** | correr |
+| **Espaço** | pular |
+| arrastar | girar a câmera (ela não atravessa as paredes) |
+| rodinha | aproximar e afastar |
+| celular | direcional, botão de correr e botão de pulo na tela |
+
+- A personagem é uma cápsula que desliza no chão, nas paredes, nas rampas e nos degraus baixos. As malhas do mapa
+  são juntadas numa árvore ([three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh)), então mapas grandes
+  não pesam a cada quadro. Caiu para fora do mapa, volta ao começo.
+- **Tamanho** (os `.fbx` costumam vir em centímetros: use ÷ 10 / × 10), **girar**, **Começar aqui** (o ponto de
+  partida) e a **velocidade** de andar ficam guardados por cenário. Sem cenário, há um chão simples.
+- Andar tem um movimento próprio (andar, correr, pular); os movimentos de um pacote podem ficar no lugar.
+  A captura pela câmera funciona junto: você anda com as teclas e os braços e o rosto seguem a câmera.
+- Rosto / Busto / Corpo voltam ao retrato.
+
+**Mapas do VRChat.** Um mundo publicado do VRChat (`.vrcw`) é um pacote fechado do motor Unity: malhas, materiais,
+shaders e scripts num formato do próprio motor, que não abre fora dele (e baixar o mundo de outra pessoa fere os
+termos do VRChat). O que dá para usar aqui é o **cenário exportado**: no projeto do Unity, com o
+[UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB"); no Blender, *Exportar › glTF 2.0*;
+ou os modelos `.fbx`/`.obj` do mundo, direto ou de dentro do `.unitypackage`. De um `.unitypackage`, a Companhia
+abre **um modelo** como mapa; as peças soltas de uma cena montada no Unity (`.unity`, prefabs) não são
+reposicionadas, e os materiais do Unity (`.mat`, shaders) não são convertidos — as texturas entram quando o
+próprio modelo aponta para elas. Use só mapas que você tem o direito de usar.
+
+### Ajustar esqueleto
+
+*Movimento › Ajustar esqueleto* corrige o esqueleto de cada personagem. Vale para tudo (a pose parada, os
+pacotes de movimento e a captura) e fica guardado com ela (e vai junto no ZIP exportado):
+
+- **Braços em descanso**: de 0° (abertos em T) a 90° (colados no corpo). O padrão é 69°.
+- **Proporções**: altura, cabeça, braços, mãos e pernas (com pernas mais compridas, o quadril sobe e os pés
+  continuam no chão).
+- **Correção por osso**: escolha o osso (ele fica marcado no esqueleto desenhado na tela) e gire em X, Y e Z;
+  **Espelhar no outro lado** aplica o mesmo no osso do outro lado. Serve, por exemplo, para os braços de um pacote
+  de movimento que atravessam a roupa, ombros caídos ou pés virados.
+
+### O defeito dos braços para cima (VRM 0.x)
+
+Os modelos **VRM 0.x** (os exportados pelo VRoid Studio "estável") olham para −Z e têm o braço esquerdo em −X; o
+VRM 1.0 olha para +Z com o braço esquerdo em +X. A Companhia girava o modelo inteiro, mas as rotações dos ossos
+continuavam espelhadas: nesses modelos os braços iam para **cima** em vez de para baixo, e a cabeça e o tronco
+inclinavam ao contrário. Agora a pose é montada num espaço só (o do VRM 1.0) e convertida no fim, para os dois
+tipos. Nos VRM 0.x do VRoid, a expressão "Surprised" (que vem como expressão própria) também passou a valer
+como a "surpresa" padrão.
+
 
 ## IA: provedores e economia de tokens
 
@@ -210,7 +327,12 @@ para outro aparelho seu.
 
 ```
 index.html, companhia.css
-js/vrm.js          palco 3D para personagens VRoid (.vrm): expressões, gestos nos ossos, toques, peças e texturas
+js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (descanso, movimento, captura, gestos,
+                   ajuste do esqueleto), expressões, toques, peças e texturas
+js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
+js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
+js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), câmera em terceira pessoa e controles de toque
+js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
                    emoções, gestos, piscar, olhar, boca, toques
 js/personagens.js  importar (ZIP, pasta, ponte), ler o vtube.json, guardar, trocar, exportar
@@ -219,8 +341,9 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
-vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm (MIT, three-vrm-pacote.min.js)
-                   — o Cubism Core não vem junto
+vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
+                   (MIT, three-vrm-pacote.min.js); MediaPipe Tasks Vision (Apache-2.0, mediapipe-visao.min.js) e o
+                   decodificador Draco (Apache-2.0, draco/) — o Cubism Core e os ~30 MB do MediaPipe não vêm junto
 ```
 
 Teste no Chromium (precisa de um modelo e do núcleo, que não estão no repositório):
@@ -229,23 +352,36 @@ Teste no Chromium (precisa de um modelo e do núcleo, que não estão no reposit
 LNUX_TESTE_MODELO=/caminho/modelo.zip LNUX_TESTE_NUCLEO=/caminho/live2dcubismcore.min.js python3 tests/testar_navegador.py companhia
 ```
 
-As personagens VRoid têm um teste próprio, que baixa o modelo de exemplo da pixiv (ou usa `LNUX_TESTE_VRM`):
+As personagens VRoid têm testes próprios, que baixam o modelo de exemplo da pixiv (ou usam `LNUX_TESTE_VRM`):
 
 ```bash
-python3 tests/testar_navegador.py companhia_vrm
+python3 tests/testar_navegador.py companhia_vrm     # importar, roupas, emoções, toques
+python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 ```
+
+O `companhia_corpo` monta os próprios arquivos de teste (um boneco VRM 0.x só de ossos, um `.bvh`, um cenário
+`.glb` e um `.unitypackage`), então a maior parte roda sem internet: braços para baixo no VRM 0.x, captura com
+resultados de mentira (braço, dedos, espelho, pernas), movimentos, andar/correr/pular/parede, esqueleto. Com
+internet ele ainda usa o modelo e o `.vrma` de exemplo da pixiv (rosto) e faz a captura de verdade: uma foto de
+exemplo do MediaPipe vira a câmera do Chromium e a personagem copia a pose (`LNUX_TESTE_SEM_CAMERA=1` pula).
 
 ## O que ainda não faz
 
 - **Modelos Cubism 2** (`.moc` / `model.json`) não abrem; só Cubism 3 e 4.
 - **Itens de roupa do VRoid Studio** (`.vroidcustomitem`) só abrem no VRoid Studio. Aqui entram a personagem
   exportada (`.vrm`) e as texturas do pacote.
-- **Animações `.vrma`** e as físicas de roupa além das do próprio VRM (spring bones) ainda não estão incluídas.
+- **Mundos publicados do VRChat** (`.vrcw`) e cenas montadas do Unity não abrem; só o cenário exportado em
+  glTF/GLB, `.fbx` ou `.obj` (veja "Mapas do VRChat"). Texturas KTX2/Basis nos `.glb` ainda não abrem.
+- **Movimentos `.vmd`** (MikuMikuDance) e **`.anim`** do Unity não abrem; converta para `.vrma`, `.fbx` ou `.bvh`.
+- **Captura de movimento**: é de uma câmera só, então a profundidade (um braço para a frente, as pernas) é
+  estimada; mãos muito rápidas ou escondidas somem por instantes; uma pessoa por vez. Não há ainda gravação da
+  captura em arquivo nem entrada de rastreadores externos (VMC/OSC).
+- As físicas de roupa além das do próprio VRM (spring bones) ainda não estão incluídas.
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.
 - **Ouvir** depende do navegador (o Firefox não tem reconhecimento de fala). A transcrição por API (Whisper)
   ainda não está ligada.
-- **Rastreamento pela câmera** (como no VTube Studio) e **movimentos `.motion3.json`** além do movimento parado
-  ainda não estão incluídos.
+- Nas personagens **Live2D**, o rastreamento pela câmera e os **movimentos `.motion3.json`** além do movimento
+  parado ainda não estão incluídos (a captura de movimento é das personagens VRoid).
 - Os modelos de exemplo e o núcleo do Live2D não vêm junto (licenças).

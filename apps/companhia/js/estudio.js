@@ -45,11 +45,22 @@
     let aberto = null; // {id, elemento, aoFechar, atualizar}
 
     // ── o painel ao lado do palco ───────────────────────────────────
+    /** A personagem fica no meio da parte do palco que o painel não cobre. */
+    function abrirEspaco() {
+      const p = palco();
+      if (!p || !p.definirMargens) return;
+      if (!aberto) { p.definirMargens({}); return; }
+      const a = area.getBoundingClientRect(), r = aberto.elemento.getBoundingClientRect();
+      const embaixo = r.width > a.width * 0.7; // no celular o painel fica embaixo, de lado a lado
+      p.definirMargens(embaixo ? { baixo: Math.max(0, a.bottom - r.top) } : { direita: Math.max(0, a.right - r.left) });
+    }
+    window.addEventListener("resize", () => { if (aberto) abrirEspaco(); });
     function fechar() {
       if (!aberto) return;
       const a = aberto;
       aberto = null;
       a.elemento.remove();
+      abrirEspaco();
       if (a.aoFechar) a.aoFechar();
     }
     function painel(id, titulo, corpo, { aoFechar, atualizar } = {}) {
@@ -62,6 +73,7 @@
       for (const ev of ["pointerdown", "pointermove", "pointerup", "wheel"]) caixa.addEventListener(ev, (e) => e.stopPropagation());
       area.append(caixa);
       aberto = { id, elemento: caixa, aoFechar, atualizar };
+      abrirEspaco();
       return caixa;
     }
     const marcar = (rotulo, valor, aoMudar, dica) => {

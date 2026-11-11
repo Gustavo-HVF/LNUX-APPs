@@ -412,6 +412,61 @@ def _():
     assert S.pedir("PUT", "/api/live2d/core", corpo=nucleo, token=False, cabecalhos={"Cookie": "lnux_ponte=" + S.ponte.token})[0] == 401
 
 
+@caso("MediaPipe: a ponte baixa uma vez os arquivos do rastreamento (pacote do npm e modelos), guarda e entrega")
+def _():
+    import io
+    import tarfile
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    # um "npm" e um "depósito de modelos" de mentira
+    pacote = io.BytesIO()
+    with tarfile.open(fileobj=pacote, mode="w:gz") as tgz:
+        for nome, dados in (("package/wasm/vision_wasm_internal.js", b"// carregador"), ("package/wasm/vision_wasm_internal.wasm", b"\0asm\1\0\0\0"), ("package/README.md", b"x")):
+            info = tarfile.TarInfo(nome)
+            info.size = len(dados)
+            tgz.addfile(info, io.BytesIO(dados))
+    pedidos = []
+
+    class Fonte(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            pedidos.append(self.path)
+            corpo = pacote.getvalue() if self.path == "/pacote.tgz" else b"modelo do rosto" if self.path.endswith("/face_landmarker.task") else None
+            self.send_response(200 if corpo is not None else 404)
+            self.send_header("Content-Length", str(len(corpo or b"")))
+            self.end_headers()
+            self.wfile.write(corpo or b"")
+
+    fonte = ThreadingHTTPServer(("127.0.0.1", 0), Fonte)
+    threading.Thread(target=fonte.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{fonte.server_address[1]}"
+    antes = lnux_apps.MEDIAPIPE_PACOTE, lnux_apps.MEDIAPIPE_MODELOS
+    lnux_apps.MEDIAPIPE_PACOTE, lnux_apps.MEDIAPIPE_MODELOS = base + "/pacote.tgz", base + "/modelos/"
+    try:
+        status, r, _ = S.json("GET", "/api/mediapipe")
+        assert status == 200 and r["versao"] == lnux_apps.MEDIAPIPE_VERSAO and all(v is None for v in r["arquivos"].values())
+        assert S.pedir("GET", "/api/mediapipe/face_landmarker.task")[0] == 404  # ainda não baixou
+        assert S.pedir("GET", "/api/mediapipe/ia.json")[0] == 404 and S.pedir("GET", "/api/mediapipe/..%2Fia.json")[0] == 404  # só os nomes da lista
+        assert S.json("POST", "/api/mediapipe", json_corpo={"arquivos": ["../ponte.json"]})[0] == 400
+        assert S.json("POST", "/api/mediapipe", json_corpo={"arquivos": ["face_landmarker.task"]}, token=False)[0] == 401
+        assert S.json("POST", "/api/mediapipe", json_corpo={"arquivos": ["hand_landmarker.task"]})[0] == 502  # a fonte não tem: erro explicado
+        status, r, _ = S.json("POST", "/api/mediapipe", json_corpo={"arquivos": ["vision_wasm_internal.wasm", "face_landmarker.task"]})
+        assert status == 200 and r["arquivos"]["vision_wasm_internal.wasm"] == 8 and r["arquivos"]["vision_wasm_internal.js"] == 13 and r["arquivos"]["face_landmarker.task"] == 15
+        assert r["arquivos"]["hand_landmarker.task"] is None
+        status, cab, dados = S.pedir("GET", "/api/mediapipe/vision_wasm_internal.wasm")
+        assert status == 200 and dados == b"\0asm\1\0\0\0" and cab["Content-Type"] == "application/wasm"
+        assert S.pedir("GET", "/api/mediapipe/face_landmarker.task")[2] == b"modelo do rosto"
+        # o que já está guardado não é baixado de novo
+        n = len(pedidos)
+        assert S.json("POST", "/api/mediapipe", json_corpo={"arquivos": ["vision_wasm_internal.js", "face_landmarker.task"]})[0] == 200 and len(pedidos) == n
+        assert not list((Path(os.environ["LNUX_APPS_DADOS"]) / "mediapipe").rglob("*.baixando")) and not list((Path(os.environ["LNUX_APPS_DADOS"]) / "mediapipe").rglob("*.tgz"))
+        assert S.json("GET", "/api/estado")[1]["recursos"]["mediapipe"] == lnux_apps.MEDIAPIPE_VERSAO
+    finally:
+        lnux_apps.MEDIAPIPE_PACOTE, lnux_apps.MEDIAPIPE_MODELOS = antes
+        fonte.shutdown()
+
+
 @caso("ffmpeg: recusa formato desconhecido e entrada fora das pastas liberadas")
 def _():
     import shutil

@@ -281,7 +281,9 @@
         if (!tipo) { if (/\.(vmd|anim)$/i.test(caminho)) erros.push(`${caminho.split("/").pop()}: esse formato não abre aqui (.vmd é do MikuMikuDance; .anim é do Unity). Converta para .vrma, .fbx ou .bvh.`); continue; }
         try {
           const aberto = await abrirArquivo(tipo, blob);
-          const partes = aberto.vrma ? aberto.vrma.map((a, i) => ({ i, dur: a.duration })) : aberto.clips.map((c, i) => ({ i, dur: c.duration, nomeClip: c.name }));
+          let partes = aberto.vrma ? aberto.vrma.map((a, i) => ({ i, dur: a.duration })) : aberto.clips.map((c, i) => ({ i, dur: c.duration, nomeClip: c.name }));
+          // os .fbx do Mixamo trazem junto uma "animação" de um quadro só (a pose em T): não é um movimento
+          if (tipo === "fbx" && partes.some((x) => x.dur > 0.2)) partes = partes.filter((x) => x.dur > 0.2);
           const mapa = aberto.raiz ? C.mapearOssos(listarOssos(aberto.raiz)) : null;
           for (const parte of partes) {
             const id = LNUX.id("mv");
@@ -322,11 +324,17 @@
     async definirMapa(id, mapa) {
       const l = await C.movimentos.lista(), reg = l.find((x) => x.id === id);
       if (!reg) return null;
+      const anterior = reg.mapa, pronto = prontos.get(id);
       reg.mapa = mapa;
-      prontos.delete(id);
-      const clip = await C.movimentos.clip(id); // lança o erro explicado se a ligação não servir
       await LNUX.guardado.gravar(LISTA, l);
-      return clip;
+      prontos.delete(id);
+      try { return await C.movimentos.clip(id); }
+      catch (e) { // a ligação não serve (faltou o quadril, por exemplo): fica como estava, e o erro explica
+        reg.mapa = anterior;
+        await LNUX.guardado.gravar(LISTA, l);
+        if (pronto) prontos.set(id, pronto);
+        throw e;
+      }
     },
     async renomear(id, nome) { const l = await C.movimentos.lista(), reg = l.find((x) => x.id === id); if (reg) { reg.nome = nome; await LNUX.guardado.gravar(LISTA, l); } },
     async apagar(ids) {

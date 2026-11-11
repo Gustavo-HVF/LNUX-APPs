@@ -285,8 +285,20 @@
       this.view.style.width = "100%";
       this.view.style.height = "100%";
       this.camera.aspect = W / H;
+      this.aplicarMargens();
       this.camera.updateProjectionMatrix();
       this.enquadrar();
+    }
+    /** Um painel aberto por cima do palco (à direita ou embaixo): a personagem fica no meio do que sobrou. */
+    definirMargens({ direita = 0, baixo = 0 } = {}) {
+      this.margens = { direita, baixo };
+      this.aplicarMargens();
+      this.camera.updateProjectionMatrix();
+    }
+    aplicarMargens() {
+      const W = this.conteiner.clientWidth, H = this.conteiner.clientHeight, m = this.margens || {};
+      const dx = Math.min(W * 0.45, m.direita || 0) / 2, dy = Math.min(H * 0.6, m.baixo || 0) / 2;
+      if (dx || dy) this.camera.setViewOffset(W, H, dx, dy, W, H); else this.camera.clearViewOffset();
     }
     pausar() { this.renderer.setAnimationLoop(null); }
     continuar() { this.relogio.getDelta(); this.renderer.setAnimationLoop(() => this.quadro()); }
@@ -363,7 +375,8 @@
       this.vrm = vrm;
       this.modelo = vrm.scene;
       this.roupa = roupa;
-      this.v0 = !!(vrm.meta && vrm.meta.metaVersion === "0");
+      const extensoes = (gltf.parser && gltf.parser.json && gltf.parser.json.extensions) || {};
+      this.v0 = vrm.meta ? vrm.meta.metaVersion === "0" : !!extensoes.VRM && !extensoes.VRMC_vrm;
       this.raiz.add(vrm.scene);
       this.reduzirTexturas(this.limiteTextura(p.qualidade || "auto"));
       if (vrm.lookAt) vrm.lookAt.target = this.alvoOlhar;
