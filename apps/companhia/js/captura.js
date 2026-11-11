@@ -134,8 +134,9 @@
           ? "A câmera só funciona em endereço seguro: abra a Companhia por http://127.0.0.1 (ou localhost) no próprio aparelho, ou por https (o túnel do LNUX)."
           : "Este navegador não dá acesso à câmera.");
       }
-      this.ligando = true;
       const cfg = this.cfg;
+      if (!cfg.rosto && !cfg.corpo && !cfg.maos) throw new Error("Marque pelo menos uma coisa para rastrear: o rosto, o corpo ou as mãos.");
+      this.ligando = true;
       try {
         // a câmera primeiro: se a pessoa não deixar, nem baixa os arquivos
         this.aoEstado("Abrindo a câmera...");
@@ -456,14 +457,16 @@
     // ── mãos e dedos ────────────────────────────────────────────────
     resolverMaos(maos, corpo) {
       const T = window.THREE, cfg = this.cfg, palco = this.palco, agora = performance.now(), esp = !!cfg.espelhar;
-      // de quem é cada mão: a do pulso mais perto (na imagem); sem o corpo, o lado que o MediaPipe diz (ele supõe
-      // a imagem espelhada, como numa selfie: "Left" é a mão direita de quem está na câmera)
+      // de quem é cada mão: a do pulso mais perto (na imagem). Quando os dois pulsos ficam quase à mesma distância (mãos
+      // juntas) ou o corpo não está sendo rastreado, vale o lado que o MediaPipe diz ("Left" = a mão esquerda da pessoa)
       const lados = maos.map((m) => {
+        const rotulo = m.lado === "Left" ? "left" : "right";
         if (corpo) {
           const w = m.imagem[0], d = (i) => Math.hypot(w[0] - corpo.imagem[i][0], w[1] - corpo.imagem[i][1]);
-          return { pessoa: d(15) <= d(16) ? "left" : "right", custo: Math.min(d(15), d(16)), outro: Math.max(d(15), d(16)) };
+          const custo = Math.min(d(15), d(16)), outro = Math.max(d(15), d(16));
+          return { pessoa: custo < outro * 0.6 ? (d(15) <= d(16) ? "left" : "right") : rotulo, custo, outro };
         }
-        return { pessoa: m.lado === "Left" ? "right" : "left", custo: 0, outro: 1 };
+        return { pessoa: rotulo, custo: 0, outro: 1 };
       });
       if (maos.length === 2 && lados[0].pessoa === lados[1].pessoa) { // as duas no mesmo pulso: a mais longe troca
         const i = lados[0].outro - lados[0].custo < lados[1].outro - lados[1].custo ? 0 : 1;

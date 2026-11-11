@@ -17,7 +17,8 @@ npm install --silent three@0.180.0 @pixiv/three-vrm@3.5.5 @pixiv/three-vrm-anima
 cp "$RAIZ/tools/companhia_vrm_entrada.js" entrada.js
 cp "$RAIZ/tools/companhia_visao_entrada.js" visao.js
 npx esbuild entrada.js --bundle --minify --format=iife --legal-comments=eof --outfile="$VENDOR/three-vrm-pacote.min.js"
-npx esbuild visao.js --bundle --minify --format=iife --legal-comments=eof --outfile="$VENDOR/mediapipe-visao.min.js"
+npx esbuild visao.js --bundle --minify --format=iife --legal-comments=eof --outfile="$VENDOR/mediapipe-visao.min.js" \
+  --banner:js="/*! MediaPipe Tasks Vision 1.2.2 - Copyright The MediaPipe Authors - Apache License 2.0 (https://www.apache.org/licenses/LICENSE-2.0) - empacotado sem alteracoes com o Worker da Companhia (tools/companhia_visao_entrada.js, MIT) por tools/montar_vrm.sh do LNUX-APPs */"
 mkdir -p "$VENDOR/draco"
 cp node_modules/three/examples/jsm/libs/draco/gltf/draco_wasm_wrapper.js node_modules/three/examples/jsm/libs/draco/gltf/draco_decoder.wasm "$VENDOR/draco/"
 rm -rf "$TMP"
