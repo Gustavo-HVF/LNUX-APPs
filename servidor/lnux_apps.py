@@ -255,6 +255,9 @@ class Sala:
     def tirar(self, pid: str):
         if self.pessoas.pop(pid, None) is not None:
             (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
+            (self.pasta / f"aparencia-{pid}.json").unlink(missing_ok=True)
+            for f in self.pasta.glob(f"textura-{pid}-*"):
+                f.unlink(missing_ok=True)
 
 
 def cabe_no_disco(pasta: Path, tamanho: int) -> None:
@@ -1490,7 +1493,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 if len(sala.pessoas) >= sala.max:
                     raise ErroPonte(429, f"A sala está cheia ({sala.max} pessoas).")
                 pid = secrets.token_hex(4)
-                sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0}
+                sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0, "aparencia": 0}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
@@ -1498,6 +1501,47 @@ class Manipulador(BaseHTTPRequestHandler):
             self.receber_para(sala.pasta / f"avatar-{p['id']}.vrm")
             j["avatar"] += 1
             return self.responder_json({"avatar": j["avatar"]}, 201)
+        # a aparência de cada um (o ajuste do esqueleto, as peças escondidas e as texturas trocadas): os outros a veem igual
+        if acao == "aparencia" and m == "PUT":
+            j = pessoa(p)
+            dados = self.ler_corpo(256 * 1024)
+            try:
+                ap = json.loads(dados or b"{}")
+            except ValueError:
+                raise ErroPonte(400, "A aparência não é um JSON válido.")
+            if not isinstance(ap, dict):
+                raise ErroPonte(400, "Esperava um objeto JSON.")
+            (sala.pasta / f"aparencia-{p['id']}.json").write_text(json.dumps(ap, ensure_ascii=False), "utf-8")
+            j["aparencia"] += 1
+            return self.responder_json({"aparencia": j["aparencia"]}, 201)
+        if acao == "aparencia" and m in ("GET", "HEAD") and len(partes) == 3:
+            arquivo = sala.pasta / f"aparencia-{partes[2]}.json"
+            if partes[2] not in sala.pessoas or not arquivo.is_file():
+                raise ErroPonte(404, "Essa pessoa não mandou a aparência.")
+            return self.enviar_arquivo(arquivo, "application/json; charset=utf-8")
+        if acao == "textura" and m == "PUT":
+            pessoa(p)
+            n = str(p.get("n", ""))
+            if not re.fullmatch(r"\d{1,3}", n) or int(n) > 255:
+                raise ErroPonte(400, "Número de textura inválido.")
+            cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
+            destino = sala.pasta / f"textura-{p['id']}-{n}"
+            self.receber_para(destino)
+            with open(destino, "rb") as f:
+                ext = tipo_de_imagem(f.read(16))
+            if not ext:
+                destino.unlink(missing_ok=True)
+                raise ErroPonte(400, "A textura precisa ser PNG, JPEG ou WebP.")
+            return self.responder_json({"ok": True}, 201)
+        if acao == "textura" and m in ("GET", "HEAD") and len(partes) == 4:
+            if partes[2] not in sala.pessoas or not re.fullmatch(r"\d{1,3}", partes[3]):
+                raise ErroPonte(404, "Essa textura não existe.")
+            arquivo = sala.pasta / f"textura-{partes[2]}-{partes[3]}"
+            if not arquivo.is_file():
+                raise ErroPonte(404, "Essa textura não existe.")
+            with open(arquivo, "rb") as f:
+                ext = tipo_de_imagem(f.read(16)) or "png"
+            return self.enviar_arquivo(arquivo, {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext], cache="private, max-age=3600")
         if acao == "avatar" and m in ("GET", "HEAD") and len(partes) == 3:
             arquivo = sala.pasta / f"avatar-{partes[2]}.vrm"
             if partes[2] not in sala.pessoas or not arquivo.is_file():
@@ -1531,7 +1575,8 @@ class Manipulador(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 desde = 0
             return self.responder_json({
-                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "estado": x["estado"]} for i, x in sala.pessoas.items()],
+                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"]}
+                            for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
                 "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo})
 

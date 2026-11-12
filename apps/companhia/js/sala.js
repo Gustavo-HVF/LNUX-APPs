@@ -8,7 +8,9 @@
  * num endereço que os outros alcancem (o túnel do LNUX, ou a rede de casa).
  *
  * Cada pessoa anda com a própria personagem; os outros a veem andar, correr, pular, acenar, mudar de expressão e,
- * com a captura de movimento ligada, mexer os braços, as mãos e o rosto. Há um bate-papo por texto, com balão em
+ * com a captura de movimento ligada, mexer os braços, as mãos e o rosto. A aparência vai junto e se atualiza na
+ * hora: o tamanho e as proporções (Ajustar esqueleto), os braços, as correções dos ossos, as peças escondidas, as
+ * texturas trocadas e a roupa vestida. Há um bate-papo por texto, com balão em
  * cima da cabeça. Não há chat bot nem nenhuma função de IA neste modo.
  *
  * Como funciona: a sala fica na memória do servidor (servidor/lnux_apps.py, /api/sala). Umas 8 vezes por segundo
@@ -114,13 +116,34 @@
     const y = (n, padrao) => { const b = vrm.humanoid && vrm.humanoid.getRawBoneNode(n); return b ? b.getWorldPosition(new T.Vector3()).y : padrao; };
     const altura = Math.max(0.5, y("head", 1.4) - Math.min(y("leftFoot", 0.05), 0.2) + 0.25);
     const expressoes = new Set(vrm.expressionManager ? vrm.expressionManager.expressions.map((e) => e.expressionName) : []);
-    return { vrm, v0, nos, hips, ausentes, altura, expressoes };
+    // para a aparência: as peças de roupa, o tamanho original dos ossos e onde fica a coxa (para as proporções)
+    const brutos = {};
+    for (const n of C.OSSOS_VRM) { const b = vrm.humanoid && vrm.humanoid.getRawBoneNode(n); if (b) brutos[n] = b.scale.clone(); }
+    const coxa = nos.leftUpperLeg || nos.rightUpperLeg;
+    return { vrm, v0, nos, hips, ausentes, altura, expressoes, pecas: C.pecasDoModelo(gltf), brutos, coxaY: coxa ? coxa.position.y : null,
+      descanso: null, ajusteQ: new Map(), erguer: 0, escala: 1 };
+  }
+  /** A aparência que a pessoa mandou, no avatar dela: {ajuste, ocultas: [peça], texturas: {peça: Blob}}. */
+  async function aplicarAparencia(av, ap) {
+    const pronto = C.prepararAjuste(ap && ap.ajuste);
+    av.descanso = pronto.descanso;
+    av.ajusteQ = pronto.ajusteQ;
+    av.escala = pronto.ajuste.escala.geral;
+    av.erguer = C.aplicarProporcoes(av.vrm, pronto.ajuste.escala, av.brutos, Math.max(0.05, av.hips.y), av.coxaY);
+    const ocultas = new Set((ap && ap.ocultas) || []), texturas = (ap && ap.texturas) || {};
+    for (const peca of av.pecas) {
+      C.mostrarPecaEm(peca, !ocultas.has(peca.nome));
+      C.voltarTexturaEm(peca);
+      if (texturas[peca.nome]) { try { await C.trocarTexturaEm(peca, texturas[peca.nome]); } catch (e) { console.warn("sala: textura de " + peca.nome, e); } }
+    }
+    const molas = av.vrm.springBoneManager;
+    if (molas) { try { molas.reset(); molas.setInitState(); } catch (e) { /* sem molas */ } }
   }
   function gravarPose(av, pose, quadril) {
     const s = av.v0 ? -1 : 1;
     for (const [n, filhos] of av.ausentes) for (const f of filhos) pose[f].premultiply(pose[n]);
     for (const n of C.OSSOS_VRM) { const b = av.nos[n]; if (b) { const q = pose[n]; b.quaternion.set(q.x * s, q.y, q.z * s, q.w); } }
-    if (av.nos.hips) av.nos.hips.position.set(av.hips.x + quadril.x * s, av.hips.y + quadril.y, av.hips.z + quadril.z * s);
+    if (av.nos.hips) av.nos.hips.position.set(av.hips.x + quadril.x * s, av.hips.y + quadril.y + (av.erguer || 0), av.hips.z + quadril.z * s);
   }
 
   /** A personagem de outra pessoa, no nosso cenário. */
@@ -147,6 +170,9 @@
       this.acenar = 0;           // quando começou o aceno (s)
       this.avatar = null;        // {vrm, ...} quando o VRM dela chegou
       this.avatarVersao = 0;
+      this.aparencia = null;     // {ajuste, ocultas, texturas: {peça: Blob}}: como ela deixou a personagem
+      this.aparenciaVersao = 0;
+      this.texturas = new Map(); // n → Blob (as texturas dela que já baixei)
       this.pose = {};
       for (const n of C.OSSOS_VRM) this.pose[n] = new T.Quaternion();
       this.poseRecebida = null;  // captura de movimento dela: {osso: Quaternion}
@@ -182,6 +208,28 @@
       } else this.poseRecebida = null;
       this.rostoRecebido = e.rosto || null;
       if (j.avatar !== this.avatarVersao) { this.avatarVersao = j.avatar; this.buscarAvatar(); }
+      if ((j.aparencia || 0) !== this.aparenciaVersao) { this.aparenciaVersao = j.aparencia || 0; this.buscarAparencia(); }
+      this.conta = j.conta || null;
+    }
+    async buscarAparencia() {
+      const versao = this.aparenciaVersao;
+      if (!versao) return;
+      try {
+        const ap = await pedir("GET", `${this.sala.codigo}/aparencia/${this.id}?v=${versao}`);
+        const texturas = {};
+        for (const [peca, n] of Object.entries(ap.texturas || {})) {
+          if (!this.texturas.has(n)) this.texturas.set(n, await pedir("GET", `${this.sala.codigo}/textura/${this.id}/${n}`, { como: "blob" }));
+          texturas[peca] = this.texturas.get(n);
+        }
+        if (versao !== this.aparenciaVersao) return;
+        this.aparencia = { ajuste: ap.ajuste || null, ocultas: ap.ocultas || [], texturas };
+        if (this.avatar) { await aplicarAparencia(this.avatar, this.aparencia); this.medirAltura(); }
+      } catch (e) { console.warn("sala: a aparência de " + this.nome + " não chegou", e); }
+    }
+    medirAltura() {
+      const av = this.avatar;
+      this.altura = av ? av.altura * (av.escala || 1) + (av.erguer || 0) * (av.escala || 1) : 1.65;
+      this.posicionarPlacas();
     }
     async buscarAvatar() {
       const versao = this.avatarVersao;
@@ -190,6 +238,7 @@
         const blob = await pedir("GET", `${this.sala.codigo}/avatar/${this.id}?v=${versao}`, { como: "blob" });
         const av = await abrirAvatar(blob, 1024);
         if (versao !== this.avatarVersao || !this.grupo.parent) { window.CompanhiaVRM.VRMUtils.deepDispose(av.vrm.scene); return; }
+        if (this.aparencia) await aplicarAparencia(av, this.aparencia);
         this.trocarAvatar(av);
       } catch (e) { console.warn("sala: o avatar de " + this.nome + " não abriu", e); }
     }
@@ -197,9 +246,8 @@
       if (this.avatar) { this.grupo.remove(this.avatar.vrm.scene); try { window.CompanhiaVRM.VRMUtils.deepDispose(this.avatar.vrm.scene); } catch (e) { /* já foi */ } }
       this.avatar = av;
       this.boneco.visible = !av;
-      this.altura = av ? av.altura : 1.65;
       if (av) this.grupo.add(av.vrm.scene);
-      this.posicionarPlacas();
+      this.medirAltura();
     }
     falar(texto) {
       soltarPlaca(this.balao);
@@ -236,7 +284,7 @@
       }
       // avatar VRM: descanso → andar → captura dela → aceno → ossos
       const av = this.avatar, pose = this.pose, T = window.THREE;
-      const descanso = this.sala.descanso;
+      const descanso = av.descanso || this.sala.descanso;
       for (const n of C.OSSOS_VRM) { if (descanso[n]) pose[n].copy(descanso[n]); else pose[n].identity(); }
       this.quadril.set(0, 0, 0);
       C.poseDeAndar(pose, this.quadril, a, 1);
@@ -247,6 +295,7 @@
         q.setFromEuler(e.set(0, 0, -1.07 + Math.sin(aceno * Math.PI * 6) * 0.35)).multiply(q2.setFromEuler(e.set(-0.8, 0, 0)));
         pose.rightLowerArm.slerp(q, env);
       }
+      for (const [n, q] of av.ajusteQ) if (pose[n]) pose[n].premultiply(q); // as correções dos ossos que ela fez
       gravarPose(av, pose, this.quadril);
       // rosto: a emoção, a captura dela e o piscar
       const em = av.vrm.expressionManager;
@@ -268,10 +317,16 @@
   }
 
   class Sala {
-    /** palco: o palco 3D; captura: a captura de movimento (para mandar a pose); aoMudar(), aoMensagem({de, nome, texto, meu}). */
-    constructor({ palco, captura, aoMudar, aoMensagem }) {
+    /**
+     * palco: o palco 3D; captura: a captura de movimento (para mandar a pose); aoMudar(), aoMensagem({de, nome, texto, meu});
+     * aparencia(): como estou agora ({avatar: Blob do .vrm vestido, ajuste, ocultas, texturas: {peça: Blob}}), conferido a
+     * cada segundo: o que mudou vai para os outros.
+     */
+    constructor({ palco, captura, aoMudar, aoMensagem, aparencia }) {
       this.palco = palco;
       this.captura = captura;
+      this.obterAparencia = aparencia || null;
+      this.enviando = false;
       this.aoMudar = aoMudar || (() => {});
       this.aoMensagem = aoMensagem || (() => {});
       this.codigo = null;
@@ -367,6 +422,10 @@
       this.visto = eu.mensagens || 0;
       this.mapaVersao = info.mapa ? info.mapa.versao : 0;
       if (avatar) pedir("PUT", `${codigo}/avatar?id=${eu.id}&segredo=${eu.segredo}`, { corpo: avatar }).catch((e) => console.warn("sala: o avatar não subiu", e));
+      this.avatarEnviado = avatar || null;
+      this.aparenciaEnviada = "";
+      this.texturasEnviadas = new Map(); // Blob → n
+      this.ultimaAparencia = 0;
       // cada um nasce um pouco para o lado, para não ficar um dentro do outro
       mundo.entrar();
       const lado = (parseInt(eu.id, 36) % 7) - 3;
@@ -394,8 +453,39 @@
       }
       return e;
     }
+    /** Manda o que mudou na minha aparência: a roupa (o .vrm), as texturas novas e o ajuste/as peças escondidas. */
+    async enviarAparencia() {
+      if (!this.dentro || this.enviando || !this.obterAparencia) return;
+      const a = this.obterAparencia();
+      if (!a) return;
+      this.enviando = true;
+      const { codigo, eu } = this, q = `id=${eu.id}&segredo=${eu.segredo}`;
+      try {
+        if (a.avatar && a.avatar !== this.avatarEnviado) {
+          await pedir("PUT", `${codigo}/avatar?${q}`, { corpo: a.avatar });
+          this.avatarEnviado = a.avatar;
+        }
+        const texturas = {};
+        for (const [peca, blob] of Object.entries(a.texturas || {})) {
+          if (!(blob instanceof Blob)) continue;
+          if (!this.texturasEnviadas.has(blob)) {
+            const n = this.texturasEnviadas.size % 256;
+            await pedir("PUT", `${codigo}/textura?${q}&n=${n}`, { corpo: blob });
+            this.texturasEnviadas.set(blob, n);
+          }
+          texturas[peca] = this.texturasEnviadas.get(blob);
+        }
+        const json = JSON.stringify({ ajuste: a.ajuste || null, ocultas: a.ocultas || [], texturas });
+        if (json !== this.aparenciaEnviada && this.codigo === codigo) {
+          await pedir("PUT", `${codigo}/aparencia?${q}`, { corpo: json });
+          this.aparenciaEnviada = json;
+        }
+      } catch (e) { console.warn("sala: a aparência não subiu", e); }
+      finally { this.enviando = false; }
+    }
     async trocar() {
       if (!this.dentro || this.ocupado) return;
+      if (performance.now() - this.ultimaAparencia > 1000) { this.ultimaAparencia = performance.now(); this.enviarAparencia(); }
       this.ocupado = true;
       try {
         const r = await pedir("POST", `${this.codigo}/estado`, { json: { id: this.eu.id, segredo: this.eu.segredo, desde: this.visto, estado: this.meuEstado() } });

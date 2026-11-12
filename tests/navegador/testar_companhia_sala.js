@@ -156,6 +156,37 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.click('#gestos button[aria-label="Feliz"]');
     await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].emocao === "feliz", null, { timeout: 15000 });
     ok(true, "o aceno e a expressão (feliz) da Ana aparecem para a Bia");
+
+    // ── a aparência vai junto: tamanho, proporções, braços, peças escondidas e texturas trocadas ──
+    const antesDoAjuste = await bia.ev(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return { escala: r.avatar.vrm.scene.scale.x, altura: r.altura }; });
+    await ana.ev(async () => {
+      const p = window.Companhia.palco, a = window.Companhia.atual;
+      p.definirAjuste({ bracos: 30, escala: { geral: 1.5, pernas: 1.2, cabeca: 1.3 }, ossos: { head: [0, 0, 20] } });
+      p.mostrarPeca("Roupa_CLOTH", false);
+      // uma textura trocada (como em Personagem › Roupas): 8×8 vermelha
+      const c = document.createElement("canvas"); c.width = c.height = 8; const g = c.getContext("2d"); g.fillStyle = "#e33"; g.fillRect(0, 0, 8, 8);
+      const png = await new Promise((ok) => c.toBlob(ok, "image/png"));
+      const r = a.roupas.find((x) => x.id === a.roupaAtual) || a.roupas[0];
+      r.texturas = { ...(r.texturas || {}), Calca_CLOTH: png };
+      await p.trocarTextura("Calca_CLOTH", png);
+    });
+    await bia.pagina.waitForFunction(() => { const r = [...window.Companhia.sala.remotos.values()][0]; if (!(r.avatar && Math.abs(r.avatar.vrm.scene.scale.x - 1.5) < 0.01 && r.aparencia && r.aparencia.ocultas.includes("Roupa_CLOTH"))) return false;
+      const calca = r.avatar.pecas.find((x) => x.nome === "Calca_CLOTH").materiais[0].map; return !!(calca && calca.image && calca.image.width === 8); }, null, { timeout: 30000 }).catch(() => {});
+    await bia.pagina.waitForTimeout(500);
+    const visto = await bia.ev(() => {
+      const r = [...window.Companhia.sala.remotos.values()][0], av = r.avatar, peca = (n) => av.pecas.find((x) => x.nome === n);
+      const cabeca = av.vrm.humanoid.getRawBoneNode("head").scale.x / av.brutos.head.x, perna = av.vrm.humanoid.getRawBoneNode("leftUpperLeg").scale.x / av.brutos.leftUpperLeg.x;
+      const calca = peca("Calca_CLOTH").materiais[0].map;
+      const giro = av.ajusteQ.get("head"), mao = av.vrm.humanoid.getRawBoneNode("leftHand").getWorldPosition(new THREE.Vector3()), ombro = av.vrm.humanoid.getRawBoneNode("leftUpperArm").getWorldPosition(new THREE.Vector3());
+      return { cabeca, perna, erguer: av.erguer, altura: r.altura, roupa: peca("Roupa_CLOTH").materiais.every((m) => !m.visible), calca: !!(calca && calca.image && calca.image.width === 8), giro: !!giro, braco: ombro.y - mao.y };
+    });
+    ok(Math.abs(visto.cabeca - 1.3) < 0.01 && Math.abs(visto.perna - 1.2) < 0.01 && visto.erguer > 0.05 && visto.altura > antesDoAjuste.altura * 1.4,
+      `o tamanho (1,5×) e as proporções da Ana (cabeça 1,3×, pernas 1,2×, o quadril sobe) aparecem igual para a Bia (altura ${antesDoAjuste.altura.toFixed(2)} → ${visto.altura.toFixed(2)} m)`);
+    ok(visto.roupa && visto.calca && visto.giro, "a peça que a Ana escondeu some, a textura que ela trocou aparece e a correção do osso da cabeça vale também para a Bia" + (visto.roupa && visto.calca && visto.giro ? "" : ` (${JSON.stringify(visto)})`));
+    ok(visto.braco > 0.2 && visto.braco < 0.75, `os braços em descanso no ângulo que a Ana escolheu (mão ${visto.braco.toFixed(2)} m abaixo do ombro)`);
+    await ana.ev(() => { const p = window.Companhia.palco; p.definirAjuste(null); p.mostrarPeca("Roupa_CLOTH", true); });
+    await bia.pagina.waitForFunction(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return Math.abs(r.avatar.vrm.scene.scale.x - 1) < 0.01 && !r.aparencia.ocultas.length; }, null, { timeout: 30000 });
+    ok(true, "e quando a Ana volta ao normal, a Bia vê voltar também");
     await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-sala-ana.png") });
     await bia.pagina.screenshot({ path: path.join(PASTA, "companhia-sala-bia.png") });
 

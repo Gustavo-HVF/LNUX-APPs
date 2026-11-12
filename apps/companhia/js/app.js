@@ -1472,7 +1472,7 @@
     LNUX.aviso("Link copiado.", "ok");
   };
   function garantirSala() {
-    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala });
+    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala, aparencia: minhaAparencia });
     return sala;
   }
   function mensagemDaSala(m) {
@@ -1515,6 +1515,12 @@
     return p.id;
   }
   /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
+  /** Como a minha personagem está agora (a roupa, o ajuste do esqueleto, as peças escondidas e as texturas trocadas): vai para a sala. */
+  function minhaAparencia() {
+    if (!atual || atual.tipo !== "vrm" || !palco3d.vrm) return null;
+    const r = roupaAtual();
+    return { avatar: r ? r.blob : null, ajuste: palco3d.ajuste || null, ocultas: palco3d.pecasOcultas(), texturas: (r && r.texturas) || {} };
+  }
   /** O .vrm da minha personagem (a roupa que estou usando), que vai para as outras pessoas da sala. */
   function avatarParaOsOutros() {
     if (!atual || atual.tipo !== "vrm") return null;
