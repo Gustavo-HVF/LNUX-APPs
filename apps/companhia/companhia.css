@@ -325,3 +325,6 @@
 .form-sala .loja-aba .conta { font-size: .78em; }
 .form-sala .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 @media (max-width: 760px) { .form-sala .grade { grid-template-columns: 1fr; } .salas-eu .lnux-campo { max-width: none; } }
+.salas-codigo { display: flex; flex-wrap: nowrap; }
+.salas-codigo .lnux-campo { flex: 1 1 auto; min-width: 0; }
+.salas-codigo .lnux-botao { flex: none; }
