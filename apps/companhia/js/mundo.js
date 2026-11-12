@@ -494,7 +494,7 @@
       if (!triangulos) throw new Error("Esse arquivo não tem nenhuma malha para servir de cenário.");
       this.tirarMapa();
       this.mapa = objeto;
-      this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, partida: null }, info.ajuste || {}) };
+      this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, deitado: false, partida: null }, info.ajuste || {}) };
       // tamanho: os FBX costumam vir em centímetros; um mapa "gigante" ou "minúsculo" é ajustado para caber uma pessoa
       const bruto = new T.Box3().setFromObject(objeto).getSize(new T.Vector3());
       const maior = Math.max(bruto.x, bruto.y, bruto.z) || 1;
@@ -513,7 +513,7 @@
       if (!this.mapa) return;
       const a = this.info.ajuste;
       this.mapa.scale.setScalar(limitar(+a.escala || 1, 1e-4, 1e4));
-      this.mapa.rotation.y = (+a.giro || 0) * Math.PI / 180;
+      this.mapa.rotation.set(a.deitado ? -Math.PI / 2 : 0, (+a.giro || 0) * Math.PI / 180, 0, "YXZ"); // deitado: o arquivo veio com o Z para cima
       this.mapa.updateMatrixWorld(true);
       this.caixa.setFromObject(this.mapa);
       if (this.colisor) { this.colisor.geometry.dispose(); this.colisor = null; }
@@ -585,8 +585,8 @@
       for (const [nome, blob] of arquivos) {
         if (/\.(vrcw|vrca|unity3d|assetbundle|bundle)$/i.test(nome)) {
           const e = new Error("Esse é um mundo (ou avatar) já publicado do VRChat/Unity: um pacote fechado do motor Unity, que não abre fora dele. " +
-            "Para usar um cenário aqui, peça ao autor (ou use o seu projeto do Unity) a versão em glTF/GLB — no Unity, com o UnityGLTF ou \"Export GLB\"; no Blender, Exportar › glTF 2.0 — " +
-            "ou abra o .unitypackage do mundo, que a Companhia lista os modelos .fbx/.obj de dentro.");
+            "Para usar um cenário aqui, abra o arquivo do projeto: o .blend do Blender, .fbx, .obj, .dae, glTF/GLB (no Unity, com o UnityGLTF ou \"Export GLB\") " +
+            "ou o .unitypackage do mundo, que a Companhia lista os modelos de dentro. Ela converte tudo para .glb.");
           e.explicacao = true;
           throw e;
         }
@@ -598,6 +598,6 @@
       for (const n of [...saida.keys()]) if (/(^|\/)(__MACOSX|\.DS_Store)/.test(n) || /\.(meta|cs|shader|mat|prefab|unity|asset|anim|controller|dll)$/i.test(n)) saida.delete(n);
       return saida;
     },
-    modelos(arquivos) { return [...arquivos.keys()].filter((n) => MODELO.test(n)).sort((a, b) => arquivos.get(b).size - arquivos.get(a).size); },
+    modelos(arquivos) { return C.conversor.modelos(arquivos); },
   };
 })();

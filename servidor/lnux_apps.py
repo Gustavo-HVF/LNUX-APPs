@@ -132,6 +132,57 @@ MEDIAPIPE_ARQUIVOS = {  # nome → ("pacote", caminho dentro do .tgz) ou ("model
 }
 MEDIAPIPE_TRAVA = threading.Lock()
 
+# Companhia, cenários: converter .blend (Blender) para .glb. Quando o Blender está instalado no aparelho (o programa
+# "blender", ou o módulo "bpy" do Python), a ponte pede a ele que abra o arquivo e exporte em glTF: sai igual ao que
+# o Blender mostra, com os modificadores aplicados. Sem ele, a Companhia usa o leitor próprio (mais simples).
+# O arquivo é aberto sem rodar os scripts que ele traz (--disable-autoexec) e só o exportador de glTF é chamado.
+BLENDER_SCRIPT = r"""
+import bpy, os, sys
+saida = sys.argv[sys.argv.index("--") + 1]
+try:  # texturas que ficaram ao lado do arquivo (em qualquer subpasta)
+    bpy.ops.file.find_missing_files(directory=os.path.dirname(bpy.data.filepath))
+except Exception:
+    pass
+opcoes = dict(filepath=saida, export_format="GLB", export_apply=True, export_cameras=False, export_lights=False, export_animations=False)
+while True:
+    try:
+        bpy.ops.export_scene.gltf(**opcoes)
+        break
+    except TypeError as e:  # uma opcao que esta versao do Blender nao tem
+        sobra = [k for k in opcoes if k != "filepath" and k in str(e)]
+        if not sobra:
+            raise
+        for k in sobra:
+            opcoes.pop(k)
+"""
+BLENDER_ACHADO: dict = {}
+BLENDER_TRAVA = threading.Lock()
+
+
+def blender_programa(conferir_bpy: bool = True) -> tuple | None:
+    """("blender", caminho do programa) ou ("bpy", python com o módulo bpy), ou None. LNUX_APPS_BLENDER aponta outro."""
+    if "resposta" in BLENDER_ACHADO:
+        return BLENDER_ACHADO["resposta"]
+    escolhido = os.environ.get("LNUX_APPS_BLENDER", "").strip()
+    candidatos = [escolhido] if escolhido else []
+    candidatos += [shutil.which("blender") or "", "/snap/bin/blender", "/var/lib/flatpak/exports/bin/org.blender.Blender",
+                   str(HOME / ".local/share/flatpak/exports/bin/org.blender.Blender"), "/Applications/Blender.app/Contents/MacOS/Blender"]
+    for c in candidatos:
+        if c and (shutil.which(c) or Path(c).is_file()):
+            if "python" in Path(c).name.lower():  # um Python que tem o módulo bpy (pip install bpy)
+                BLENDER_ACHADO["resposta"] = ("bpy", c)
+            else:
+                BLENDER_ACHADO["resposta"] = ("blender", shutil.which(c) or c)
+            return BLENDER_ACHADO["resposta"]
+    if not conferir_bpy:
+        return None
+    try:  # o módulo bpy no mesmo Python da ponte (demora um pouco para conferir; fica guardado)
+        tem = subprocess.run([sys.executable, "-c", "import bpy"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        tem = False
+    BLENDER_ACHADO["resposta"] = ("bpy", sys.executable) if tem else None
+    return BLENDER_ACHADO["resposta"]
+
 
 def baixar_para(url: str, destino: Path, limite: int):
     """Baixa um arquivo grande aos pedaços (para um temporário, que só vira o destino quando termina)."""
@@ -291,6 +342,8 @@ class Ponte:
             try:
                 if f.is_file() and f.stat().st_mtime < limite:
                     f.unlink()
+                elif f.is_dir() and f.name.startswith("blender-") and f.stat().st_mtime < limite:
+                    shutil.rmtree(f, ignore_errors=True)  # conversões do Blender que ficaram para trás
             except OSError:
                 pass
 
@@ -325,6 +378,8 @@ class Ponte:
                 "ia": True, "live2d_core": (DADOS / "live2d" / "live2dcubismcore.min.js").is_file(),
                 # Companhia: guarda os arquivos do rastreamento pela câmera (MediaPipe)
                 "mediapipe": MEDIAPIPE_VERSAO,
+                # Companhia: converter cenários .blend com o Blender do aparelho (a rota existe; /api/blender diz se ele está instalado)
+                "blender": True,
             },
             "perfis": sorted(PERFIS),
         }
@@ -903,6 +958,8 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.live2d_core(m)
         if rota == "mediapipe" or rota.startswith("mediapipe/"):
             return self.mediapipe(m, rota[10:])
+        if rota == "blender" or rota.startswith("blender/"):
+            return self.blender(m, rota[8:])
         raise ErroPonte(404, f"A ponte não conhece /api/{rota} ({m}).")
 
     # ── ações
@@ -1056,6 +1113,59 @@ class Manipulador(BaseHTTPRequestHandler):
             raise ErroPonte(405, "Use GET (ver ou pegar) ou POST (baixar).")
         return self.responder_json({"versao": MEDIAPIPE_VERSAO,
                                     "arquivos": {n: ((pasta / n).stat().st_size if (pasta / n).is_file() else None) for n in MEDIAPIPE_ARQUIVOS}})
+
+    def blender(self, metodo: str, resto: str):
+        """Converter .blend em .glb com o Blender do aparelho. GET /api/blender diz se há Blender; PUT /api/blender/<lote>/<nome>
+        envia um arquivo (o .blend e as texturas dele) para uma pasta temporária; POST /api/blender/<lote> converte
+        ({"principal": nome enviado} ou {"entrada": caminho de um .blend numa pasta liberada}); DELETE apaga a pasta."""
+        if metodo == "GET" and not resto:
+            achado = blender_programa()
+            return self.responder_json({"disponivel": bool(achado), "como": achado[0] if achado else None,
+                                        "programa": Path(achado[1]).name if achado else None})
+        lote, _, nome = resto.partition("/")
+        if not re.fullmatch(r"[a-z0-9]{6,32}", lote):
+            raise ErroPonte(400, "Lote inválido.")
+        pasta = self.ponte.temporarios / f"blender-{lote}"
+        if metodo == "PUT" and nome:
+            pasta.mkdir(parents=True, exist_ok=True)
+            destino = pasta / nome_seguro(urllib.parse.unquote(nome), "arquivo")
+            self.receber_para(destino)
+            return self.responder_json({"nome": destino.name, "tamanho": destino.stat().st_size}, 201)
+        if metodo == "DELETE" and not nome:
+            shutil.rmtree(pasta, ignore_errors=True)
+            return self.responder_json({"ok": True})
+        if metodo != "POST" or nome:
+            raise ErroPonte(405, "Use GET (tem Blender?), PUT (enviar), POST (converter) ou DELETE (limpar).")
+        d = self.ler_json()
+        if d.get("entrada"):
+            entrada = self.ponte.resolver(str(d["entrada"]))
+        else:
+            entrada = pasta / nome_seguro(str(d.get("principal") or ""), "")
+        if not entrada.is_file() or entrada.suffix.lower() != ".blend":
+            raise ErroPonte(400, "Diga qual é o arquivo .blend a converter.")
+        achado = blender_programa()
+        if not achado:
+            raise ErroPonte(501, "O Blender não está instalado neste aparelho (nem o módulo bpy do Python).")
+        pasta.mkdir(parents=True, exist_ok=True)
+        saida = pasta / (entrada.stem + ".glb")
+        saida.unlink(missing_ok=True)
+        if achado[0] == "blender":
+            cmd = [achado[1], "--background", "--factory-startup", "--disable-autoexec", str(entrada), "--python-expr", BLENDER_SCRIPT, "--", str(saida)]
+        else:
+            abrir = "import bpy, sys\nbpy.ops.wm.open_mainfile(filepath=sys.argv[1], use_scripts=False)\n"
+            cmd = [achado[1], "-c", abrir + BLENDER_SCRIPT, str(entrada), "--", str(saida)]
+        inicio = time.time()
+        with BLENDER_TRAVA:  # uma conversão de cada vez (o Blender usa bastante memória)
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(entrada.parent))
+            except subprocess.TimeoutExpired:
+                raise ErroPonte(504, "O Blender demorou demais para converter esse arquivo (mais de 15 minutos).")
+            except OSError as e:
+                raise ErroPonte(500, f"Não consegui rodar o Blender: {e}")
+        if not saida.is_file() or saida.stat().st_size < 20:
+            linhas = [l for l in ((r.stderr or "") + "\n" + (r.stdout or "")).splitlines() if l.strip()]
+            raise ErroPonte(500, "O Blender não conseguiu exportar esse arquivo: " + (linhas[-1][:300] if linhas else "sem explicação"))
+        return self.responder_json({"saida": str(saida), "tamanho": saida.stat().st_size, "segundos": round(time.time() - inicio, 1), "como": achado[0]})
 
     def listar(self, caminho: str, ocultos: bool) -> dict:
         pasta = self.ponte.resolver(caminho)

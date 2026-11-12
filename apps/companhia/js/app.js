@@ -611,7 +611,7 @@
   }
   LNUX.soltarArquivos(palcoArea, async (arqs) => {
     const a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
-    const outros = arqs.filter((x) => /\.(vrma|bvh|fbx|glb|gltf|obj|unitypackage|vrcw)$/i.test(x.nome));
+    const outros = arqs.filter((x) => /\.(vrma|bvh|unitypackage|vrcw)$/i.test(x.nome) || C.conversor.MODELO.test(x.nome));
     if (outros.length && atual && atual.tipo === "vrm") { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
     if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
     palco.pausar();
@@ -625,7 +625,7 @@
     const nomes = [...arquivos.keys()];
     if (zip && atual && atual.tipo === "vrm" && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem)$/i.test(n))) {
       if (nomes.some((n) => /\.(vrma|bvh)$/i.test(n)) || (nomes.some((n) => /\.fbx$/i.test(n)) && !nomes.some((n) => /\.(png|jpe?g)$/i.test(n)))) { estudio.receberMovimentos(new Map([[a.nome, zip]])).catch(LNUX.erro); return; }
-      if (nomes.some((n) => C.mapas.MODELO.test(n))) { estudio.receberMapa(new Map([[a.nome, zip]]), LNUX.nomeSemExtensao(a.nome)).catch(LNUX.erro); return; }
+      if (nomes.some((n) => C.conversor.MODELO.test(n))) { estudio.receberMapa(new Map([[a.nome, zip]]), LNUX.nomeSemExtensao(a.nome)).catch(LNUX.erro); return; }
     }
     try { await importarPacote(arquivos, zip); } catch (e) { erroAoImportar(e); }
   });
@@ -634,7 +634,7 @@
     const mapa = new Map();
     for (const x of arqs) mapa.set(x.nome, await x.blob());
     const nomes = [...mapa.keys()];
-    let destino = nomes.every((n) => /\.(vrma|bvh)$/i.test(n)) ? "movimento" : nomes.some((n) => /\.(obj|unitypackage|vrcw)$/i.test(n)) ? "cenario" : null;
+    let destino = nomes.every((n) => /\.(vrma|bvh)$/i.test(n)) ? "movimento" : nomes.some((n) => /\.(blend|obj|dae|stl|ply|3ds|3mf|usdz|unitypackage|vrcw)$/i.test(n)) ? "cenario" : null;
     if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem) ou um cenário (um mapa para ela andar).`,
       botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
     if (destino === "movimento") await estudio.receberMovimentos(mapa);
