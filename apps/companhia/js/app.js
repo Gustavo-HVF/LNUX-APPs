@@ -1420,10 +1420,9 @@
     return p.id;
   }
   /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
-  async function avatarParaOsOutros(mandar) {
-    if (!mandar || !atual || atual.tipo !== "vrm") return null;
-    if (atual.protegido && !(await LNUX.dialogo({ titulo: "Modelo com licença", corpo: `O autor de "${atual.perfil.nome}" não deixa redistribuir o modelo. Para os outros te verem com ela, o arquivo é mandado para o aparelho de cada pessoa da sala. ` +
-      "Sem mandar, você continua se vendo com ela e os outros veem um boneco simples.", botoes: [{ rotulo: "Aparecer como boneco", valor: false, primario: true }, { rotulo: "Mandar mesmo assim", valor: true }] }))) return null;
+  /** O .vrm da minha personagem (a roupa que estou usando), que vai para as outras pessoas da sala. */
+  function avatarParaOsOutros() {
+    if (!atual || atual.tipo !== "vrm") return null;
     const r = roupaAtual();
     return r ? r.blob : null;
   }
@@ -1434,7 +1433,6 @@
     const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
     const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem (.vrm, ZIP ou avatar do Unity)..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
     avatar.setAttribute("aria-label", "Sua personagem");
-    const mandar = el("input", { type: "checkbox", checked: pref("sala-mandar", "1") === "1" });
     const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
     const podeCriar = LNUX.ponte.disponivel && LNUX.ponte.tem("salas");
     const mapas = podeCriar ? await C.mapas.lista() : [];
@@ -1447,13 +1445,12 @@
       const n = nome.value.trim();
       if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
       gravarPref("sala-nome", n);
-      gravarPref("sala-mandar", mandar.checked ? "1" : "0");
       if (avatar.value === "importar") { d.fechar(); await importar("zip"); if (atual && atual.tipo === "vrm") gravarPref("sala-avatar", atual.id); janelaSala(codigo.value); return null; }
       gravarPref("sala-avatar", avatar.value);
       const id = avatar.value || (await idDoBoneco());
       if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
       if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
-      return { nome: n, avatar: avatar.value ? await avatarParaOsOutros(mandar.checked) : (await C.lerPersonagem(id)).roupas[0].blob }; // o boneco padrão sempre vai
+      return { nome: n, avatar: avatarParaOsOutros() }; // a personagem sempre vai para os outros (o boneco padrão também)
     };
     const entrar = async (cod, criada) => {
       const eu = await preparar();
@@ -1484,7 +1481,6 @@
     };
     const corpo = el("div", { class: "ajustes" },
       el("div", { class: "grade" }, el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome), el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), avatar)),
-      el("label", { class: "lnux-alternar" }, mandar, "Mostrar minha personagem para os outros (sem isso, eles me veem como um boneco simples)"),
       el("div", { class: "lnux-rotulo" }, "Entrar numa sala"),
       el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, codigo), el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigo.focus(); return; } entrar(c).catch(LNUX.erro); } }, "Entrar")),
       podeCriar ? el("div", { class: "lnux-rotulo" }, "Criar uma sala neste aparelho") : null,
@@ -1645,7 +1641,6 @@
       { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
       { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
       { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
-      { rotulo: "Ver as personagens dos outros (senão, bonecos)", marcado: () => garantirSalaCfg().avatares, acao: () => { const c = garantirSalaCfg(); c.avatares = !c.avatares; LNUX.preferencia.gravar("companhia.sala", JSON.stringify(c)); if (sala) { sala.cfg.avatares = c.avatares; for (const r of sala.remotos.values()) r.buscarAvatar(); } } },
       "-",
       { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
       { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
@@ -1660,7 +1655,6 @@
     return [menus[0], menuSala, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
       .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
   }
-  const garantirSalaCfg = () => { if (sala) return sala.cfg; try { return Object.assign({ avatares: true }, JSON.parse(pref("sala", "{}") || "{}")); } catch (e) { return { avatares: true }; } };
 
   // ── Entrada de texto e controles ─────────────────────────────────────
 

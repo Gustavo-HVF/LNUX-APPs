@@ -28,13 +28,19 @@ Uso:
     python3 servidor/lnux_apps.py                       # porta 8095, com a ponte
     python3 servidor/lnux_apps.py --porta 9000 --abrir  # abre a página inicial no navegador
     python3 servidor/lnux_apps.py --sem-ponte           # só os apps, sem acesso ao aparelho
+    python3 servidor/lnux_apps.py --so-app companhia    # publica só a Companhia (salas e loja; sem os outros apps)
     python3 servidor/lnux_apps.py --mostrar-token       # mostra a chave e sai
+
+Publicar um app sozinho (--so-app): o endereço entrega só esse app (a página inicial dos Apps Web e os outros apps
+não abrem) e quem chega pela rede ou pela internet (um túnel) nunca usa a ponte, nem com a chave: só as salas e a
+loja da Companhia. A chave da ponte só vale para quem abre no próprio aparelho (127.0.0.1).
 
 Só precisa do Python 3.9 ou mais novo (biblioteca padrão). O ffmpeg é opcional.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import hmac
 import json
 import mimetypes
@@ -166,11 +172,22 @@ SALAS: dict = {}
 SALAS_TRAVA = threading.Lock()
 SALA_MAXIMO = 6            # salas ao mesmo tempo
 SALA_PESSOAS = 16          # pessoas por sala
-SALA_MAPA = 200 * 1024 * 1024
-SALA_AVATAR = 40 * 1024 * 1024
+RESERVA_DISCO = 300 * 1024 * 1024  # envios (cenário, personagens, loja) não podem deixar o aparelho com menos que isto livre
 SALA_SUMIU = 20            # segundos sem notícia de uma pessoa: ela saiu
 SALA_VAZIA = 3600          # segundos sem ninguém: a sala fecha
 SALA_LETRAS = "abcdefghjkmnpqrstuvwxyz23456789"  # sem as que se confundem (i, l, o, 0, 1)
+
+# Companhia, loja: personagens, mundos e animações guardados NESTE aparelho, numa pasta própria (~/.lnux-apps/loja,
+# ou "loja" em ponte.json, ou --loja), com uma subpasta por tipo. Quem entra pelo link vê a loja, experimenta (a
+# prévia 3D é no navegador dela), baixa para usar e, se o dono deixar, publica as suas. Arquivos postos à mão nas
+# subpastas também aparecem. É a única pasta do aparelho que os visitantes alcançam.
+LOJA_TIPOS = {  # tipo → (subpasta, extensões aceitas)
+    "personagem": ("personagens", (".vrm",)),
+    "mundo": ("mundos", (".glb",)),
+    "animacao": ("animacoes", (".vrma", ".bvh", ".fbx", ".glb")),
+}
+LOJA_MINIATURA = 3 * 1024 * 1024
+LOJA_TRAVA = threading.Lock()
 
 
 class Sala:
@@ -196,6 +213,42 @@ class Sala:
     def tirar(self, pid: str):
         if self.pessoas.pop(pid, None) is not None:
             (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
+
+
+def cabe_no_disco(pasta: Path, tamanho: int) -> None:
+    """Recusa um envio que deixaria o aparelho quase sem espaço (é o único limite de tamanho)."""
+    try:
+        livre = shutil.disk_usage(pasta).free
+    except OSError:
+        return
+    if tamanho > livre - RESERVA_DISCO:
+        raise ErroPonte(507, f"Não cabe: o aparelho que guarda isso tem só {max(0, livre - RESERVA_DISCO) // (1024 * 1024)} MB livres para envios.")
+
+
+def formato_confere(caminho: Path, ext: str) -> bool:
+    """O começo do arquivo bate com o formato (um .vrm é mesmo um glTF, um .bvh começa por HIERARCHY...)."""
+    try:
+        with open(caminho, "rb") as f:
+            cabeca = f.read(4096)
+    except OSError:
+        return False
+    if ext in (".vrm", ".glb", ".vrma"):
+        return cabeca[:4] == b"glTF"
+    if ext == ".bvh":
+        return cabeca.lstrip(b"\xef\xbb\xbf \t\r\n").upper().startswith(b"HIERARCHY")
+    if ext == ".fbx":
+        return cabeca.startswith(b"Kaydara FBX Binary") or b"FBXHeaderExtension" in cabeca or cabeca.lstrip().startswith(b"; FBX")
+    return False
+
+
+def tipo_de_imagem(dados: bytes) -> str | None:
+    if dados.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if dados.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if dados[:4] == b"RIFF" and dados[8:12] == b"WEBP":
+        return "webp"
+    return None
 
 
 def sala_texto(valor, limite: int) -> str:
@@ -330,6 +383,27 @@ def carregar_config() -> dict:
     return config
 
 
+def gravar_config(config: dict) -> None:
+    """Grava ~/.lnux-apps/ponte.json (permissão 600)."""
+    arquivo = DADOS / "ponte.json"
+    temporario = arquivo.with_suffix(".tmp")
+    temporario.write_text(json.dumps(config, ensure_ascii=False, indent=2), "utf-8")
+    os.chmod(temporario, 0o600)
+    os.replace(temporario, arquivo)
+
+
+def app_do_catalogo(app_id: str) -> dict | None:
+    """O app com esse id no apps.json (com o "caminho" dele), ou None."""
+    try:
+        dados = json.loads((RAIZ_APPS / "apps.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    for a in dados.get("apps", []):
+        if isinstance(a, dict) and a.get("id") == app_id and a.get("caminho"):
+            return a
+    return None
+
+
 def pastas_do_usuario() -> dict:
     """Atalhos das pastas comuns (só as que existem): Pessoal, Downloads, Músicas, Vídeos, Imagens, Documentos."""
     if TERMUX:
@@ -359,10 +433,15 @@ def pastas_do_usuario() -> dict:
 class Ponte:
     """O estado da ponte: chave, pastas liberadas, tarefas do ffmpeg."""
 
-    def __init__(self, ligada: bool, raizes_extras: list, permitir_comandos: bool, hosts_extras: tuple = (), sem_comandos: bool = False):
+    def __init__(self, ligada: bool, raizes_extras: list, permitir_comandos: bool, hosts_extras: tuple = (), sem_comandos: bool = False,
+                 so_app: dict | None = None, loja: str | None = None):
         self.ligada = ligada
         self.config = carregar_config() if ligada else {}
         self.token = self.config.get("token", "")
+        # --so-app: o endereço entrega só este app ({id, caminho, ...} do apps.json), e a ponte só vale no próprio aparelho
+        self.so_app = so_app
+        # a loja da Companhia (personagens, mundos e animações que as pessoas publicam neste aparelho)
+        self.loja = Path(os.path.expanduser(loja or self.config.get("loja") or str(DADOS / "loja")))
         # --sem-comandos vale mais que a configuração (ex.: servidor aberto pela internet, por um túnel)
         self.comandos = bool(permitir_comandos or self.config.get("comandos")) and not sem_comandos
         # domínios aceitos no Host/Origin além de localhost e IPs: o endereço de um túnel (cloudflared...)
@@ -433,9 +512,20 @@ class Ponte:
                 "blender": True,
                 # Companhia: salas para jogar com outras pessoas (quem recebe o link entra sem a chave da ponte)
                 "salas": True,
+                # Companhia: a loja de personagens, mundos e animações guardada neste aparelho
+                "loja": True,
             },
             "perfis": sorted(PERFIS),
+            "so_app": self.so_app["id"] if self.so_app else None,
         }
+
+    def publico(self) -> dict:
+        """O que qualquer um pode saber deste servidor (sem a chave): o que ele oferece aos visitantes."""
+        return {"versao": VERSAO, "so_app": self.so_app["id"] if self.so_app else None, "ponte": self.ligada,
+                "salas": self.ligada, "loja": self.ligada, "loja_publicar": self.ligada and self.loja_publicar()}
+
+    def loja_publicar(self) -> bool:
+        return self.config.get("loja_publicar", True) is not False
 
 
 # ── Aparelho (bateria, área de transferência, notificação, voz) ─────────
@@ -717,7 +807,7 @@ class Manipulador(BaseHTTPRequestHandler):
         self.close_connection = True
         self.responder_json({"erro": mensagem}, status, {"Connection": "close"})
 
-    def enviar_arquivo(self, caminho: Path, tipo: str, cache: str = "no-cache"):
+    def enviar_arquivo(self, caminho: Path, tipo: str, cache: str = "no-cache", cabecalhos: dict | None = None):
         """Manda um arquivo, com suporte a Range (os players de vídeo pedem pedaços)."""
         tamanho = caminho.stat().st_size
         inicio, fim = 0, tamanho - 1
@@ -749,6 +839,8 @@ class Manipulador(BaseHTTPRequestHandler):
         self.send_header("Accept-Ranges", "bytes")
         self.send_header("Cache-Control", cache)
         self.send_header("X-Content-Type-Options", "nosniff")
+        for k, v in (cabecalhos or {}).items():
+            self.send_header(k, v)
         if status == 206:
             self.send_header("Content-Range", f"bytes {inicio}-{fim}/{tamanho}")
         self.end_headers()
@@ -877,10 +969,35 @@ class Manipulador(BaseHTTPRequestHandler):
 
     # ── arquivos dos apps
 
+    def redirecionar(self, destino: str):
+        self.send_response(302)
+        self.send_header("Location", destino)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
     def estatico(self, caminho_url: str):
         partes = [p for p in urllib.parse.unquote(caminho_url).split("/") if p]
         if any(p.startswith(".") or "\\" in p or "\x00" in p for p in partes):
             return self.erro(404, "Não encontrado.")
+        if self.ponte.so_app:
+            # publicado sozinho: só este app e o que ele usa (comum/); a página inicial e os outros apps não existem aqui
+            app = self.ponte.so_app["caminho"].strip("/")
+            rel = "/".join(partes)
+            if rel in ("", "index.html", "apps", "apps/index.html"):
+                return self.redirecionar("/" + app + "/")
+            if rel == "apps.json":
+                corpo = json.dumps({"apps": [self.ponte.so_app]}, ensure_ascii=False).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(corpo)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(corpo)
+                return
+            if not (rel == app or rel.startswith(app + "/") or rel.startswith("comum/") or rel in ("CREDITOS.md", "LICENSE")):
+                return self.erro(404, "Este endereço só tem a " + str(self.ponte.so_app.get("nome") or "página publicada") + ".")
         alvo = RAIZ_APPS.joinpath(*partes) if partes else RAIZ_APPS
         real = Path(os.path.realpath(alvo))
         if real != RAIZ_APPS and RAIZ_APPS not in real.parents:
@@ -900,10 +1017,21 @@ class Manipulador(BaseHTTPRequestHandler):
 
     # ── API da ponte
 
+    def do_proprio_aparelho(self) -> bool:
+        """O pedido vem de um navegador neste aparelho (127.0.0.1), não da rede nem da internet por um túnel (o
+        cloudflared também conecta de 127.0.0.1, mas o pedido chega com o endereço público e os cabeçalhos da Cloudflare)."""
+        if self.client_address[0] not in ("127.0.0.1", "::1", "::ffff:127.0.0.1"):
+            return False
+        if any(self.headers.get(h) for h in ("Cf-Connecting-Ip", "Cf-Ray", "X-Forwarded-For", "X-Forwarded-Host", "Forwarded", "X-Real-Ip")):
+            return False
+        return nome_do_host(self.headers.get("Host", "")) not in self.ponte.hosts_extras
+
     def autorizado(self, permitir_cookie: bool) -> bool:
         token = self.ponte.token
         if not token:
             return False
+        if self.ponte.so_app and not self.do_proprio_aparelho():
+            return False  # publicado sozinho: de fora, nem a chave abre a ponte (só as salas e a loja)
         enviado = self.headers.get("X-Ponte-Token", "")
         if enviado and hmac.compare_digest(enviado.encode(), token.encode()):
             return True
@@ -917,6 +1045,8 @@ class Manipulador(BaseHTTPRequestHandler):
     def api(self, rota: str):
         if not host_valido(self.headers.get("Host", ""), self.ponte.hosts_extras):
             raise ErroPonte(403, "Endereço não permitido (use localhost ou o IP do aparelho).")
+        if rota == "publico" and self.command in ("GET", "HEAD"):
+            return self.responder_json(self.ponte.publico())
         if not self.ponte.ligada:
             if rota == "estado":
                 return self.responder_json({"ponte": False, "versao": VERSAO, "motivo": "o servidor foi iniciado sem a ponte"})
@@ -930,9 +1060,14 @@ class Manipulador(BaseHTTPRequestHandler):
         # As salas da Companhia têm acesso próprio: criar exige a chave da ponte; entrar, só o código da sala
         if rota == "sala" or rota.startswith("sala/"):
             return self.sala(self.command, rota[5:])
+        # A loja também: ver e baixar, qualquer um; publicar, se o dono deixar; apagar, o dono ou quem publicou
+        if rota == "loja" or rota.startswith("loja/"):
+            return self.loja(self.command, rota[5:])
         # O cookie só vale para LER arquivos (é o que <video src> e <img src> precisam); o resto exige o cabeçalho
         so_leitura = self.command in ("GET", "HEAD") and rota in ("arquivo", "live2d/core")
         if not self.autorizado(permitir_cookie=so_leitura):
+            if self.ponte.so_app and not self.do_proprio_aparelho():
+                raise ErroPonte(403, "Este endereço publica só a " + str(self.ponte.so_app.get("nome") or "página") + ": daqui não dá para usar o aparelho (só as salas e a loja).")
             raise ErroPonte(401, "Falta a chave da ponte. Abra o app pelo LNUX (🌐 Apps Web), que já manda a chave.")
 
         p = self.parametros()
@@ -1230,8 +1365,7 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.enviar_arquivo(sala.pasta / "mapa.glb", "model/gltf-binary")
         if acao == "mapa" and m == "PUT":
             dono()
-            if int(self.headers.get("Content-Length") or 0) > SALA_MAPA:
-                raise ErroPonte(413, f"O cenário passa de {SALA_MAPA // (1024 * 1024)} MB.")
+            cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
             self.receber_para(sala.pasta / "mapa.glb")
             with sala.trava:
                 sala.versao_mapa += 1
@@ -1266,8 +1400,7 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
-            if int(self.headers.get("Content-Length") or 0) > SALA_AVATAR:
-                raise ErroPonte(413, f"O avatar passa de {SALA_AVATAR // (1024 * 1024)} MB.")
+            cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
             self.receber_para(sala.pasta / f"avatar-{p['id']}.vrm")
             j["avatar"] += 1
             return self.responder_json({"avatar": j["avatar"]}, 201)
@@ -1305,6 +1438,151 @@ class Manipulador(BaseHTTPRequestHandler):
                 "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "estado": x["estado"]} for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
                 "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome})
+
+    # ── loja da Companhia
+
+    def loja_itens(self) -> list:
+        """Os itens da loja: os publicados (uma pasta <id>/ com item.json, o arquivo e a miniatura) e os arquivos
+        postos à mão direto nas subpastas (personagens/, mundos/, animacoes/)."""
+        itens = []
+        for tipo, (sub, exts) in LOJA_TIPOS.items():
+            pasta = self.ponte.loja / sub
+            if not pasta.is_dir():
+                continue
+            for f in pasta.iterdir():
+                if f.name.startswith("."):
+                    continue
+                try:
+                    if f.is_dir():
+                        if not re.fullmatch(r"[0-9a-f]{12}", f.name):
+                            continue
+                        dados = json.loads((f / "item.json").read_text("utf-8"))
+                        arq = f / nome_seguro(str(dados.get("arquivo", "")))
+                        if not arq.is_file() or arq.suffix.lower() not in exts:
+                            continue
+                        mini = next((f / ("miniatura." + e) for e in ("png", "jpg", "webp") if (f / ("miniatura." + e)).is_file()), None)
+                        itens.append({"id": f.name, "tipo": tipo, "nome": str(dados.get("nome") or arq.stem), "descricao": str(dados.get("descricao") or ""),
+                                      "autor": str(dados.get("autor") or ""), "arquivo": arq.name, "tamanho": arq.stat().st_size,
+                                      "criado": int(dados.get("criado") or arq.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
+                                      "solto": False, "_arq": arq, "_mini": mini, "_pasta": f, "_segredo": str(dados.get("segredo") or "")})
+                    elif f.is_file() and f.suffix.lower() in exts and ".enviando-" not in f.name:
+                        ident = "a" + hashlib.sha1(f"{sub}/{f.name}".encode("utf-8", "surrogateescape")).hexdigest()[:11]
+                        # a miniatura de um arquivo posto à mão fica numa pasta escondida ao lado (.miniaturas/<id>.png)
+                        lado = pasta / ".miniaturas"
+                        mini = next((lado / f"{ident}.{e}" for e in ("png", "jpg", "webp") if (lado / f"{ident}.{e}").is_file()), None)
+                        itens.append({"id": ident, "tipo": tipo, "nome": f.stem, "descricao": "", "autor": "", "arquivo": f.name,
+                                      "tamanho": f.stat().st_size, "criado": int(f.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
+                                      "solto": True, "_arq": f, "_mini": mini, "_pasta": None, "_segredo": ""})
+                except (OSError, ValueError, TypeError, AttributeError):
+                    continue
+        itens.sort(key=lambda x: -x["criado"])
+        return itens
+
+    def loja(self, m: str, resto: str):
+        """A loja da Companhia. GET /api/loja (a lista), GET /api/loja/<id>[/arquivo|/miniatura], PUT /api/loja/<tipo>
+        (publicar: o arquivo no corpo; nome, descrição, autor e o nome do arquivo no endereço; devolve o segredo de quem
+        publicou), PUT /api/loja/<id>/miniatura, DELETE /api/loja/<id> e POST /api/loja/config (o dono)."""
+        partes = [x for x in resto.split("/") if x]
+        p = self.parametros()
+        dono = self.autorizado(False)
+        publico = lambda item: {k: v for k, v in item.items() if not k.startswith("_")}
+        if not partes and m in ("GET", "HEAD"):
+            return self.responder_json({"itens": [publico(i) for i in self.loja_itens()], "publicar": self.ponte.loja_publicar(), "dono": dono,
+                                        **({"pasta": str(self.ponte.loja)} if dono else {})})
+        if partes == ["config"] and m == "POST":
+            if not dono:
+                raise ErroPonte(403, "Só o dono da loja (com a chave da ponte, neste aparelho) muda isso.")
+            d = self.ler_json()
+            if "publicar" in d:
+                self.ponte.config["loja_publicar"] = bool(d["publicar"])
+                gravar_config(self.ponte.config)
+            return self.responder_json({"publicar": self.ponte.loja_publicar()})
+        if len(partes) == 1 and partes[0] in LOJA_TIPOS and m in ("PUT", "POST"):
+            return self.loja_publicar(partes[0], p, dono)
+        with LOJA_TRAVA:
+            item = next((i for i in self.loja_itens() if i["id"] == partes[0]), None) if partes else None
+        if not item:
+            raise ErroPonte(404, "Esse item não está mais na loja.")
+        acao = partes[1] if len(partes) > 1 else ""
+
+        def pode_mexer() -> bool:
+            if dono:
+                return True
+            segredo = self.headers.get("X-Loja-Segredo", "")
+            return bool(segredo and item["_segredo"] and hmac.compare_digest(hashlib.sha256(segredo.encode()).hexdigest().encode(), item["_segredo"].encode()))
+
+        if not acao and m == "GET":
+            return self.responder_json(publico(item))
+        if acao == "arquivo" and m in ("GET", "HEAD"):
+            return self.enviar_arquivo(item["_arq"], "application/octet-stream", cache="private, max-age=600",
+                                       cabecalhos={"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(item["arquivo"])})
+        if acao == "miniatura" and m in ("GET", "HEAD"):
+            if not item["_mini"]:
+                raise ErroPonte(404, "Esse item não tem miniatura.")
+            tipo_img = {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}[item["_mini"].suffix]
+            return self.enviar_arquivo(item["_mini"], tipo_img, cache="private, max-age=86400")
+        if acao == "miniatura" and m == "PUT":
+            if not (dono if item["solto"] else pode_mexer()):
+                raise ErroPonte(403, "Só quem publicou (ou o dono da loja) troca a miniatura.")
+            dados = self.ler_corpo(LOJA_MINIATURA)
+            ext = tipo_de_imagem(dados)
+            if not ext:
+                raise ErroPonte(400, "A miniatura precisa ser PNG, JPEG ou WebP.")
+            if item["solto"]:
+                pasta, base = item["_arq"].parent / ".miniaturas", item["id"]
+                pasta.mkdir(exist_ok=True)
+            else:
+                pasta, base = item["_pasta"], "miniatura"
+            for e in ("png", "jpg", "webp"):
+                (pasta / f"{base}.{e}").unlink(missing_ok=True)
+            temporario = pasta / f".miniatura-{uuid.uuid4().hex[:6]}"
+            temporario.write_bytes(dados)
+            os.replace(temporario, pasta / f"{base}.{ext}")
+            return self.responder_json({"ok": True}, 201)
+        if not acao and m == "DELETE":
+            if item["solto"]:
+                if not dono:
+                    raise ErroPonte(403, "Só o dono da loja apaga um arquivo posto à mão.")
+                item["_arq"].unlink(missing_ok=True)
+                if item["_mini"]:
+                    item["_mini"].unlink(missing_ok=True)
+            else:
+                if not pode_mexer():
+                    raise ErroPonte(403, "Só quem publicou (ou o dono da loja) apaga.")
+                shutil.rmtree(item["_pasta"], ignore_errors=True)
+            return self.responder_json({"ok": True})
+        raise ErroPonte(404, f"A loja não conhece /{acao} ({m}).")
+
+    def loja_publicar(self, tipo: str, p: dict, dono: bool):
+        if not dono and not self.ponte.loja_publicar():
+            raise ErroPonte(403, "O dono desta loja não está aceitando publicações agora.")
+        sub, exts = LOJA_TIPOS[tipo]
+        nome_arq = nome_seguro(p.get("arquivo", ""), "arquivo")
+        ext = Path(nome_arq).suffix.lower()
+        if ext not in exts:
+            raise ErroPonte(400, f"Na loja, {sub} são arquivos {', '.join(exts)}.")
+        if "Content-Length" not in self.headers or int(self.headers.get("Content-Length") or 0) <= 0:
+            raise ErroPonte(400, "Faltou o arquivo.")
+        pasta_tipo = self.ponte.loja / sub
+        pasta_tipo.mkdir(parents=True, exist_ok=True)
+        cabe_no_disco(pasta_tipo, int(self.headers["Content-Length"]))
+        ident = secrets.token_hex(6)
+        pasta = pasta_tipo / ident
+        pasta.mkdir()
+        try:
+            self.receber_para(pasta / nome_arq)
+            if not formato_confere(pasta / nome_arq, ext):
+                raise ErroPonte(400, f"Esse arquivo não é um {ext} de verdade.")
+            segredo = secrets.token_urlsafe(18)
+            dados = {"nome": sala_texto(p.get("nome"), 60) or Path(nome_arq).stem, "descricao": sala_texto(p.get("descricao"), 600),
+                     "autor": sala_texto(p.get("autor"), 40), "arquivo": nome_arq, "criado": int(time.time()),
+                     "segredo": hashlib.sha256(segredo.encode()).hexdigest()}
+            (pasta / "item.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2), "utf-8")
+        except BaseException:
+            shutil.rmtree(pasta, ignore_errors=True)
+            raise
+        item = next(i for i in self.loja_itens() if i["id"] == ident)
+        return self.responder_json({"item": {k: v for k, v in item.items() if not k.startswith("_")}, "segredo": segredo}, 201)
 
     def blender(self, metodo: str, resto: str):
         """Converter .blend em .glb com o Blender do aparelho. GET /api/blender diz se há Blender; PUT /api/blender/<lote>/<nome>
@@ -1524,21 +1802,35 @@ def main(argv: list | None = None) -> int:
     ap.add_argument("--permitir-host", action="append", default=[], metavar="DOMINIO",
                     help="aceita este domínio no endereço (o de um túnel, ex.: abc.trycloudflare.com); pode repetir")
     ap.add_argument("--sem-comandos", action="store_true", help="nunca deixa os apps rodarem programas (mesmo se a configuração deixar)")
+    ap.add_argument("--so-app", metavar="ID", help="publica só este app (ex.: companhia): sem a página inicial nem os outros apps, "
+                                                   "e de fora (rede, túnel) a ponte não abre nem com a chave — só as salas e a loja")
+    ap.add_argument("--loja", metavar="PASTA", help="a pasta da loja da Companhia (padrão: ~/.lnux-apps/loja)")
     args = ap.parse_args(argv)
 
     if args.mostrar_token:
         print(carregar_config()["token"])
         return 0
-    ponte = Ponte(not args.sem_ponte, args.raiz, args.permitir_comandos and not args.sem_comandos, args.permitir_host, args.sem_comandos)
+    so_app = None
+    if args.so_app:
+        so_app = app_do_catalogo(args.so_app)
+        if not so_app:
+            print(f"Não achei o app '{args.so_app}' no apps.json.", file=sys.stderr)
+            return 2
+    ponte = Ponte(not args.sem_ponte, args.raiz, args.permitir_comandos and not args.sem_comandos, args.permitir_host, args.sem_comandos,
+                  so_app=so_app, loja=args.loja)
     try:
         servidor = criar_servidor(args.endereco, args.porta, ponte)
     except OSError as e:
         print(f"Não deu para usar a porta {args.porta}: {e}. Já tem outro servidor nela? Use --porta.", file=sys.stderr)
         return 1
-    base = f"http://127.0.0.1:{args.porta}/"
+    base = f"http://127.0.0.1:{args.porta}/" + (so_app["caminho"].strip("/") + "/" if so_app else "")
     url = base + (f"#token={ponte.token}" if ponte.ligada else "")
     print(f"LNUX-APPs {VERSAO} — {nome_do_sistema()}")
     print(f"  Abra: {url}")
+    if so_app:
+        print(f"  Publicando só: {so_app.get('nome') or so_app['id']} (sem a página inicial nem os outros apps; de fora, só as salas e a loja)")
+        if ponte.ligada:
+            print(f"  Loja: {ponte.loja}")
     if args.endereco == "0.0.0.0":
         print(f"  Na rede: http://{ip_local()}:{args.porta}/  (a ponte ainda exige a chave)")
     for h in ponte.hosts_extras:

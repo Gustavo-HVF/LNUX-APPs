@@ -6,7 +6,8 @@ Testes do servidor e da ponte local (servidor/lnux_apps.py), só com a bibliotec
 Sobe o servidor numa porta livre, com uma pasta pessoal TEMPORÁRIA (não mexe nos seus arquivos), e confere:
 arquivos dos apps, chave da ponte, proteção contra outros sites e DNS rebinding, pastas liberadas (inclusive
 atalhos para fora), leitura com Range, gravação sem sobrescrever, mover/copiar/apagar, envio temporário,
-conversão com o ffmpeg (se estiver instalado), comandos desligados/ligados e o modo sem ponte.
+conversão com o ffmpeg (se estiver instalado), comandos desligados/ligados, o modo sem ponte, as salas e a loja da
+Companhia e o modo que publica só um app (--so-app), em que quem chega pela internet nunca usa a ponte.
 
 Uso:  python3 tests/testar_servidor.py
 """
@@ -44,8 +45,8 @@ def caso(nome):
 
 
 class Servidor:
-    def __init__(self, ligada=True, comandos=False, hosts=(), sem_comandos=False):
-        self.ponte = lnux_apps.Ponte(ligada, [], comandos, hosts, sem_comandos)
+    def __init__(self, ligada=True, comandos=False, hosts=(), sem_comandos=False, so_app=None, loja=None):
+        self.ponte = lnux_apps.Ponte(ligada, [], comandos, hosts, sem_comandos, so_app=lnux_apps.app_do_catalogo(so_app) if so_app else None, loja=loja)
         self.http = lnux_apps.criar_servidor("127.0.0.1", 0, self.ponte)
         self.porta = self.http.server_address[1]
         threading.Thread(target=self.http.serve_forever, daemon=True).start()
@@ -584,6 +585,149 @@ def _():
     S.json("GET", "/api/sala/qualquer", **visita)
     assert velha["codigo"] not in lnux_apps.SALAS
     assert S.json("GET", "/api/estado")[1]["recursos"]["salas"] is True
+
+
+@caso("Salas: a personagem e o cenário não têm limite de tamanho (só o espaço livre do aparelho)")
+def _():
+    _, sala, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Grande"})
+    c, chave = sala["codigo"], sala["chave"]
+    _, ana, _ = S.json("POST", f"/api/sala/{c}/entrar", json_corpo={"nome": "Ana"}, token=False)
+    grande = b"glTF" + b"\0" * (45 * 1024 * 1024)  # passa dos 40 MB de antes
+    assert S.pedir("PUT", f"/api/sala/{c}/avatar?id={ana['id']}&segredo={ana['segredo']}", corpo=grande, token=False)[0] == 201
+    assert len(S.pedir("GET", f"/api/sala/{c}/avatar/{ana['id']}", token=False)[2]) == len(grande)
+    antes = lnux_apps.RESERVA_DISCO
+    lnux_apps.RESERVA_DISCO = 1 << 62  # um aparelho sem espaço: recusa com 507, sem gravar nada
+    try:
+        assert S.pedir("PUT", f"/api/sala/{c}/mapa?nome=x", corpo=b"glTF", cabecalhos={"X-Sala-Chave": chave}, token=False)[0] == 507
+    finally:
+        lnux_apps.RESERVA_DISCO = antes
+    assert S.json("DELETE", f"/api/sala/{c}", cabecalhos={"X-Sala-Chave": chave}, token=False)[0] == 200
+
+
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000" "1f15c4890000000d49444154789c63f8cfc0f01f0005000201" "d6a3a45b0000000049454e44ae426082")
+
+
+@caso("Loja: ver e baixar sem a chave; publicar (com o segredo de quem publicou); miniatura; apagar; formatos conferidos")
+def _():
+    visita = dict(token=False)
+    status, loja, _ = S.json("GET", "/api/loja", **visita)
+    assert status == 200 and loja["itens"] == [] and loja["publicar"] is True and loja["dono"] is False and "pasta" not in loja
+    assert S.json("GET", "/api/loja")[1]["pasta"] == str(S.ponte.loja)  # o dono vê onde fica a pasta
+    # publicar: o arquivo no corpo; o resto no endereço
+    vrm = b"glTF\x02\x00\x00\x00" + b"x" * 500
+    status, r, _ = S.json("PUT", "/api/loja/personagem?nome=Ana%0A%3Cb%3E&descricao=Uma%20personagem&autor=Bia&arquivo=..%2F..%2Fana.vrm", corpo=vrm, **visita)
+    assert status == 201 and len(r["segredo"]) >= 20 and r["item"]["nome"] == "Ana <b>" and r["item"]["arquivo"] == "ana.vrm" and r["item"]["tamanho"] == len(vrm), r
+    ana, segredo = r["item"], r["segredo"]
+    assert (S.ponte.loja / "personagens" / ana["id"] / "ana.vrm").is_file() and segredo not in (S.ponte.loja / "personagens" / ana["id"] / "item.json").read_text()
+    assert S.json("PUT", "/api/loja/personagem?arquivo=ana.exe", corpo=vrm, **visita)[0] == 400
+    assert S.json("PUT", "/api/loja/personagem?arquivo=ana.vrm", corpo=b"<html>nada</html>", **visita)[0] == 400
+    assert S.json("PUT", "/api/loja/animacao?arquivo=ana.vrm", corpo=vrm, **visita)[0] == 400
+    assert S.json("PUT", "/api/loja/coisa?arquivo=a.vrm", corpo=vrm, **visita)[0] == 404
+    assert len([x for x in (S.ponte.loja / "personagens").iterdir() if x.is_dir()]) == 1  # o que foi recusado não ficou
+    assert S.json("PUT", "/api/loja/animacao?nome=Dan%C3%A7a&arquivo=danca.bvh", corpo=b"HIERARCHY\nROOT Hips\n", **visita)[0] == 201
+    assert S.json("PUT", "/api/loja/animacao?arquivo=samba.fbx", corpo=b"; FBX 7.4.0 project file\nFBXHeaderExtension:  {\n}", **visita)[0] == 201
+    _, mundo, _ = S.json("PUT", "/api/loja/mundo?nome=Pra%C3%A7a&arquivo=praca.glb", corpo=b"glTF" + b"m" * 100)
+    # a lista e o arquivo
+    _, loja, _ = S.json("GET", "/api/loja", **visita)
+    assert sorted(i["tipo"] for i in loja["itens"]) == ["animacao", "animacao", "mundo", "personagem"] and all("segredo" not in json.dumps(i) for i in loja["itens"])
+    status, cab, dados = S.pedir("GET", f"/api/loja/{ana['id']}/arquivo", **visita)
+    assert status == 200 and dados == vrm and cab["Content-Type"] == "application/octet-stream" and cab["Content-Disposition"].startswith("attachment")
+    assert S.pedir("GET", "/api/loja/..%2F..%2Fponte.json/arquivo", **visita)[0] == 404 and S.pedir("GET", "/api/loja/000000000000/arquivo", **visita)[0] == 404
+    # miniatura: só quem publicou (pelo segredo) ou o dono
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": "errado"}, **visita)[0] == 403
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=b"<svg onload=x>", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 400
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 201
+    status, cab, dados = S.pedir("GET", f"/api/loja/{ana['id']}/miniatura", **visita)
+    assert status == 200 and cab["Content-Type"] == "image/png" and dados == PNG
+    assert S.json("GET", f"/api/loja/{ana['id']}", **visita)[1]["miniatura"] > 0
+    # apagar: quem publicou (pelo segredo) ou o dono; os outros não
+    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": "errado"}, **visita)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 200
+    assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}")[0] == 200
+    assert not (S.ponte.loja / "personagens" / ana["id"]).exists()
+    # arquivos postos à mão na pasta aparecem; a miniatura deles e apagar, só o dono
+    (S.ponte.loja / "mundos" / "parque.glb").write_bytes(b"glTF" + b"p" * 50)
+    (S.ponte.loja / "mundos" / "leia-me.txt").write_text("não é da loja")
+    _, loja, _ = S.json("GET", "/api/loja", **visita)
+    solto = next(i for i in loja["itens"] if i["arquivo"] == "parque.glb")
+    assert solto["solto"] and solto["nome"] == "parque" and solto["tipo"] == "mundo" and not any(i["arquivo"] == "leia-me.txt" for i in loja["itens"])
+    assert S.pedir("GET", f"/api/loja/{solto['id']}/arquivo", **visita)[2] == b"glTF" + b"p" * 50
+    assert S.pedir("PUT", f"/api/loja/{solto['id']}/miniatura", corpo=PNG, **visita)[0] == 403
+    assert S.pedir("PUT", f"/api/loja/{solto['id']}/miniatura", corpo=PNG)[0] == 201
+    assert S.json("GET", f"/api/loja/{solto['id']}", **visita)[1]["miniatura"] > 0
+    assert S.json("DELETE", f"/api/loja/{solto['id']}", **visita)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{solto['id']}")[0] == 200 and not (S.ponte.loja / "mundos" / "parque.glb").exists()
+    assert not list((S.ponte.loja / "mundos" / ".miniaturas").iterdir())
+    # o dono fecha a loja para publicações (e só ele)
+    assert S.json("POST", "/api/loja/config", json_corpo={"publicar": False}, **visita)[0] == 403
+    assert S.json("POST", "/api/loja/config", json_corpo={"publicar": False})[1] == {"publicar": False}
+    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY", **visita)[0] == 403
+    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY")[0] == 201
+    assert S.json("GET", "/api/publico", **visita)[1]["loja_publicar"] is False
+    assert lnux_apps.carregar_config()["loja_publicar"] is False
+    S.json("POST", "/api/loja/config", json_corpo={"publicar": True})
+    # sem espaço no aparelho: recusa
+    antes = lnux_apps.RESERVA_DISCO
+    lnux_apps.RESERVA_DISCO = 1 << 62
+    try:
+        assert S.json("PUT", "/api/loja/mundo?arquivo=c.glb", corpo=b"glTF", **visita)[0] == 507
+    finally:
+        lnux_apps.RESERVA_DISCO = antes
+    # a loja não abre o resto da ponte, nem é alcançada de outro site
+    assert S.json("GET", "/api/pastas?caminho=~", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 401
+    assert S.json("PUT", "/api/loja/animacao?arquivo=d.bvh", corpo=b"HIERARCHY", cabecalhos={"Origin": "http://mal.example"}, **visita)[0] == 403
+    assert S.json("GET", "/api/estado")[1]["recursos"]["loja"] is True
+
+
+@caso("Só a Companhia (--so-app): sem a página inicial nem os outros apps; de fora, nem a chave abre a ponte")
+def _():
+    T = Servidor(hosts=("abc.trycloudflare.com",), sem_comandos=True, so_app="companhia")
+    try:
+        visita = dict(token=False)
+        fora = {"Host": "abc.trycloudflare.com", "Cf-Connecting-Ip": "203.0.113.9", "Cf-Ray": "8a1b2c3d4e5f-GRU"}
+        for caminho in ("/", "/index.html", "/apps/"):
+            status, cab, _ = T.pedir("GET", caminho, cabecalhos=fora, **visita)
+            assert status == 302 and cab["Location"] == "/apps/companhia/", (caminho, status)
+        assert T.pedir("GET", "/apps/companhia/", cabecalhos=fora, **visita)[0] == 200
+        assert T.pedir("GET", "/apps/companhia/js/loja.js", cabecalhos=fora, **visita)[0] == 200
+        assert T.pedir("GET", "/comum/lnux.js", cabecalhos=fora, **visita)[0] == 200
+        for caminho in ("/apps/video/", "/apps/som/index.html", "/README.md", "/servidor/lnux_apps.py", "/tests/testar_servidor.py"):
+            assert T.pedir("GET", caminho, cabecalhos=fora, **visita)[0] == 404, caminho
+        apps = json.loads(T.pedir("GET", "/apps.json", cabecalhos=fora, **visita)[2])
+        assert [a["id"] for a in apps["apps"]] == ["companhia"]
+        publico = T.json("GET", "/api/publico", cabecalhos=fora, **visita)[1]
+        assert publico["so_app"] == "companhia" and publico["salas"] and publico["loja"]
+        # no próprio aparelho, com a chave: a ponte funciona (é o dono, criando a sala)
+        assert T.json("GET", "/api/estado")[1]["so_app"] == "companhia"
+        assert T.json("GET", "/api/pastas?caminho=~")[0] == 200
+        status, sala, _ = T.json("POST", "/api/sala", json_corpo={"nome": "Praça"})
+        assert status == 201 and sala["enderecos"] == ["https://abc.trycloudflare.com"]
+        # pelo túnel, mesmo com a chave: nada da ponte (nem ler arquivos pelo cookie, nem criar sala)
+        for metodo, caminho in (("GET", "/api/estado"), ("GET", "/api/pastas?caminho=~"), ("GET", f"/api/arquivo?caminho={q(CASA)}"), ("POST", "/api/entrar")):
+            status = T.pedir(metodo, caminho, cabecalhos=fora)[0]
+            assert status == 403, (caminho, status)
+        assert T.pedir("GET", f"/api/arquivo?caminho={q(CASA)}", cabecalhos={**fora, "Cookie": f"lnux_ponte={T.ponte.token}"}, **visita)[0] == 403
+        assert T.json("POST", "/api/sala", json_corpo={}, cabecalhos=fora)[0] == 401
+        # nem fingindo ser do aparelho: um repasse (X-Forwarded-For) ou o endereço público entregam
+        assert T.pedir("GET", "/api/pastas?caminho=~", cabecalhos={"X-Forwarded-For": "203.0.113.9"})[0] == 403
+        assert T.pedir("GET", "/api/pastas?caminho=~", cabecalhos={"Host": "abc.trycloudflare.com"})[0] == 403
+        # o que os visitantes usam funciona pelo túnel: a sala e a loja
+        _, ana, _ = T.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "Ana"}, cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)
+        assert ana["id"]
+        assert T.json("GET", "/api/loja", cabecalhos=fora, **visita)[0] == 200
+        assert T.json("PUT", "/api/loja/animacao?arquivo=v.bvh", corpo=b"HIERARCHY", cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)[0] == 201
+        assert T.json("GET", "/api/loja", cabecalhos=fora)[1]["dono"] is False  # a chave pelo túnel não faz de ninguém o dono
+    finally:
+        T.parar()
+    # o servidor de sempre (sem --so-app) continua igual: a página inicial existe e a chave vale pelo endereço liberado
+    U = Servidor(hosts=("abc.trycloudflare.com",))
+    try:
+        assert U.pedir("GET", "/", token=False)[0] == 200 and U.pedir("GET", "/apps/video/", token=False)[0] == 200
+        assert U.json("GET", "/api/estado", cabecalhos={"Host": "abc.trycloudflare.com"})[0] == 200
+        assert U.json("GET", "/api/publico", token=False)[1]["so_app"] is None
+    finally:
+        U.parar()
 
 
 @caso("ffmpeg: recusa formato desconhecido e entrada fora das pastas liberadas")

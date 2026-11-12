@@ -13,7 +13,7 @@
  * Como funciona: a sala fica na memória do servidor (servidor/lnux_apps.py, /api/sala). Umas 8 vezes por segundo
  * cada navegador manda onde a sua personagem está e recebe onde estão as outras; entre um aviso e outro, as
  * personagens dos outros são levadas suavemente até o lugar novo. O cenário (.glb) e os avatares (.vrm) passam
- * pelo servidor da sala uma vez. Quem não manda o avatar aparece como um boneco simples.
+ * pelo servidor da sala uma vez. Enquanto a personagem de alguém não chega, ela aparece como um boneco simples.
  */
 (function () {
   "use strict";
@@ -183,7 +183,7 @@
     }
     async buscarAvatar() {
       const versao = this.avatarVersao;
-      if (!versao || !this.sala.cfg.avatares) { this.trocarAvatar(null); return; }
+      if (!versao) { this.trocarAvatar(null); return; }
       try {
         const blob = await pedir("GET", `${this.sala.codigo}/avatar/${this.id}?v=${versao}`, { como: "blob" });
         const av = await abrirAvatar(blob, 1024);
@@ -279,8 +279,6 @@
       this.remotos = new Map();
       this.visto = 0;           // última mensagem recebida
       this.gesto = [0, ""];
-      this.cfg = { avatares: true };
-      try { Object.assign(this.cfg, JSON.parse(LNUX.preferencia.ler("companhia.sala", "{}"))); } catch (e) { /* padrão */ }
       this.descanso = C.poseDescanso(1.2);
       this.ocupado = false;
       this.falhas = 0;
