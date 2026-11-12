@@ -521,10 +521,11 @@ def _():
             os.environ["LNUX_APPS_BLENDER"] = antes
 
 
-@caso("Salas: só a ponte cria; quem tem o código entra sem a chave, troca posições e mensagens, e não alcança mais nada")
+PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000" "1f15c4890000000d49444154789c63f8cfc0f01f0005000201" "d6a3a45b0000000049454e44ae426082")
+
+
+@caso("Salas: quem tem o código entra sem a chave, troca posições e mensagens, e não alcança mais nada")
 def _():
-    # criar: só com a chave da ponte
-    assert S.json("POST", "/api/sala", json_corpo={"nome": "Praça"}, token=False)[0] == 401
     status, sala, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Praça\n<b>"})
     assert status == 201 and len(sala["codigo"]) == 8 and sala["nome"] == "Praça <b>" and sala["chave"] and sala["mapa"] is None, sala
     c, chave = sala["codigo"], sala["chave"]
@@ -579,12 +580,74 @@ def _():
     assert S.json("DELETE", f"/api/sala/{c}", **visita)[0] == 403
     assert S.json("DELETE", f"/api/sala/{c}", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 200
     assert S.json("GET", f"/api/sala/{c}", **visita)[0] == 404 and not pasta.exists()
-    # uma sala vazia há muito tempo é fechada sozinha
+    # uma sala vazia há um tempo é fechada sozinha
     _, velha, _ = S.json("POST", "/api/sala", json_corpo={})
     lnux_apps.SALAS[velha["codigo"]].vista -= lnux_apps.SALA_VAZIA + 1
     S.json("GET", "/api/sala/qualquer", **visita)
     assert velha["codigo"] not in lnux_apps.SALAS
     assert S.json("GET", "/api/estado")[1]["recursos"]["salas"] is True
+
+
+@caso("Salas: qualquer um cria (se o dono deixar), com as opções: pública ou privada, senha, quantas pessoas, bate-papo")
+def _():
+    visita = dict(token=False)
+    fora = {"Cf-Connecting-Ip": "203.0.113.7"}
+    status, lista, _ = S.json("GET", "/api/salas", **visita)
+    assert status == 200 and lista["criar"] is True and lista["visitantes_criam"] is True and lista["dono"] is False
+    # uma visita cria uma sala pública, com senha, para 3 pessoas e sem bate-papo
+    status, a, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Corrida", "descricao": "Quem chega primeiro\nganha", "publica": True, "senha": "1234",
+                                                           "max": 3, "bate_papo": False, "criador": "Ana"}, cabecalhos=fora, **visita)
+    assert status == 201 and a["chave"] and a["descricao"] == "Quem chega primeiro ganha" and a["senha"] is True and a["max"] == 3 and a["bate_papo"] is False and a["criador"] == "Ana", a
+    # e uma privada (não aparece na lista; entra quem tem o código)
+    _, b, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Só nós", "publica": False, "max": 99}, cabecalhos=fora, **visita)
+    assert b["max"] == lnux_apps.SALA_PESSOAS and b["publica"] is False
+    lista = S.json("GET", "/api/salas", **visita)[1]["salas"]
+    assert [x["codigo"] for x in lista] == [a["codigo"]] and "chave" not in json.dumps(lista) and all(x["publica"] for x in lista)
+    assert S.json("GET", f"/api/sala/{b['codigo']}", **visita)[1]["nome"] == "Só nós"
+    # a senha: sem ela ou errada, não entra; quem criou entra sem (pela chave da sala)
+    assert S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Bia"}, **visita)[0] == 403
+    assert S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Bia", "senha": "4321"}, **visita)[0] == 403
+    status, ana, _ = S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Ana"}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)
+    assert status == 201
+    _, bia, _ = S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Bia", "senha": "1234"}, **visita)
+    _, cia, _ = S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Cia", "senha": "1234"}, **visita)
+    assert S.json("POST", f"/api/sala/{a['codigo']}/entrar", json_corpo={"nome": "Dani", "senha": "1234"}, **visita)[0] == 429  # cheia: 3 pessoas
+    # sem bate-papo
+    assert S.json("POST", f"/api/sala/{a['codigo']}/falar", json_corpo={"id": bia["id"], "segredo": bia["segredo"], "texto": "oi"}, **visita)[0] == 403
+    # quem criou muda as opções depois (e só ela)
+    assert S.json("POST", f"/api/sala/{a['codigo']}/config", json_corpo={"bate_papo": True}, **visita)[0] == 403
+    r = S.json("POST", f"/api/sala/{a['codigo']}/config", json_corpo={"bate_papo": True, "senha": "", "max": 4, "publica": False, "criador": "Outra"},
+               cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)[1]
+    assert r["bate_papo"] and not r["senha"] and r["max"] == 4 and not r["publica"] and r["criador"] == "Ana", r
+    assert S.json("POST", f"/api/sala/{a['codigo']}/falar", json_corpo={"id": cia["id"], "segredo": cia["segredo"], "texto": "agora sim"}, **visita)[0] == 200
+    assert S.json("GET", "/api/salas", **visita)[1]["salas"] == []
+    # um mundo da loja vira o cenário (sem enviar o arquivo), com a miniatura dele
+    _, mundo, _ = S.json("PUT", "/api/loja/mundo?nome=Pista&arquivo=pista.glb", corpo=b"glTF" + b"p" * 64, **visita)
+    assert S.pedir("PUT", f"/api/loja/{mundo['item']['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": mundo["segredo"]}, **visita)[0] == 201
+    assert S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, **visita)[0] == 403
+    status, r, _ = S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)
+    assert status == 201 and r["mapa"]["nome"] == "Pista" and r["miniatura"] == 1, r
+    assert S.pedir("GET", f"/api/sala/{a['codigo']}/mapa", **visita)[2] == b"glTF" + b"p" * 64
+    assert S.pedir("GET", f"/api/sala/{a['codigo']}/miniatura", **visita)[2] == PNG
+    assert S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": "000000000000"}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)[0] == 404
+    # a miniatura enviada por quem criou (só imagem)
+    assert S.pedir("PUT", f"/api/sala/{b['codigo']}/miniatura", corpo=b"<svg/>", cabecalhos={"X-Sala-Chave": b["chave"]}, **visita)[0] == 400
+    assert S.pedir("PUT", f"/api/sala/{b['codigo']}/miniatura", corpo=PNG, cabecalhos={"X-Sala-Chave": b["chave"]}, **visita)[0] == 201
+    # limite de salas abertas por pessoa (o dono não tem)
+    _, c3, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Três"}, cabecalhos=fora, **visita)
+    assert S.json("POST", "/api/sala", json_corpo={"nome": "Quatro"}, cabecalhos=fora, **visita)[0] == 429
+    assert S.json("POST", "/api/sala", json_corpo={"nome": "Outra pessoa"}, cabecalhos={"Cf-Connecting-Ip": "198.51.100.4"}, **visita)[0] == 201
+    # o dono fecha a criação para os visitantes (e só ele pode)
+    assert S.json("POST", "/api/salas/ajustes", json_corpo={"visitantes_criam": False}, **visita)[0] == 403
+    assert S.json("POST", "/api/salas/ajustes", json_corpo={"visitantes_criam": False})[1] == {"visitantes_criam": False}
+    assert S.json("POST", "/api/sala", json_corpo={"nome": "X"}, cabecalhos={"Cf-Connecting-Ip": "192.0.2.1"}, **visita)[0] == 403
+    assert S.json("GET", "/api/salas", **visita)[1]["criar"] is False and S.json("GET", "/api/salas")[1]["criar"] is True
+    assert S.json("GET", "/api/publico", **visita)[1]["salas_criar"] is False
+    assert S.json("POST", "/api/sala", json_corpo={"nome": "Do dono"})[0] == 201
+    S.json("POST", "/api/salas/ajustes", json_corpo={"visitantes_criam": True})
+    for codigo in list(lnux_apps.SALAS):
+        lnux_apps.SALAS.pop(codigo)
+    assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}")[0] == 200  # a loja volta vazia para o caso dela
 
 
 @caso("Salas: a personagem e o cenário não têm limite de tamanho (só o espaço livre do aparelho)")
@@ -604,7 +667,6 @@ def _():
     assert S.json("DELETE", f"/api/sala/{c}", cabecalhos={"X-Sala-Chave": chave}, token=False)[0] == 200
 
 
-PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000" "1f15c4890000000d49444154789c63f8cfc0f01f0005000201" "d6a3a45b0000000049454e44ae426082")
 
 
 @caso("Loja: ver e baixar sem a chave; publicar (com o segredo de quem publicou); miniatura; apagar; formatos conferidos")
@@ -708,7 +770,9 @@ def _():
             status = T.pedir(metodo, caminho, cabecalhos=fora)[0]
             assert status == 403, (caminho, status)
         assert T.pedir("GET", f"/api/arquivo?caminho={q(CASA)}", cabecalhos={**fora, "Cookie": f"lnux_ponte={T.ponte.token}"}, **visita)[0] == 403
-        assert T.json("POST", "/api/sala", json_corpo={}, cabecalhos=fora)[0] == 401
+        assert T.json("GET", "/api/salas", cabecalhos=fora)[1]["dono"] is False  # a chave pelo túnel não faz de ninguém o dono
+        status, dela, _ = T.json("POST", "/api/sala", json_corpo={"nome": "Da visita"}, cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)
+        assert status == 201 and dela["enderecos"] == ["https://abc.trycloudflare.com"]  # pelo link isolado, quem chega cria a sala
         # nem fingindo ser do aparelho: um repasse (X-Forwarded-For) ou o endereço público entregam
         assert T.pedir("GET", "/api/pastas?caminho=~", cabecalhos={"X-Forwarded-For": "203.0.113.9"})[0] == 403
         assert T.pedir("GET", "/api/pastas?caminho=~", cabecalhos={"Host": "abc.trycloudflare.com"})[0] == 403
