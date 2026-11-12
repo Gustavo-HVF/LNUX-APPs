@@ -64,6 +64,13 @@ conforme cada versão ficar pronta (a lista dos planejados está em `apps.json`)
   [three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh) 0.9.1 (MIT, Garrett Johnson), para a colisão com
   o cenário. Em `vendor/draco/` fica o decodificador [Draco](https://github.com/google/draco) (Apache-2.0, Google),
   copiado do three.js.
+- **Conversor de mapas**: o leitor de `.blend` (`js/blend.js`) foi escrito aqui, a partir do próprio formato do
+  arquivo (ele traz a descrição das suas estruturas, o "DNA"); não usa código do Blender. Quando o Blender está
+  instalado, a ponte só o chama para exportar em glTF. Os outros formatos passam pelos carregadores e pelo
+  exportador de glTF do three.js (MIT), que entram no mesmo pacote, com o
+  [zstddec](https://github.com/donmccurdy/zstddec) (MIT, Don McCurdy; traz o zstd, BSD, Meta) para os `.blend`
+  compactados. Os dois `.blend` de `tests/dados/` foram feitos aqui, com o Blender 4.2 e o 5.3 (`gerar_blend.py`).
+  Blender é marca da Blender Foundation.
 - **Captura de movimento pela câmera**: [MediaPipe Tasks Vision](https://github.com/google-ai-edge/mediapipe)
   1.2.2 (Apache-2.0, The MediaPipe Authors / Google). O código JavaScript vem em `vendor/mediapipe-visao.min.js`
   (montado por `tools/montar_vrm.sh`); o WebAssembly e os modelos (rosto, corpo e mãos) **não vêm no repositório**:

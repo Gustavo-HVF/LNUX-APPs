@@ -30,10 +30,12 @@
     const estado = { carregados: 0, total: 0 };
     gerente.onProgress = (_, carregados, total) => { estado.carregados = carregados; estado.total = total; };
     gerente.setURLModifier((url) => {
-      if (/^(data|blob):/i.test(url)) return url;
+      // os endereços que este gerente criou (blob:) e os dados embutidos passam direto; um "blob:.../textura.png" é um
+      // arquivo vizinho do modelo (o carregador montou o endereço em cima do endereço do próprio modelo)
+      if (/^data:/i.test(url) || urls.includes(url)) return url;
       let limpo = url;
       try { limpo = decodeURIComponent(url); } catch (e) { /* fica como veio */ }
-      limpo = limpo.replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
+      limpo = limpo.replace(/^blob:/i, "").replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
       const achado = arquivos.has(pasta + limpo) ? pasta + limpo : arquivos.has(limpo) ? limpo : porNome.get(base(limpo).toLowerCase());
       if (!achado) return PIXEL; // textura que não veio: um ponto branco, sem erro
       const u = URL.createObjectURL(arquivos.get(achado));

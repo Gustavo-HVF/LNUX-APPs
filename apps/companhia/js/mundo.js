@@ -453,10 +453,10 @@
       const base = principal.includes("/") ? principal.replace(/[^/]+$/, "") : "";
       const gerente = new T.LoadingManager();
       gerente.setURLModifier((url) => {
-        if (/^(data|blob):/i.test(url)) return url;
+        if (/^data:/i.test(url) || urls.includes(url)) return url;
         let limpo = url;
         try { limpo = decodeURIComponent(url); } catch (e) { /* fica como veio */ }
-        limpo = limpo.replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
+        limpo = limpo.replace(/^blob:/i, "").replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
         const achado = arquivos.has(base + limpo) ? base + limpo : arquivos.has(limpo) ? limpo : porNome.get(limpo.split("/").pop().toLowerCase());
         if (!achado) return PIXEL; // textura que não veio: um ponto branco, sem erro
         const u = URL.createObjectURL(arquivos.get(achado));
