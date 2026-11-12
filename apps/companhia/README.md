@@ -12,7 +12,9 @@ braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bv
 `.fbx`) são convertidos para `.vrm` ao importar.
 
 Ao abrir, a Companhia pergunta o que você quer fazer: **conversar com a personagem** (o chat bot) ou **jogar com
-outras pessoas** numa **sala**, pelo link, sem chat bot nem nenhuma função de IA.
+outras pessoas** numa **sala**, pelo link, sem chat bot nem nenhuma função de IA. A **loja** do servidor tem
+personagens, mundos e animações para ver em 3D, usar e publicar; e o servidor pode publicar **só a Companhia**,
+sem os outros apps e sem a ponte para quem vem de fora.
 
 Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
 chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
@@ -55,15 +57,46 @@ abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
 - **Na sala**: cada pessoa anda com a própria personagem (W A S D, Shift, Espaço). Os outros veem você andar,
   correr, pular, **acenar** e mudar de **expressão** (os botões 👋 😀 😂 😮 😢 😠 😐) e, com a captura de movimento
   ligada, mexer os braços, as mãos e o rosto. O **bate-papo** aparece na conversa e num balão em cima da cabeça.
-- **Personagens dos outros**: por padrão você vê a personagem que cada um mandou (o `.vrm` passa pelo servidor da
-  sala uma vez). Em *Sala › Ver as personagens dos outros* dá para ver só bonecos (mais leve). Se a licença da sua
-  personagem não deixa redistribuir, a Companhia pergunta antes de mandar; dá para entrar como boneco.
-- **Para pessoas de fora**: a sala fica no servidor do aparelho de quem criou e existe enquanto ele estiver ligado.
-  O link de `127.0.0.1` só vale nesse aparelho; para outras pessoas, use o compartilhamento dos Apps Web pela
-  internet do LNUX (o túnel) ou abra o servidor para a rede de casa (`--endereco 0.0.0.0`), e crie a sala abrindo
-  a Companhia por esse endereço.
-- Limites: 6 salas ao mesmo tempo, 16 pessoas por sala, cenário de até 200 MB e personagem de até 40 MB. Quem some
-  por 20 segundos sai da sala; uma sala vazia fecha depois de uma hora.
+- **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
+  vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
+  dos outros, nem eles a sua: ela vai junto ao entrar.
+- **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só a Companhia* (veja "Site publicado só com a
+  Companhia", abaixo): o link abre só a Companhia, sem a ponte. A sala fica no servidor do aparelho de quem criou e
+  existe enquanto ele estiver ligado. Na rede de casa também dá (`--endereco 0.0.0.0`).
+- Limites: 6 salas ao mesmo tempo e 16 pessoas por sala. O cenário e as personagens não têm limite de tamanho; só
+  não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem some por 20 segundos sai da sala; uma
+  sala vazia fecha depois de uma hora.
+
+### Loja: personagens, mundos e animações
+
+A **loja** (*Personagem › Loja*, *Sala › Loja* ou os botões 🛍️ na janela da sala) mostra o que está guardado no
+aparelho de quem tem o servidor, como uma vitrine: abas (personagens, mundos, animações), busca e cartões com a
+miniatura.
+
+- **Ver antes de usar**: ao abrir um item, ele aparece em **3D**: a personagem de pé (arraste para girar, a rodinha
+  aproxima), o mundo visto de cima e a animação num boneco.
+- **Usar**: a personagem vira uma das suas (na janela da sala, já fica escolhida), o mundo vai para *Movimento ›
+  Cenário* (e pode ser o cenário de uma sala) e a animação para *Movimento › Pacotes de movimento*. *Baixar o
+  arquivo* guarda o `.vrm`, `.glb`, `.vrma`, `.bvh` ou `.fbx`.
+- **Publicar** (＋ Publicar): uma das suas personagens, um dos seus cenários ou movimentos, ou um arquivo do aparelho
+  (avatares do Unity viram `.vrm`; mapas de qualquer formato viram `.glb`). A miniatura é tirada da prévia. Quem
+  publicou pode apagar o que é seu (neste navegador).
+- **O dono da loja** (quem abre no aparelho do servidor, com a ponte) apaga qualquer item, decide se quem entra
+  pelo link pode publicar e vê onde fica a pasta: `~/.lnux-apps/loja` (ou `"loja"` em `ponte.json`, ou `--loja`),
+  com as subpastas `personagens`, `mundos` e `animacoes`. Arquivos postos à mão nelas também aparecem na loja; as
+  miniaturas que faltam o dono gera sozinho ao abrir a loja.
+- É a única pasta do aparelho que os visitantes alcançam. O formato de cada arquivo é conferido ao publicar.
+
+### Site publicado só com a Companhia
+
+O servidor pode publicar **só a Companhia** (`python3 servidor/lnux_apps.py --so-app companhia`; no LNUX, *🧩 Apps
+Web › 💬 Publicar só a Companhia*, que também liga o túnel):
+
+- O endereço abre direto na Companhia; a página inicial dos Apps Web e os outros apps **não existem** nele, e o
+  botão dos Apps Web some.
+- De fora (pela rede ou pela internet, pelo túnel) a **ponte não abre, nem com a chave**: só as salas e a loja.
+  A chave só vale para quem abre no próprio aparelho do servidor (`127.0.0.1`): é por ali que o dono cria as salas.
+- O link para as pessoas nunca leva a chave.
 
 ## Personagens VRoid (.vrm) e troca de roupa
 
@@ -445,6 +478,7 @@ js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3d
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar pelo link, as personagens dos outros, bate-papo
+js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
@@ -474,6 +508,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se
@@ -511,6 +546,7 @@ na hora. Se o aparelho tiver o Blender (ou o módulo `bpy`), ele confere também
   dos ossos.
 - **Salas**: só bate-papo por texto (ainda não há voz entre as pessoas) e a sala vive no servidor de quem criou:
   para pessoas de fora, o servidor precisa estar num endereço que elas alcancem (o túnel do LNUX ou a rede de casa).
+- **Loja**: não há preço, avaliações nem contas: quem publica é identificado só pelo nome que escreve.
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.
