@@ -1,10 +1,11 @@
 /*
  * Companhia — salas: jogar com outras pessoas no mesmo cenário.
  *
- * Quem tem a ponte (abriu a Companhia pelo LNUX) cria uma sala no próprio aparelho e manda o link; quem recebe o
- * link entra pelo navegador, sem instalar nada e sem a chave da ponte (o link só dá acesso à sala). Para o link
- * valer pela internet, o servidor precisa estar num endereço que os outros alcancem (o túnel do LNUX, ou a rede
- * de casa).
+ * O servidor guarda as salas; quem abre a Companhia por ele vê a lista das salas públicas (js/salas.js) e entra, ou
+ * cria a sua com as opções (pública ou privada, senha, quantas pessoas, bate-papo, cenário). Criar não precisa da
+ * ponte: pelo link isolado do LNUX (só a Companhia), quem chega cria a sala, se o dono do servidor deixar. O link
+ * de uma sala só dá acesso a ela, nunca às pastas do aparelho. Para valer pela internet, o servidor precisa estar
+ * num endereço que os outros alcancem (o túnel do LNUX, ou a rede de casa).
  *
  * Cada pessoa anda com a própria personagem; os outros a veem andar, correr, pular, acenar, mudar de expressão e,
  * com a captura de movimento ligada, mexer os braços, as mãos e o rosto. Há um bate-papo por texto, com balão em
@@ -25,13 +26,14 @@
   const ROSTO = { feliz: { happy: 0.8 }, rindo: { happy: 1, aa: 0.35 }, triste: { sad: 0.85 }, brava: { angry: 0.9 }, surpresa: { surprised: 0.9 }, apaixonada: { happy: 0.6, relaxed: 0.5 }, sonolenta: { relaxed: 0.6, blink: 0.45 } };
   const PRESETS_ROSTO = ["happy", "sad", "angry", "relaxed", "surprised", "aa", "ih", "ou", "ee", "oh", "blink", "blinkLeft", "blinkRight"];
 
-  /** Pede à sala (sem a chave da ponte: o código da sala é o que dá acesso). */
-  async function pedir(metodo, rota, { json, corpo, como = "json", chave } = {}) {
+  /** Pede à sala (o código da sala é o que dá acesso; a chave da ponte só vai se houver: é o dono do servidor). */
+  async function pedir(metodo, rota, { json, corpo, como = "json", chave, base = "/api/sala" } = {}) {
     const cabecalhos = {};
     if (json !== undefined) cabecalhos["Content-Type"] = "application/json";
     if (chave) cabecalhos["X-Sala-Chave"] = chave;
+    if (LNUX.ponte && LNUX.ponte._token) cabecalhos["X-Ponte-Token"] = LNUX.ponte._token;
     let r;
-    try { r = await fetch("/api/sala" + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo }); }
+    try { r = await fetch(base + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo }); }
     catch (e) { throw new Error("O servidor da sala não respondeu. O link ainda vale? (quem criou a sala precisa estar com ela aberta)"); }
     if (!r.ok) {
       let msg = "A sala respondeu " + r.status;
@@ -289,17 +291,45 @@
     get pessoas() { return this.remotos.size + (this.dentro ? 1 : 0); }
     link() { return this.codigo ? location.origin + location.pathname + "#sala=" + this.codigo : ""; }
 
-    /** Cria uma sala neste servidor (precisa da ponte: só o dono do aparelho cria). mapa: {glb: Blob, nome, ajuste} | null. */
-    async criar(nome, mapa) {
-      const r = await LNUX.ponte.pedir("POST", "sala", { json: { nome } });
+    /** As salas públicas deste servidor e se dá para criar: {salas: [...], criar, visitantes_criam, dono, abertas, maximo}. */
+    static lista() { return pedir("GET", "", { base: "/api/salas" }); }
+    /** O dono do servidor deixa (ou não) quem chega pelo link criar salas. */
+    static ajustar(ajustes) { return pedir("POST", "ajustes", { json: ajustes, base: "/api/salas" }); }
+    /** As chaves das salas que criei (neste navegador): {código: chave}. */
+    static minhas() { try { return JSON.parse(LNUX.preferencia.ler("companhia.salas.chaves", "{}")) || {}; } catch (e) { return {}; } }
+    static guardarChave(codigo, chave) {
+      const m = Sala.minhas();
+      if (chave) m[codigo] = chave; else delete m[codigo];
+      for (const c of Object.keys(m).slice(0, -20)) delete m[c]; // só as mais recentes
+      LNUX.preferencia.gravar("companhia.salas.chaves", JSON.stringify(m));
+    }
+
+    /**
+     * Cria uma sala neste servidor. opcoes: {nome, descricao, publica, senha, max, bate_papo, criador}.
+     * mapa: {glb: Blob, nome, ajuste} (um cenário meu) | {loja: id, nome} (um mundo da loja) | null (o chão simples).
+     * miniatura: Blob (a foto do cenário, para a lista) | null.
+     */
+    async criar(opcoes, mapa, miniatura) {
+      const r = await pedir("POST", "", { json: opcoes });
       this.chave = r.chave;
-      if (mapa && mapa.glb) await this.mandarMapa(r.codigo, mapa);
+      Sala.guardarChave(r.codigo, r.chave);
+      if (mapa) await this.mandarMapa(r.codigo, mapa);
+      if (miniatura) await pedir("PUT", `${r.codigo}/miniatura`, { corpo: miniatura, chave: r.chave }).catch((e) => console.warn("sala: miniatura", e));
       return r;
     }
     async mandarMapa(codigo, mapa) {
+      if (mapa.loja) { await pedir("POST", `${codigo}/mapa`, { json: { loja: mapa.loja }, chave: this.chave }); return; }
       await pedir("PUT", `${codigo}/mapa?nome=${encodeURIComponent(mapa.nome || "mapa")}`, { corpo: mapa.glb, chave: this.chave });
       await pedir("POST", `${codigo}/config`, { json: { ajuste: mapa.ajuste || {} }, chave: this.chave });
     }
+    /** Quem criou muda as opções da sala (as mesmas de criar, menos o cenário). */
+    async configurar(opcoes) {
+      const r = await pedir("POST", `${this.codigo}/config`, { json: opcoes, chave: this.chave });
+      this.info = { ...this.info, ...r };
+      this.aoMudar();
+      return r;
+    }
+    async trocarMiniatura(blob) { if (this.codigo && this.chave && blob) await pedir("PUT", `${this.codigo}/miniatura`, { corpo: blob, chave: this.chave }); }
     /** O que a sala tem (para a tela de entrada): {nome, pessoas, max, mapa: {nome, tamanho, ajuste, versao} | null}. */
     static consultar(codigo) { return pedir("GET", codigo); }
 
@@ -307,19 +337,30 @@
      * Entra na sala: baixa o cenário dela, põe a personagem no ponto de partida e começa a trocar posições.
      * avatar: Blob do .vrm para os outros verem (null = aparece como boneco simples para eles).
      */
-    async entrar(codigo, nome, avatar, aoProgresso = () => {}) {
+    async entrar(codigo, nome, avatar, aoProgresso = () => {}, { senha = "" } = {}) {
       if (this.dentro) await this.sair();
       const palco = this.palco, mundo = palco.mundo;
+      this.chave = Sala.minhas()[codigo] || null; // quem criou a sala (neste navegador) continua dona dela
       aoProgresso("Procurando a sala...");
       const info = await Sala.consultar(codigo);
-      if (info.mapa) {
-        aoProgresso(`Baixando o cenário da sala (${LNUX.bytes(info.mapa.tamanho)})...`);
-        const glb = await pedir("GET", `${codigo}/mapa?v=${info.mapa.versao}`, { como: "blob" });
-        aoProgresso("Abrindo o cenário...");
-        await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
-      } else if (mundo.mapa) mundo.tirarMapa();
+      if (info.pessoas >= info.max) throw Object.assign(new Error(`A sala está cheia (${info.max} pessoas).`), { status: 429 });
+      if (info.senha && !this.chave && !senha) throw Object.assign(new Error("Esta sala tem senha."), { status: 403, senha: true });
+      // entra primeiro (a senha e a lotação são conferidas aqui), depois baixa o cenário
       aoProgresso("Entrando...");
-      const eu = await pedir("POST", `${codigo}/entrar`, { json: { nome } });
+      let eu;
+      try { eu = await pedir("POST", `${codigo}/entrar`, { json: { nome, senha }, chave: this.chave }); }
+      catch (e) { if (e.status === 403) e.senha = true; throw e; }
+      try {
+        if (info.mapa) {
+          aoProgresso(`Baixando o cenário da sala (${LNUX.bytes(info.mapa.tamanho)})...`);
+          const glb = await pedir("GET", `${codigo}/mapa?v=${info.mapa.versao}`, { como: "blob" });
+          aoProgresso("Abrindo o cenário...");
+          await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
+        } else if (mundo.mapa) mundo.tirarMapa();
+      } catch (e) {
+        pedir("POST", `${codigo}/sair`, { json: { id: eu.id, segredo: eu.segredo } }).catch(() => {});
+        throw e;
+      }
       this.codigo = codigo;
       this.info = info;
       this.eu = { ...eu, nome };
@@ -375,6 +416,11 @@
           this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu });
         }
         if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => console.warn(e)); }
+        // quem criou mudou o nome ou o bate-papo: todos veem
+        if (this.info && ((r.nome && r.nome !== this.info.nome) || (r.bate_papo !== undefined && r.bate_papo !== this.info.bate_papo))) {
+          this.info = { ...this.info, nome: r.nome || this.info.nome, bate_papo: r.bate_papo };
+          this.aoMudar();
+        }
       } catch (e) {
         if (e.status === 404 || e.status === 403 || ++this.falhas > 40) { const motivo = e.status === 404 ? "A sala foi fechada." : e.status === 403 ? "Você foi tirado da sala (ficou tempo demais sem resposta)." : "A ligação com a sala caiu."; await this.sair(true); this.aoMensagem({ sistema: true, texto: motivo }); LNUX.aviso(motivo, "alerta", 8000); }
       } finally { this.ocupado = false; }
@@ -411,9 +457,9 @@
       const codigo = this.codigo;
       await this.sair();
       if (codigo && this.chave) await pedir("DELETE", codigo, { chave: this.chave }).catch(() => {});
+      if (codigo) Sala.guardarChave(codigo, null);
       this.chave = null;
     }
-    salvarCfg() { LNUX.preferencia.gravar("companhia.sala", JSON.stringify(this.cfg)); }
   }
   C.Sala = Sala;
   C.salaPedir = pedir;
