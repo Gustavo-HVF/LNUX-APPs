@@ -628,7 +628,7 @@
       // um pacote com uma textura só e nenhum material ligado: é a textura de tudo
       if (semTextura === novos.size && imagens.length === 1) { const unica = await texturaDoArquivo(imagens[0]); if (unica) for (const n of novos.values()) { n.map = unica; n.color.set(0xffffff); semTextura--; } }
       if (naoAbriu) avisos.push(`${naoAbriu} textura(s) estão num formato que não abre aqui (use PNG, JPEG, TGA ou PSD comum).`);
-      if (semTextura > 0) avisos.push(`${semTextura} de ${novos.size} materiais ficaram só com a cor: o pacote não diz qual textura é de cada um. Dá para pôr as texturas em Personagem › Roupas.`);
+      if (semTextura > 0 && imagens.length) avisos.push(`${semTextura} de ${novos.size} materiais ficaram só com a cor: o pacote não diz qual textura é de cada um. Dá para pôr as texturas em Personagem › Roupas.`);
 
       // 9. gravar o glTF e completar com a parte de personagem (VRM 1.0)
       aoProgresso(0.6, "Montando o .vrm...");
