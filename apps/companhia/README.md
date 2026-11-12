@@ -7,7 +7,8 @@ num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** 
 
 Nas personagens VRoid há ainda o menu **Movimento**: **captura de movimento** pela câmera (rosto, olhos, tronco,
 braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bvh`), **cenários** para andar
-(W A S D, Espaço pula) e **ajuste do esqueleto**.
+(W A S D, Espaço pula), um **conversor de mapas** para `.glb` (inclusive `.blend`, do Blender) e **ajuste do
+esqueleto**.
 
 Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
 chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
@@ -121,9 +122,11 @@ lado da personagem, para ver o resultado enquanto você mexe.
 
 ### Cenário e andar
 
-*Movimento › Cenário (mapa)* abre um modelo 3D como lugar: **`.glb` / `.gltf`** (com Draco e Meshopt), **`.fbx`**,
-**`.obj`**, um **ZIP** com o modelo e as texturas, ou um **`.unitypackage`** (a Companhia abre o pacote e lista os
-modelos de dentro). No retrato o cenário aparece atrás da personagem; em **Andar pelo cenário** ela anda por ele:
+*Movimento › Cenário (mapa)* abre um modelo 3D como lugar: **`.blend`** (Blender), **`.glb` / `.gltf`** (com Draco
+e Meshopt), **`.fbx`**, **`.obj`**, **`.dae`**, **`.stl`**, **`.ply`**, **`.3ds`**, **`.3mf`**, **`.usdz`**, um **ZIP** com
+o modelo e as texturas, ou um **`.unitypackage`** (a Companhia abre o pacote e lista os modelos de dentro). Tudo
+é **convertido para `.glb`** ao abrir (veja "Converter mapas", abaixo). No retrato o cenário aparece atrás da
+personagem; em **Andar pelo cenário** ela anda por ele:
 
 | | |
 |---|---|
@@ -137,17 +140,41 @@ modelos de dentro). No retrato o cenário aparece atrás da personagem; em **And
 - A personagem é uma cápsula que desliza no chão, nas paredes, nas rampas e nos degraus baixos. As malhas do mapa
   são juntadas numa árvore ([three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh)), então mapas grandes
   não pesam a cada quadro. Caiu para fora do mapa, volta ao começo.
-- **Tamanho** (os `.fbx` costumam vir em centímetros: use ÷ 10 / × 10), **girar**, **Começar aqui** (o ponto de
-  partida) e a **velocidade** de andar ficam guardados por cenário. Sem cenário, há um chão simples.
+- **Tamanho** (os `.fbx` costumam vir em centímetros: use ÷ 10 / × 10), **girar**, **O mapa veio deitado** (para
+  arquivos com o Z para cima, como `.stl` e `.ply`), **Começar aqui** (o ponto de partida) e a **velocidade** de
+  andar ficam guardados por cenário. Sem cenário, há um chão simples.
 - Andar tem um movimento próprio (andar, correr, pular); os movimentos de um pacote podem ficar no lugar.
   A captura pela câmera funciona junto: você anda com as teclas e os braços e o rosto seguem a câmera.
 - Rosto / Busto / Corpo voltam ao retrato.
 
+### Converter mapas para `.glb`
+
+O `.glb` (glTF binário, com as texturas dentro) é o formato em que a Companhia guarda e abre os cenários. Qualquer
+mapa aberto em *Cenário › Abrir cenário* é convertido para ele; **Salvar em .glb** entrega o arquivo convertido, e
+*Movimento › Converter mapa para .glb* (ou **Só converter**, no painel) converte e salva sem trocar o cenário.
+
+| De | Como |
+|---|---|
+| **`.blend`** (Blender) | **Com a ponte e o Blender instalado no aparelho** (o programa `blender` ou o módulo `bpy` do Python; `LNUX_APPS_BLENDER` aponta outro), é o próprio Blender que abre o arquivo e exporta: sai igual ao que ele mostra, com os modificadores aplicados. O arquivo é aberto sem rodar os scripts que traz. **Sem o Blender** (no celular, por exemplo), entra o **leitor próprio** de `.blend`, que roda no navegador |
+| `.fbx`, `.obj` (+ `.mtl`), `.dae`, `.stl`, `.ply`, `.3ds`, `.3mf`, `.usdz` | pelos carregadores do three.js; os materiais viram materiais do glTF |
+| `.gltf` com `.bin` e texturas soltas, `.glb` | juntados num arquivo só |
+| `.zip`, `.unitypackage` | abertos antes; se houver vários modelos, você escolhe qual é o mapa |
+
+O **leitor próprio de `.blend`** lê o "DNA" que cada arquivo traz (a descrição das estruturas da versão que o
+gravou), então abre arquivos do Blender 2.6 ao 5.x, compactados (gzip ou zstd) ou não. Ele tira: as malhas, a
+posição de cada objeto no mundo (inclusive filhos de outros objetos), o mapa UV, os materiais (cor, rugosidade,
+metal e a imagem ligada à cor do Principled BSDF) e as texturas embutidas no arquivo (ou as que vierem junto, pelo
+nome). **Não tira**: modificadores (espelho, matriz, subdivisão...), curvas, textos, metaballs, instâncias de
+coleção, partículas e animações — para isso, use a conversão pelo Blender (instale o Blender e abra a Companhia
+pelo LNUX) ou, no Blender, *Arquivo › Exportar › glTF 2.0*. A Companhia avisa quando converteu pelo leitor próprio.
+Se as texturas do `.blend` ficam em arquivos separados, escolha as imagens junto com ele (ou embuta no Blender:
+*Arquivo › Dados externos › Empacotar recursos*).
+
 **Mapas do VRChat.** Um mundo publicado do VRChat (`.vrcw`) é um pacote fechado do motor Unity: malhas, materiais,
 shaders e scripts num formato do próprio motor, que não abre fora dele (e baixar o mundo de outra pessoa fere os
-termos do VRChat). O que dá para usar aqui é o **cenário exportado**: no projeto do Unity, com o
-[UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB"); no Blender, *Exportar › glTF 2.0*;
-ou os modelos `.fbx`/`.obj` do mundo, direto ou de dentro do `.unitypackage`. De um `.unitypackage`, a Companhia
+termos do VRChat). O que dá para usar aqui são os **arquivos do projeto** do mundo: o `.blend` do Blender, os
+modelos `.fbx`/`.obj`/`.dae` (direto ou de dentro do `.unitypackage`) ou a cena exportada do Unity com o
+[UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB") — a Companhia converte para `.glb`. De um `.unitypackage`, a Companhia
 abre **um modelo** como mapa; as peças soltas de uma cena montada no Unity (`.unity`, prefabs) não são
 reposicionadas, e os materiais do Unity (`.mat`, shaders) não são convertidos — as texturas entram quando o
 próprio modelo aponta para elas. Use só mapas que você tem o direito de usar.
@@ -332,6 +359,8 @@ js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (de
 js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
 js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), câmera em terceira pessoa e controles de toque
+js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
+js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
                    emoções, gestos, piscar, olhar, boca, toques
@@ -357,6 +386,7 @@ As personagens VRoid têm testes próprios, que baixam o modelo de exemplo da pi
 ```bash
 python3 tests/testar_navegador.py companhia_vrm     # importar, roupas, emoções, toques
 python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
+python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 ```
 
 O `companhia_corpo` monta os próprios arquivos de teste (um boneco VRM 0.x só de ossos, um `.bvh`, um cenário
@@ -365,13 +395,20 @@ resultados de mentira (braço, dedos, espelho, pernas), movimentos, andar/correr
 internet ele ainda usa o modelo e o `.vrma` de exemplo da pixiv (rosto) e faz a captura de verdade: uma foto de
 exemplo do MediaPipe vira a câmera do Chromium e a personagem copia a pose (`LNUX_TESTE_SEM_CAMERA=1` pula).
 
+O `companhia_mapas` usa dois `.blend` de verdade guardados em `tests/dados/` (salvos pelo Blender 4.2 e pelo 5.3,
+que gravam as malhas de jeitos diferentes; `gerar_blend.py` mostra como foram feitos) e monta os outros formatos
+na hora. Se o aparelho tiver o Blender (ou o módulo `bpy`), ele confere também a conversão feita por ele.
+
 ## O que ainda não faz
 
 - **Modelos Cubism 2** (`.moc` / `model.json`) não abrem; só Cubism 3 e 4.
 - **Itens de roupa do VRoid Studio** (`.vroidcustomitem`) só abrem no VRoid Studio. Aqui entram a personagem
   exportada (`.vrm`) e as texturas do pacote.
-- **Mundos publicados do VRChat** (`.vrcw`) e cenas montadas do Unity não abrem; só o cenário exportado em
-  glTF/GLB, `.fbx` ou `.obj` (veja "Mapas do VRChat"). Texturas KTX2/Basis nos `.glb` ainda não abrem.
+- **Mundos publicados do VRChat** (`.vrcw`) e cenas montadas do Unity não abrem; só os arquivos do projeto
+  (`.blend`, `.fbx`, `.obj`, glTF...; veja "Mapas do VRChat"). Texturas KTX2/Basis nos `.glb` ainda não abrem.
+- **`.blend` sem o Blender instalado**: o leitor próprio não aplica modificadores nem lê curvas, textos, instâncias
+  de coleção e materiais além do Principled simples (veja "Converter mapas"). `.max`, `.c4d` e `.ma/.mb` não abrem:
+  exporte desses programas em `.fbx` ou glTF.
 - **Movimentos `.vmd`** (MikuMikuDance) e **`.anim`** do Unity não abrem; converta para `.vrma`, `.fbx` ou `.bvh`.
 - **Captura de movimento**: é de uma câmera só, então a profundidade (um braço para a frente, as pernas) é
   estimada; mãos muito rápidas ou escondidas somem por instantes; uma pessoa por vez. Não há ainda gravação da

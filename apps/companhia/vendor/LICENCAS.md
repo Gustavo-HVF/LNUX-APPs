@@ -63,8 +63,9 @@ o app baixa do site oficial (pela ponte, uma vez) ou usa o arquivo que você mes
 Montados num arquivo só por `tools/montar_vrm.sh` (esbuild), para abrir personagens VRoid (`.vrm`), tocar
 movimentos (`.vrma`, `.fbx`, `.bvh`, `.glb`) e abrir cenários (`.glb`, `.fbx`, `.obj`) com colisão.
 Os avisos de licença das partes também estão no fim do próprio arquivo. Do three.js entram, além do núcleo, os
-carregadores GLTFLoader, FBXLoader (com o fflate), BVHLoader, OBJLoader e DRACOLoader, o decodificador Meshopt e
-o RoomEnvironment (todos MIT, dos autores do three.js, salvo indicação abaixo).
+carregadores GLTFLoader, FBXLoader (com o fflate), BVHLoader, OBJLoader, MTLLoader, ColladaLoader, STLLoader, PLYLoader,
+TDSLoader, 3MFLoader, USDZLoader e DRACOLoader, o exportador GLTFExporter, o decodificador Meshopt, o zstddec e o
+RoomEnvironment (todos MIT, dos autores do three.js, salvo indicação abaixo).
 
 ### three.js
 
@@ -155,7 +156,12 @@ SOFTWARE.
 - meshoptimizer (meshopt_decoder) — Copyright (C) 2016-2024, Arseny Kapoulkine — licença MIT
   (https://github.com/zeux/meshoptimizer/blob/master/LICENSE.md).
 
-As duas usam o mesmo texto da licença MIT reproduzido acima, com o aviso de direitos de cada autor.
+- zstddec (decodificador zstd em WebAssembly, para os `.blend` compactados) — Copyright (c) 2020 Don McCurdy —
+  licença MIT (https://github.com/donmccurdy/zstddec). O WebAssembly dele é o descompactador do
+  [Zstandard](https://github.com/facebook/zstd) — Copyright (c) Meta Platforms, Inc. and affiliates — licença BSD
+  de 3 cláusulas (https://github.com/facebook/zstd/blob/dev/LICENSE).
+
+As três primeiras usam o mesmo texto da licença MIT reproduzido acima, com o aviso de direitos de cada autor.
 
 ## MediaPipe Tasks Vision 1.2.2 (mediapipe-visao.min.js)
 

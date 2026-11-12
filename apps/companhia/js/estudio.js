@@ -294,39 +294,82 @@
       if (avisar) LNUX.aviso(`Cenário "${reg.nome}": ${r.triangulos.toLocaleString("pt-BR")} triângulos, ${r.tamanho[0]} × ${r.tamanho[2]} m.`, "ok");
       return true;
     }
-    async function importarMapa() {
-      if (!exigirVRM()) return;
-      const arqs = await LNUX.arquivos.abrir({ titulo: "Abrir cenário (.glb, .gltf, .fbx, .obj, ZIP ou .unitypackage)", aceitar: ".glb,.gltf,.fbx,.obj,.zip,.unitypackage,.bin,.png,.jpg,.jpeg,.webp,.vrcw", multiplos: true });
-      if (!arqs.length) return;
+    /** Escolhe os arquivos de um cenário (o modelo e o que vier junto: texturas, .mtl, .bin). */
+    async function escolherMapa(titulo) {
+      const arqs = await LNUX.arquivos.abrir({ titulo, aceitar: C.conversor.ACEITAR, multiplos: true });
+      if (!arqs.length) return null;
       const entrada = new Map();
       for (const a of arqs) entrada.set(a.nome, await a.blob());
-      return receberMapa(entrada, LNUX.nomeSemExtensao(arqs[0].nome));
+      return { entrada, nome: LNUX.nomeSemExtensao((arqs.find((a) => C.conversor.MODELO.test(a.nome) || /\.(zip|unitypackage)$/i.test(a.nome)) || arqs[0]).nome) };
     }
-    async function receberMapa(entrada, nome) {
+    /**
+     * Qualquer formato aceito → .glb. Abre ZIP e .unitypackage, explica o que não abre (.vrcw), pergunta qual modelo é o
+     * mapa quando há vários e converte. Devolve {glb, nome, triangulos, avisos, como} ou null (cancelou ou não abre).
+     */
+    async function converterEntrada(entrada, nome) {
       let arquivos;
       try { arquivos = await C.mapas.preparar(entrada); }
       catch (e) {
         if (!e.explicacao) throw e;
         LNUX.dialogo({ titulo: "Esse arquivo não abre aqui", corpo: e.message, largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
-        return;
+        return null;
       }
-      const modelos = C.mapas.modelos(arquivos);
-      if (!modelos.length) { LNUX.aviso("Não achei um modelo 3D (.glb, .gltf, .fbx ou .obj) nesses arquivos.", "alerta"); return; }
+      const modelos = C.conversor.modelos(arquivos);
+      if (!modelos.length) { LNUX.aviso("Não achei um modelo 3D nesses arquivos (" + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ").", "alerta", 8000); return null; }
       let principal = modelos[0];
       if (modelos.length > 1) {
         const s = el("select", { class: "lnux-selecao", size: Math.min(10, modelos.length), style: { width: "100%" } }, modelos.map((m, i) => el("option", { value: m, selected: i === 0 }, `${m} (${LNUX.bytes(arquivos.get(m).size)})`)));
         const ok = await LNUX.dialogo({ titulo: "Qual modelo é o cenário?", largo: true, corpo: el("div", { class: "ajustes" },
           el("p", { class: "fraco", style: { margin: 0 } }, `O pacote tem ${modelos.length} modelos. Escolha o que é o mapa (em geral, o maior). Os outros (objetos soltos) não são colocados.`), s),
-          botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Abrir", primario: true, valor: true }] });
-        if (!ok) return;
+          botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Converter", primario: true, valor: true }] });
+        if (!ok) return null;
         principal = s.value || modelos[0];
       }
-      const reg = await C.mapas.guardar(nome || LNUX.nomeSemExtensao(principal.split("/").pop()), arquivos, principal);
+      const prog = LNUX.progresso("Convertendo para .glb");
+      try {
+        const r = await C.conversor.paraGLB(arquivos, principal, { aoProgresso: (f, t) => prog.definir(f, t) });
+        return { ...r, nome: nome || LNUX.nomeSemExtensao(principal.split("/").pop()), origem: principal };
+      } finally { prog.fechar(); }
+    }
+    const avisarConversao = (r) => {
+      const partes = [`"${r.nome}" convertido ${r.como}: ${LNUX.bytes(r.glb.size)}` + (r.triangulos ? `, ${r.triangulos.toLocaleString("pt-BR")} triângulos` : "") + "."];
+      LNUX.aviso(partes.concat(r.avisos).join(" "), r.avisos.length ? "alerta" : "ok", r.avisos.length ? 14000 : 6000);
+    };
+    async function importarMapa() {
+      if (!exigirVRM()) return;
+      const e = await escolherMapa("Abrir cenário: .blend, .glb, .gltf, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz, ZIP ou .unitypackage");
+      return e && receberMapa(e.entrada, e.nome);
+    }
+    /** Converte e usa como cenário (o mapa fica guardado em .glb). */
+    async function receberMapa(entrada, nome) {
+      const r = await converterEntrada(entrada, nome);
+      if (!r) return;
+      const arquivo = r.nome + ".glb";
+      const reg = await C.mapas.guardar(r.nome, new Map([[arquivo, r.glb]]), arquivo);
       $carregando(true, "Abrindo o cenário...");
-      try { await abrirMapaGuardado(reg.id); }
+      try { await abrirMapaGuardado(reg.id, { avisar: false }); avisarConversao(r); }
       catch (e) { await C.mapas.apagar(reg.id); throw e; }
       finally { $carregando(false); }
       if (aberto && aberto.atualizar) aberto.atualizar();
+    }
+    /** Só converte: escolhe um mapa de qualquer formato e salva o .glb (sem usar como cenário). */
+    async function converterMapa() {
+      const e = await escolherMapa("Converter um mapa para .glb (Blender .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz, glTF, ZIP, .unitypackage)");
+      if (!e) return null;
+      const r = await converterEntrada(e.entrada, e.nome);
+      if (!r) return null;
+      avisarConversao(r);
+      await LNUX.arquivos.salvar(r.glb, r.nome + ".glb", { titulo: "Salvar o mapa convertido (.glb)" });
+      return r;
+    }
+    /** Salva num arquivo .glb o cenário que está aberto. */
+    async function salvarMapa() {
+      const m = palco().mundo;
+      if (!m.info || !m.info.id) { LNUX.aviso("Abra um cenário primeiro.", "alerta"); return; }
+      const arquivos = await C.mapas.ler(m.info.id);
+      let glb = arquivos && arquivos.size === 1 && /\.glb$/i.test(m.info.principal) ? arquivos.get(m.info.principal) : null;
+      if (!glb && arquivos) { const prog = LNUX.progresso("Convertendo para .glb"); try { glb = (await C.conversor.paraGLB(arquivos, m.info.principal, { aoProgresso: (f, t) => prog.definir(f, t) })).glb; } finally { prog.fechar(); } }
+      if (glb) await LNUX.arquivos.salvar(glb, m.info.nome.replace(/[^\p{L}\p{N} _.-]+/gu, "") + ".glb", { titulo: "Salvar o cenário (.glb)" });
     }
     const $carregando = (sim, texto) => { const c = document.querySelector("#palco-carregando"); if (c) { c.textContent = texto || ""; c.hidden = !sim; } };
     async function painelCenario() {
@@ -349,6 +392,7 @@
         ajustes.replaceChildren(
           el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Tamanho (1 = como veio)"), tamanho), vezes(0.1), vezes(10)),
           faixa("Girar o cenário", 0, 355, 5, a.giro || 0, (v) => { a.giro = v; m.aplicarAjuste(); salvarAjuste(); }, (v) => " " + v + "°"),
+          marcar("O mapa veio deitado (Z para cima)", a.deitado, (v) => { a.deitado = v; a.partida = null; m.aplicarAjuste(); m.partida(); palco().enquadrar(); salvarAjuste(); }, "Arquivos de programas em que o Z aponta para cima (.stl, .ply, alguns .obj) aparecem deitados: marque para levantar."),
           el("div", { class: "linha" },
             botao("Começar aqui", () => { m.marcarPartida(); salvarAjuste(); LNUX.aviso("Ponto de partida guardado: é aqui que ela aparece neste cenário.", "ok"); }, "pequeno"),
             botao("Voltar ao começo", () => m.partida(), "pequeno"),
@@ -358,14 +402,16 @@
       const corpo = el("div", { class: "ajustes" }, anda,
         el("p", { class: "fraco pequeno", style: { margin: 0 } }, "W A S D ou as setas andam · Shift corre · Espaço pula · arrastar gira a câmera · a rodinha aproxima. No celular aparece um direcional."),
         el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapas),
-        el("div", { class: "linha" }, botao("Abrir cenário...", importarMapa),
+        el("div", { class: "linha" }, botao("Abrir cenário...", importarMapa), botao("Salvar em .glb", salvarMapa),
           botao("Apagar este", async () => { if (!m.info || !m.info.id) return; const id = m.info.id; if (!(await LNUX.confirmar("Apagar cenário", `Apagar "${m.info.nome}" deste aparelho?`, { rotulo: "Apagar", perigo: true }))) return; m.tirarMapa(); await C.mapas.apagar(id); gravarPref("mapa", ""); atualizar(); })),
         ajustes,
         faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => " " + v.toFixed(1) + "×"),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Abre e converte para .glb: " + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ", ZIP e .unitypackage. O .blend é convertido pelo Blender do aparelho (com a ponte) ou, sem ele, pelo leitor próprio."),
+        botao("Só converter um mapa para .glb...", converterMapa),
         el("details", {}, el("summary", {}, "Mapas do VRChat e do Unity"),
           el("p", { class: "fraco pequeno", style: { margin: "8px 0 0" } }, "Um mundo publicado do VRChat (.vrcw) é um pacote fechado do motor Unity e não abre fora dele. O que abre aqui: o cenário exportado em glTF/GLB " +
-            "(no Unity, com o UnityGLTF ou \"Export GLB\"; no Blender, Exportar › glTF 2.0), modelos .fbx e .obj, um ZIP com o modelo e as texturas, ou o .unitypackage do mundo — a Companhia abre o pacote e " +
-            "lista os modelos de dentro (as peças soltas de uma cena montada no Unity não são reposicionadas). Use só mapas que você tem o direito de usar.")));
+            "(no Unity, com o UnityGLTF ou \"Export GLB\"), o arquivo .blend do Blender, modelos .fbx, .obj e .dae, um ZIP com o modelo e as texturas, ou o .unitypackage do mundo — a Companhia abre o pacote, " +
+            "lista os modelos de dentro e converte para .glb (as peças soltas de uma cena montada no Unity não são reposicionadas). Use só mapas que você tem o direito de usar.")));
       painel("cenario", "Cenário", corpo, { atualizar });
       atualizar();
     }
@@ -434,10 +480,11 @@
       "-",
       { rotulo: "Andar pelo cenário (W A S D)", marcado: () => ehVRM() && palco().mundo.andando, acao: () => alternarAndar(), ativo: ehVRM },
       { rotulo: "Cenário (mapa)...", acao: painelCenario, ativo: ehVRM },
+      { rotulo: "Converter mapa para .glb...", acao: () => converterMapa().catch(LNUX.erro) },
       "-",
       { rotulo: "Ajustar esqueleto...", acao: painelEsqueleto, ativo: ehVRM },
     ];
-    return { painelCaptura, painelMovimentos, painelCenario, painelEsqueleto, alternarCaptura, alternarAndar, tocar, parar, importarMovimentos, receberMovimentos, importarMapa, receberMapa,
+    return { painelCaptura, painelMovimentos, painelCenario, painelEsqueleto, alternarCaptura, alternarAndar, tocar, parar, importarMovimentos, receberMovimentos, importarMapa, receberMapa, converterMapa, salvarMapa,
       abrirMapaGuardado, aplicarAndar, aoAbrirPersonagem, itensDoMenu, fechar, atualizar: () => { if (aberto && aberto.atualizar) aberto.atualizar(); }, get aberto() { return aberto && aberto.id; } };
   };
 })();

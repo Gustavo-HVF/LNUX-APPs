@@ -467,6 +467,125 @@ def _():
         fonte.shutdown()
 
 
+@caso("Blender: a ponte converte .blend com o Blender do aparelho (sem rodar os scripts do arquivo) e limpa depois")
+def _():
+    import stat
+    # um "blender" de mentira: grava um .glb e anota como foi chamado
+    falso = PASTA_TESTE / "blender"
+    falso.write_text("#!" + sys.executable + "\nimport sys, json\nargs = sys.argv[1:]\nsaida = args[args.index('--') + 1]\n"
+                     "open(saida, 'wb').write(b'glTF' + bytes(20))\nopen(saida + '.chamada', 'w').write(json.dumps(args))\n", "utf-8")
+    falso.chmod(falso.stat().st_mode | stat.S_IEXEC)
+    antes = os.environ.get("LNUX_APPS_BLENDER")
+    os.environ["LNUX_APPS_BLENDER"] = str(falso)
+    lnux_apps.BLENDER_ACHADO.clear()
+    try:
+        status, r, _ = S.json("GET", "/api/blender")
+        assert status == 200 and r["disponivel"] is True and r["como"] == "blender", r
+        assert S.json("GET", "/api/estado")[1]["recursos"]["blender"] is True
+        assert S.pedir("PUT", "/api/blender/lote01/cena.blend", corpo=b"BLENDER-v305", token=False)[0] == 401
+        assert S.pedir("PUT", "/api/blender/../cena.blend", corpo=b"x")[0] in (400, 404)
+        assert S.pedir("PUT", "/api/blender/lote01/cena.blend", corpo=b"BLENDER-v305")[0] == 201
+        assert S.pedir("PUT", "/api/blender/lote01/..%2F..%2Ffora.png", corpo=b"png")[0] == 201  # o nome é limpo: fica dentro da pasta do lote
+        pasta = Path(os.environ["LNUX_APPS_DADOS"]) / "tmp" / "blender-lote01"
+        assert sorted(f.name for f in pasta.iterdir()) == ["cena.blend", "fora.png"]
+        assert S.json("POST", "/api/blender/lote01", json_corpo={"principal": "fora.png"})[0] == 400  # só .blend
+        assert S.json("POST", "/api/blender/lote01", json_corpo={"entrada": "/etc/passwd"})[0] == 403  # fora das pastas liberadas
+        status, r, _ = S.json("POST", "/api/blender/lote01", json_corpo={"principal": "cena.blend"})
+        assert status == 200 and r["tamanho"] == 24 and r["como"] == "blender", r
+        chamada = json.loads(Path(r["saida"] + ".chamada").read_text())
+        assert "--background" in chamada and "--disable-autoexec" in chamada and "--python-expr" in chamada and chamada[chamada.index("--python-expr") + 1] == lnux_apps.BLENDER_SCRIPT
+        assert "export_scene.gltf" in lnux_apps.BLENDER_SCRIPT and "exec(" not in lnux_apps.BLENDER_SCRIPT
+        status, _, dados = S.pedir("GET", "/api/arquivo?caminho=" + r["saida"])
+        assert status == 200 and dados[:4] == b"glTF"
+        # um .blend de uma pasta liberada (escolhido pela janela de pastas) também serve
+        (CASA / "mapa.blend").write_bytes(b"BLENDER-v305")
+        status, r2, _ = S.json("POST", "/api/blender/lote02", json_corpo={"entrada": "~/mapa.blend"})
+        assert status == 200 and Path(r2["saida"]).name == "mapa.glb"
+        for lote in ("lote01", "lote02"):
+            assert S.json("DELETE", f"/api/blender/{lote}")[0] == 200
+        assert not pasta.exists() and (CASA / "mapa.blend").exists()
+        # sem Blender no aparelho: a rota diz que não há (a Companhia usa o leitor próprio)
+        os.environ["LNUX_APPS_BLENDER"] = ""
+        lnux_apps.BLENDER_ACHADO["resposta"] = None
+        assert S.json("GET", "/api/blender")[1]["disponivel"] is False
+        S.pedir("PUT", "/api/blender/lote03/cena.blend", corpo=b"BLENDER-v305")
+        status, r, _ = S.json("POST", "/api/blender/lote03", json_corpo={"principal": "cena.blend"})
+        assert status == 501 and "Blender" in r["erro"]
+        S.json("DELETE", "/api/blender/lote03")
+    finally:
+        lnux_apps.BLENDER_ACHADO.clear()
+        if antes is None:
+            os.environ.pop("LNUX_APPS_BLENDER", None)
+        else:
+            os.environ["LNUX_APPS_BLENDER"] = antes
+
+
+@caso("Salas: só a ponte cria; quem tem o código entra sem a chave, troca posições e mensagens, e não alcança mais nada")
+def _():
+    # criar: só com a chave da ponte
+    assert S.json("POST", "/api/sala", json_corpo={"nome": "Praça"}, token=False)[0] == 401
+    status, sala, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Praça\n<b>"})
+    assert status == 201 and len(sala["codigo"]) == 8 and sala["nome"] == "Praça <b>" and sala["chave"] and sala["mapa"] is None, sala
+    c, chave = sala["codigo"], sala["chave"]
+    visita = dict(token=False)  # daqui em diante, como quem recebeu o link: sem a chave da ponte
+    assert S.json("GET", "/api/sala/naoexiste", **visita)[0] == 404
+    status, info, _ = S.json("GET", f"/api/sala/{c}", **visita)
+    assert status == 200 and info["pessoas"] == 0 and "chave" not in info
+    # o cenário: só quem criou manda
+    assert S.pedir("PUT", f"/api/sala/{c}/mapa?nome=praca", corpo=b"glTF-mapa", **visita)[0] == 403
+    assert S.pedir("GET", f"/api/sala/{c}/mapa", **visita)[0] == 404
+    assert S.pedir("PUT", f"/api/sala/{c}/mapa?nome=praca", corpo=b"glTF-mapa", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 201
+    assert S.json("POST", f"/api/sala/{c}/config", json_corpo={"ajuste": {"escala": 2}}, cabecalhos={"X-Sala-Chave": chave}, **visita)[1]["mapa"]["ajuste"] == {"escala": 2}
+    status, cab, dados = S.pedir("GET", f"/api/sala/{c}/mapa", **visita)
+    assert status == 200 and dados == b"glTF-mapa" and cab["Content-Type"] == "model/gltf-binary"
+    # duas pessoas entram
+    _, ana, _ = S.json("POST", f"/api/sala/{c}/entrar", json_corpo={"nome": "Ana"}, **visita)
+    _, bia, _ = S.json("POST", f"/api/sala/{c}/entrar", json_corpo={"nome": "Bia" + "x" * 60}, **visita)
+    assert ana["id"] != bia["id"] and len(bia["segredo"]) >= 12
+    eu = lambda j, **mais: {"id": j["id"], "segredo": j["segredo"], **mais}
+    status, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(ana, estado={"p": [1, 0, 2], "r": 0.5, "e": "andando"}), **visita)
+    assert status == 200 and [x["nome"] for x in r["pessoas"]] == ["Ana", "Bia" + "x" * 21] and r["mapa"] == 2 and all("segredo" not in x for x in r["pessoas"])
+    status, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, estado={"p": [0, 0, 0]}), **visita)
+    assert next(x for x in r["pessoas"] if x["id"] == ana["id"])["estado"] == {"p": [1, 0, 2], "r": 0.5, "e": "andando"}
+    # ninguém se passa por outra pessoa
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo={"id": ana["id"], "segredo": bia["segredo"], "estado": {}}, **visita)[0] == 403
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo={"id": ana["id"], "segredo": "errado", "texto": "oi"}, **visita)[0] == 403
+    # bate-papo: cada um recebe só o que ainda não viu
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo=eu(ana, texto="  Oi,\tBia!  " + "z" * 400), **visita)[1]["n"] == 1
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo=eu(ana, texto="   "), **visita)[0] == 400
+    _, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=0), **visita)
+    assert len(r["mensagens"]) == 1 and r["mensagens"][0]["nome"] == "Ana" and r["mensagens"][0]["texto"].startswith("Oi, Bia!") and len(r["mensagens"][0]["texto"]) == 300
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=1), **visita)[1]["mensagens"] == []
+    # avatar: cada um manda o seu; os outros pegam pelo id
+    assert S.pedir("PUT", f"/api/sala/{c}/avatar?id={ana['id']}&segredo=errado", corpo=b"vrm", **visita)[0] == 403
+    assert S.pedir("PUT", f"/api/sala/{c}/avatar?id={ana['id']}&segredo={ana['segredo']}", corpo=b"vrm-da-ana", **visita)[0] == 201
+    assert S.pedir("GET", f"/api/sala/{c}/avatar/{ana['id']}", **visita)[2] == b"vrm-da-ana"
+    assert S.pedir("GET", f"/api/sala/{c}/avatar/{bia['id']}", **visita)[0] == 404 and S.pedir("GET", f"/api/sala/{c}/avatar/..%2Fmapa.glb", **visita)[0] == 404
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia), **visita)[1]["pessoas"][0]["avatar"] == 1
+    # o código da sala não abre o resto da ponte
+    assert S.json("GET", "/api/pastas?caminho=~", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 401
+    assert S.json("POST", "/api/sala/" + c + "/estado", json_corpo=eu(ana), cabecalhos={"Origin": "http://mal.example"}, **visita)[0] == 403
+    assert S.pedir("POST", f"/api/sala/{c}/estado", corpo=b"x" * 30000, cabecalhos={"Content-Type": "application/json"}, **visita)[0] == 413
+    # quem some por um tempo sai sozinho; quem sai, sai na hora
+    lnux_apps.SALAS[c].pessoas[bia["id"]]["visto"] -= lnux_apps.SALA_SUMIU + 1
+    _, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(ana), **visita)
+    assert [x["nome"] for x in r["pessoas"]] == ["Ana"]
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia), **visita)[0] == 403
+    assert S.json("POST", f"/api/sala/{c}/sair", json_corpo=eu(ana), **visita)[0] == 200
+    pasta = lnux_apps.SALAS[c].pasta
+    assert not (pasta / f"avatar-{ana['id']}.vrm").exists() and (pasta / "mapa.glb").exists()
+    # fechar: só quem criou
+    assert S.json("DELETE", f"/api/sala/{c}", **visita)[0] == 403
+    assert S.json("DELETE", f"/api/sala/{c}", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 200
+    assert S.json("GET", f"/api/sala/{c}", **visita)[0] == 404 and not pasta.exists()
+    # uma sala vazia há muito tempo é fechada sozinha
+    _, velha, _ = S.json("POST", "/api/sala", json_corpo={})
+    lnux_apps.SALAS[velha["codigo"]].vista -= lnux_apps.SALA_VAZIA + 1
+    S.json("GET", "/api/sala/qualquer", **visita)
+    assert velha["codigo"] not in lnux_apps.SALAS
+    assert S.json("GET", "/api/estado")[1]["recursos"]["salas"] is True
+
+
 @caso("ffmpeg: recusa formato desconhecido e entrada fora das pastas liberadas")
 def _():
     import shutil

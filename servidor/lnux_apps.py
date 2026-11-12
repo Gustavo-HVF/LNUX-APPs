@@ -132,6 +132,107 @@ MEDIAPIPE_ARQUIVOS = {  # nome → ("pacote", caminho dentro do .tgz) ou ("model
 }
 MEDIAPIPE_TRAVA = threading.Lock()
 
+# Companhia, cenários: converter .blend (Blender) para .glb. Quando o Blender está instalado no aparelho (o programa
+# "blender", ou o módulo "bpy" do Python), a ponte pede a ele que abra o arquivo e exporte em glTF: sai igual ao que
+# o Blender mostra, com os modificadores aplicados. Sem ele, a Companhia usa o leitor próprio (mais simples).
+# O arquivo é aberto sem rodar os scripts que ele traz (--disable-autoexec) e só o exportador de glTF é chamado.
+BLENDER_SCRIPT = r"""
+import bpy, os, sys
+saida = sys.argv[sys.argv.index("--") + 1]
+try:  # texturas que ficaram ao lado do arquivo (em qualquer subpasta)
+    bpy.ops.file.find_missing_files(directory=os.path.dirname(bpy.data.filepath))
+except Exception:
+    pass
+opcoes = dict(filepath=saida, export_format="GLB", export_apply=True, export_cameras=False, export_lights=False, export_animations=False)
+while True:
+    try:
+        bpy.ops.export_scene.gltf(**opcoes)
+        break
+    except TypeError as e:  # uma opcao que esta versao do Blender nao tem
+        sobra = [k for k in opcoes if k != "filepath" and k in str(e)]
+        if not sobra:
+            raise
+        for k in sobra:
+            opcoes.pop(k)
+"""
+BLENDER_ACHADO: dict = {}
+BLENDER_TRAVA = threading.Lock()
+
+# Companhia, salas: jogar com outras pessoas no mesmo cenário. A sala fica na memória deste servidor; só quem tem a
+# chave da ponte cria uma, e quem recebe o link (com o código da sala) entra sem a chave: o código só dá acesso à
+# sala (o cenário, os avatares, as posições e o bate-papo dela), nunca às pastas do aparelho. Os arquivos da sala
+# ficam em ~/.lnux-apps/tmp/salas/<código>/ e somem quando ela fecha.
+SALAS: dict = {}
+SALAS_TRAVA = threading.Lock()
+SALA_MAXIMO = 6            # salas ao mesmo tempo
+SALA_PESSOAS = 16          # pessoas por sala
+SALA_MAPA = 200 * 1024 * 1024
+SALA_AVATAR = 40 * 1024 * 1024
+SALA_SUMIU = 20            # segundos sem notícia de uma pessoa: ela saiu
+SALA_VAZIA = 3600          # segundos sem ninguém: a sala fecha
+SALA_LETRAS = "abcdefghjkmnpqrstuvwxyz23456789"  # sem as que se confundem (i, l, o, 0, 1)
+
+
+class Sala:
+    def __init__(self, codigo: str, nome: str, pasta: Path):
+        self.codigo, self.nome, self.pasta = codigo, nome, pasta
+        self.chave = secrets.token_urlsafe(18)   # de quem criou: trocar o cenário e fechar a sala
+        self.vista = time.time()
+        self.pessoas: dict = {}                  # id → {nome, segredo, visto, estado, avatar}
+        self.mensagens: list = []
+        self.n = 0
+        self.mapa: dict | None = None            # {nome, tamanho, versao, ajuste}
+        self.versao_mapa = 0
+        self.trava = threading.Lock()
+
+    def resumo(self) -> dict:
+        return {"codigo": self.codigo, "nome": self.nome, "pessoas": len(self.pessoas), "max": SALA_PESSOAS, "mapa": self.mapa}
+
+    def limpar(self, agora: float):
+        """Tira quem parou de dar notícia (fechou a aba, perdeu a internet)."""
+        for pid in [i for i, j in self.pessoas.items() if agora - j["visto"] > SALA_SUMIU]:
+            self.tirar(pid)
+
+    def tirar(self, pid: str):
+        if self.pessoas.pop(pid, None) is not None:
+            (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
+
+
+def sala_texto(valor, limite: int) -> str:
+    """Um texto vindo de fora: sem caracteres de controle, com tamanho máximo."""
+    return re.sub(r"[\x00-\x1f\x7f]+", " ", str(valor or "")).strip()[:limite]
+
+
+def salas_limpar(agora: float):
+    with SALAS_TRAVA:
+        for codigo in [c for c, sala in SALAS.items() if not sala.pessoas and agora - sala.vista > SALA_VAZIA]:
+            shutil.rmtree(SALAS.pop(codigo).pasta, ignore_errors=True)
+
+
+def blender_programa(conferir_bpy: bool = True) -> tuple | None:
+    """("blender", caminho do programa) ou ("bpy", python com o módulo bpy), ou None. LNUX_APPS_BLENDER aponta outro."""
+    if "resposta" in BLENDER_ACHADO:
+        return BLENDER_ACHADO["resposta"]
+    escolhido = os.environ.get("LNUX_APPS_BLENDER", "").strip()
+    candidatos = [escolhido] if escolhido else []
+    candidatos += [shutil.which("blender") or "", "/snap/bin/blender", "/var/lib/flatpak/exports/bin/org.blender.Blender",
+                   str(HOME / ".local/share/flatpak/exports/bin/org.blender.Blender"), "/Applications/Blender.app/Contents/MacOS/Blender"]
+    for c in candidatos:
+        if c and (shutil.which(c) or Path(c).is_file()):
+            if "python" in Path(c).name.lower():  # um Python que tem o módulo bpy (pip install bpy)
+                BLENDER_ACHADO["resposta"] = ("bpy", c)
+            else:
+                BLENDER_ACHADO["resposta"] = ("blender", shutil.which(c) or c)
+            return BLENDER_ACHADO["resposta"]
+    if not conferir_bpy:
+        return None
+    try:  # o módulo bpy no mesmo Python da ponte (demora um pouco para conferir; fica guardado)
+        tem = subprocess.run([sys.executable, "-c", "import bpy"], capture_output=True, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        tem = False
+    BLENDER_ACHADO["resposta"] = ("bpy", sys.executable) if tem else None
+    return BLENDER_ACHADO["resposta"]
+
 
 def baixar_para(url: str, destino: Path, limite: int):
     """Baixa um arquivo grande aos pedaços (para um temporário, que só vira o destino quando termina)."""
@@ -269,6 +370,7 @@ class Ponte:
         self.temporarios = DADOS / "tmp"
         if ligada:  # antes de montar a lista: na primeira vez a pasta ainda não existe e ficaria de fora
             self.temporarios.mkdir(parents=True, exist_ok=True)
+            shutil.rmtree(self.temporarios / "salas", ignore_errors=True)  # as salas vivem na memória: o que ficou é de antes
         candidatos = [HOME, self.temporarios]
         if TERMUX or Path("/storage/emulated/0").is_dir():
             candidatos += [Path("/storage/emulated/0"), Path("/sdcard")]
@@ -291,6 +393,8 @@ class Ponte:
             try:
                 if f.is_file() and f.stat().st_mtime < limite:
                     f.unlink()
+                elif f.is_dir() and f.name.startswith("blender-") and f.stat().st_mtime < limite:
+                    shutil.rmtree(f, ignore_errors=True)  # conversões do Blender que ficaram para trás
             except OSError:
                 pass
 
@@ -325,6 +429,10 @@ class Ponte:
                 "ia": True, "live2d_core": (DADOS / "live2d" / "live2dcubismcore.min.js").is_file(),
                 # Companhia: guarda os arquivos do rastreamento pela câmera (MediaPipe)
                 "mediapipe": MEDIAPIPE_VERSAO,
+                # Companhia: converter cenários .blend com o Blender do aparelho (a rota existe; /api/blender diz se ele está instalado)
+                "blender": True,
+                # Companhia: salas para jogar com outras pessoas (quem recebe o link entra sem a chave da ponte)
+                "salas": True,
             },
             "perfis": sorted(PERFIS),
         }
@@ -819,6 +927,9 @@ class Manipulador(BaseHTTPRequestHandler):
             # atrás de um túnel, o Host pode chegar como localhost e o Origin como o endereço público liberado
             if netloc != self.headers.get("Host", "").lower() and nome_do_host(netloc) not in self.ponte.hosts_extras:
                 raise ErroPonte(403, "Pedido de outro site recusado.")
+        # As salas da Companhia têm acesso próprio: criar exige a chave da ponte; entrar, só o código da sala
+        if rota == "sala" or rota.startswith("sala/"):
+            return self.sala(self.command, rota[5:])
         # O cookie só vale para LER arquivos (é o que <video src> e <img src> precisam); o resto exige o cabeçalho
         so_leitura = self.command in ("GET", "HEAD") and rota in ("arquivo", "live2d/core")
         if not self.autorizado(permitir_cookie=so_leitura):
@@ -903,6 +1014,8 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.live2d_core(m)
         if rota == "mediapipe" or rota.startswith("mediapipe/"):
             return self.mediapipe(m, rota[10:])
+        if rota == "blender" or rota.startswith("blender/"):
+            return self.blender(m, rota[8:])
         raise ErroPonte(404, f"A ponte não conhece /api/{rota} ({m}).")
 
     # ── ações
@@ -1056,6 +1169,195 @@ class Manipulador(BaseHTTPRequestHandler):
             raise ErroPonte(405, "Use GET (ver ou pegar) ou POST (baixar).")
         return self.responder_json({"versao": MEDIAPIPE_VERSAO,
                                     "arquivos": {n: ((pasta / n).stat().st_size if (pasta / n).is_file() else None) for n in MEDIAPIPE_ARQUIVOS}})
+
+    def sala(self, m: str, resto: str):
+        """Salas da Companhia (jogar com outras pessoas). POST /api/sala cria (com a chave da ponte) e devolve o código;
+        o resto usa só o código: GET /api/sala/<código> (o que a sala tem), .../mapa (GET; PUT de quem criou),
+        .../config, .../entrar, .../avatar (PUT o meu; GET .../avatar/<id> o de alguém), .../estado (mando o meu, recebo
+        o de todos e as mensagens novas), .../falar, .../sair e DELETE /api/sala/<código> (quem criou fecha)."""
+        agora = time.time()
+        salas_limpar(agora)
+        partes = [x for x in resto.split("/") if x]
+        if not partes:
+            if m != "POST":
+                raise ErroPonte(405, "Use POST para criar uma sala.")
+            if not self.autorizado(False):
+                raise ErroPonte(401, "Só cria salas quem abriu a Companhia pelo LNUX (com a chave da ponte) no aparelho que vai ser o servidor.")
+            nome = sala_texto(self.ler_json().get("nome"), 40) or "Sala"
+            with SALAS_TRAVA:
+                if len(SALAS) >= SALA_MAXIMO:
+                    raise ErroPonte(429, f"Este servidor já tem {SALA_MAXIMO} salas abertas. Feche uma antes de criar outra.")
+                codigo = "".join(secrets.choice(SALA_LETRAS) for _ in range(8))
+                pasta = self.ponte.temporarios / "salas" / codigo
+                shutil.rmtree(pasta, ignore_errors=True)
+                pasta.mkdir(parents=True, exist_ok=True)
+                nova = SALAS[codigo] = Sala(codigo, nome, pasta)
+            # os endereços por onde outras pessoas alcançam este servidor: o túnel liberado e a rede de casa
+            enderecos = [f"https://{h}" for h in self.ponte.hosts_extras]
+            if self.server.server_address[0] not in ("127.0.0.1", "::1", "localhost"):
+                enderecos.append(f"http://{ip_local()}:{self.server.server_address[1]}")
+            return self.responder_json({**nova.resumo(), "chave": nova.chave, "enderecos": enderecos}, 201)
+        sala = SALAS.get(partes[0].lower())
+        if not sala:
+            raise ErroPonte(404, "Essa sala não existe mais (quem criou fechou, ou o servidor foi reiniciado).")
+        sala.vista = agora
+        acao = partes[1] if len(partes) > 1 else ""
+        p = self.parametros()
+
+        def dono():
+            chave = self.headers.get("X-Sala-Chave", "")
+            if not (chave and hmac.compare_digest(chave.encode(), sala.chave.encode())) and not self.autorizado(False):
+                raise ErroPonte(403, "Só quem criou a sala pode fazer isso.")
+
+        def pessoa(dados: dict) -> dict:
+            j = sala.pessoas.get(str(dados.get("id", "")))
+            if not j or not hmac.compare_digest(str(dados.get("segredo", "")).encode(), j["segredo"].encode()):
+                raise ErroPonte(403, "Você não está mais nesta sala (ficou tempo demais sem resposta). Entre de novo.")
+            j["visto"] = agora
+            return j
+
+        if not acao and m == "GET":
+            return self.responder_json(sala.resumo())
+        if not acao and m == "DELETE":
+            dono()
+            with SALAS_TRAVA:
+                SALAS.pop(sala.codigo, None)
+            shutil.rmtree(sala.pasta, ignore_errors=True)
+            return self.responder_json({"ok": True})
+        if acao == "mapa" and m in ("GET", "HEAD"):
+            if not sala.mapa:
+                raise ErroPonte(404, "Esta sala não tem cenário (é o chão simples).")
+            return self.enviar_arquivo(sala.pasta / "mapa.glb", "model/gltf-binary")
+        if acao == "mapa" and m == "PUT":
+            dono()
+            if int(self.headers.get("Content-Length") or 0) > SALA_MAPA:
+                raise ErroPonte(413, f"O cenário passa de {SALA_MAPA // (1024 * 1024)} MB.")
+            self.receber_para(sala.pasta / "mapa.glb")
+            with sala.trava:
+                sala.versao_mapa += 1
+                sala.mapa = {"nome": sala_texto(p.get("nome"), 80) or "Cenário", "tamanho": (sala.pasta / "mapa.glb").stat().st_size,
+                             "versao": sala.versao_mapa, "ajuste": (sala.mapa or {}).get("ajuste", {})}
+            return self.responder_json(sala.resumo(), 201)
+        if acao == "mapa" and m == "DELETE":
+            dono()
+            with sala.trava:
+                sala.versao_mapa += 1
+                sala.mapa = None
+            (sala.pasta / "mapa.glb").unlink(missing_ok=True)
+            return self.responder_json(sala.resumo())
+        if acao == "config" and m == "POST":
+            dono()
+            d = self.ler_json()
+            with sala.trava:
+                if "nome" in d:
+                    sala.nome = sala_texto(d.get("nome"), 40) or sala.nome
+                if sala.mapa and isinstance(d.get("ajuste"), dict) and len(json.dumps(d["ajuste"])) < 2000:
+                    sala.versao_mapa += 1
+                    sala.mapa = {**sala.mapa, "ajuste": d["ajuste"], "versao": sala.versao_mapa}
+            return self.responder_json(sala.resumo())
+        if acao == "entrar" and m == "POST":
+            nome = sala_texto(self.ler_json().get("nome"), 24) or "Visitante"
+            with sala.trava:
+                sala.limpar(agora)
+                if len(sala.pessoas) >= SALA_PESSOAS:
+                    raise ErroPonte(429, f"A sala está cheia ({SALA_PESSOAS} pessoas).")
+                pid = secrets.token_hex(4)
+                sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0}
+            return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
+        if acao == "avatar" and m == "PUT":
+            j = pessoa(p)
+            if int(self.headers.get("Content-Length") or 0) > SALA_AVATAR:
+                raise ErroPonte(413, f"O avatar passa de {SALA_AVATAR // (1024 * 1024)} MB.")
+            self.receber_para(sala.pasta / f"avatar-{p['id']}.vrm")
+            j["avatar"] += 1
+            return self.responder_json({"avatar": j["avatar"]}, 201)
+        if acao == "avatar" and m in ("GET", "HEAD") and len(partes) == 3:
+            arquivo = sala.pasta / f"avatar-{partes[2]}.vrm"
+            if partes[2] not in sala.pessoas or not arquivo.is_file():
+                raise ErroPonte(404, "Essa pessoa não mandou o avatar.")
+            return self.enviar_arquivo(arquivo, "model/gltf-binary")
+        if m != "POST" or acao not in ("estado", "falar", "sair"):
+            raise ErroPonte(404, f"A sala não conhece /{acao} ({m}).")
+        if int(self.headers.get("Content-Length") or 0) > 24 * 1024:
+            raise ErroPonte(413, "Pedido grande demais para a sala.")
+        d = self.ler_json()
+        with sala.trava:
+            j = pessoa(d)
+            if acao == "sair":
+                sala.tirar(str(d["id"]))
+                return self.responder_json({"ok": True})
+            if acao == "falar":
+                texto = sala_texto(d.get("texto"), 300)
+                if not texto:
+                    raise ErroPonte(400, "Faltou o texto.")
+                sala.n += 1
+                sala.mensagens.append({"n": sala.n, "de": str(d["id"]), "nome": j["nome"], "texto": texto})
+                del sala.mensagens[:-200]
+                return self.responder_json({"n": sala.n})
+            if isinstance(d.get("estado"), dict):
+                j["estado"] = d["estado"]
+            sala.limpar(agora)
+            try:
+                desde = int(d.get("desde") or 0)
+            except (TypeError, ValueError):
+                desde = 0
+            return self.responder_json({
+                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "estado": x["estado"]} for i, x in sala.pessoas.items()],
+                "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
+                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome})
+
+    def blender(self, metodo: str, resto: str):
+        """Converter .blend em .glb com o Blender do aparelho. GET /api/blender diz se há Blender; PUT /api/blender/<lote>/<nome>
+        envia um arquivo (o .blend e as texturas dele) para uma pasta temporária; POST /api/blender/<lote> converte
+        ({"principal": nome enviado} ou {"entrada": caminho de um .blend numa pasta liberada}); DELETE apaga a pasta."""
+        if metodo == "GET" and not resto:
+            achado = blender_programa()
+            return self.responder_json({"disponivel": bool(achado), "como": achado[0] if achado else None,
+                                        "programa": Path(achado[1]).name if achado else None})
+        lote, _, nome = resto.partition("/")
+        if not re.fullmatch(r"[a-z0-9]{6,32}", lote):
+            raise ErroPonte(400, "Lote inválido.")
+        pasta = self.ponte.temporarios / f"blender-{lote}"
+        if metodo == "PUT" and nome:
+            pasta.mkdir(parents=True, exist_ok=True)
+            destino = pasta / nome_seguro(urllib.parse.unquote(nome), "arquivo")
+            self.receber_para(destino)
+            return self.responder_json({"nome": destino.name, "tamanho": destino.stat().st_size}, 201)
+        if metodo == "DELETE" and not nome:
+            shutil.rmtree(pasta, ignore_errors=True)
+            return self.responder_json({"ok": True})
+        if metodo != "POST" or nome:
+            raise ErroPonte(405, "Use GET (tem Blender?), PUT (enviar), POST (converter) ou DELETE (limpar).")
+        d = self.ler_json()
+        if d.get("entrada"):
+            entrada = self.ponte.resolver(str(d["entrada"]))
+        else:
+            entrada = pasta / nome_seguro(str(d.get("principal") or ""), "")
+        if not entrada.is_file() or entrada.suffix.lower() != ".blend":
+            raise ErroPonte(400, "Diga qual é o arquivo .blend a converter.")
+        achado = blender_programa()
+        if not achado:
+            raise ErroPonte(501, "O Blender não está instalado neste aparelho (nem o módulo bpy do Python).")
+        pasta.mkdir(parents=True, exist_ok=True)
+        saida = pasta / (entrada.stem + ".glb")
+        saida.unlink(missing_ok=True)
+        if achado[0] == "blender":
+            cmd = [achado[1], "--background", "--factory-startup", "--disable-autoexec", str(entrada), "--python-expr", BLENDER_SCRIPT, "--", str(saida)]
+        else:
+            abrir = "import bpy, sys\nbpy.ops.wm.open_mainfile(filepath=sys.argv[1], use_scripts=False)\n"
+            cmd = [achado[1], "-c", abrir + BLENDER_SCRIPT, str(entrada), "--", str(saida)]
+        inicio = time.time()
+        with BLENDER_TRAVA:  # uma conversão de cada vez (o Blender usa bastante memória)
+            try:
+                r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, cwd=str(entrada.parent))
+            except subprocess.TimeoutExpired:
+                raise ErroPonte(504, "O Blender demorou demais para converter esse arquivo (mais de 15 minutos).")
+            except OSError as e:
+                raise ErroPonte(500, f"Não consegui rodar o Blender: {e}")
+        if not saida.is_file() or saida.stat().st_size < 20:
+            linhas = [l for l in ((r.stderr or "") + "\n" + (r.stdout or "")).splitlines() if l.strip()]
+            raise ErroPonte(500, "O Blender não conseguiu exportar esse arquivo: " + (linhas[-1][:300] if linhas else "sem explicação"))
+        return self.responder_json({"saida": str(saida), "tamanho": saida.stat().st_size, "segundos": round(time.time() - inicio, 1), "como": achado[0]})
 
     def listar(self, caminho: str, ocultos: bool) -> dict:
         pasta = self.ponte.resolver(caminho)
