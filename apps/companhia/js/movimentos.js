@@ -304,6 +304,16 @@
       await LNUX.guardado.gravar(LISTA, l);
       return { novos, erros };
     },
+    /** O primeiro movimento de um arquivo, sem guardar nada (para a prévia da loja). */
+    async clipDoArquivo(blob, nome) {
+      const tipo = tipoDe(nome);
+      if (!tipo) throw new Error("Esse arquivo não é um movimento (.vrma, .fbx, .bvh ou .glb).");
+      const aberto = await abrirArquivo(tipo, blob);
+      if (aberto.vrma) return clipDoVRMA(aberto.vrma[0], semExt(nome));
+      let clips = aberto.clips;
+      if (tipo === "fbx" && clips.some((c) => c.duration > 0.2)) clips = clips.filter((c) => c.duration > 0.2);
+      return retargetar(aberto.raiz, clips[0], C.mapearOssos(listarOssos(aberto.raiz)), semExt(nome));
+    },
     /** O AnimationClip (canônico) de um movimento guardado. */
     async clip(id) {
       if (prontos.has(id)) return prontos.get(id);
@@ -316,6 +326,8 @@
       return clip;
     },
     /** Para a janela "Ossos...": os ossos do arquivo e a ligação em uso. null para os .vrma (não precisam). */
+    /** O arquivo de um movimento guardado: {blob, tipo} (para publicar na loja). */
+    async arquivo(id) { const d = await LNUX.guardado.ler(chave(id)); return d ? { blob: d.blob, tipo: d.tipo } : null; },
     async ossos(id) {
       const reg = (await C.movimentos.lista()).find((x) => x.id === id), dados = await LNUX.guardado.ler(chave(id));
       if (!reg || !dados || dados.tipo === "vrma") return null;

@@ -654,14 +654,15 @@
       botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Importar", primario: true, valor: true }] });
     return ok ? new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]) : null;
   }
-  async function importarPacote(arquivos, zip) {
+  async function importarPacote(arquivos, zip, { semAviso = false, abrir = true } = {}) {
     pronto = false;
     const info = await C.lerPacote(arquivos);
-    if (info.protegido && !info.convertido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
+    if (info.protegido && !info.convertido && !semAviso && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
     const p = await C.importarPacote(arquivos, zip);
     if (info.tipo === "vrm") LNUX.aviso(`${p.nome} importada (VRoid): ${p.roupas.length} roupa${p.roupas.length > 1 ? "s" : ""}${p.variacoes.length ? `, ${p.variacoes.length} variações de textura` : ""}. Troque em Personagem › Roupas.`, "ok");
     else LNUX.aviso(`${p.nome} importada: ${info.expressoes.length} expressões${info.idle ? ", movimento parado" : ""}${info.vtube ? ", ajustes do VTube Studio" : ""}.`, "ok");
-    await abrirPersonagem(p.id);
+    if (abrir) await abrirPersonagem(p.id); else pronto = true;
+    return p;
   }
   /** Erros de importação: o item de roupa do VRoid Studio vira variações de textura da personagem VRoid aberta. */
   async function erroAoImportar(e) {
@@ -723,6 +724,98 @@
     if (destino === "personagem") { const convertido = await pacoteDoAvatar(mapa, LNUX.nomeSemExtensao(nomes.find((n) => C.avatar.MODELO.test(n)) || nomes[0])); if (convertido) await importarPacote(convertido, null); }
     else if (destino === "movimento") await estudio.receberMovimentos(mapa);
     else if (destino === "cenario") await estudio.receberMapa(mapa, LNUX.nomeSemExtensao(nomes[0]));
+  }
+
+  // ── Loja (personagens, mundos e animações do servidor) ───────────────
+
+  let lojaDisponivel = false;
+  C.loja.disponivel().then((v) => { lojaDisponivel = v; }).catch(() => {});
+  const nomeArq = (n) => String(n || "").replace(/[\\/:*?"<>|\x00-\x1f]+/g, "_").trim().slice(0, 80) || "arquivo";
+  /** A personagem da loja entre as minhas (importa uma vez; depois reaproveita a mesma). Devolve o id. */
+  async function personagemDaLoja(item, blob) {
+    let usados = {};
+    try { usados = JSON.parse(pref("loja-usados", "{}")) || {}; } catch (e) { usados = {}; }
+    if (usados[item.id] && (await C.listarPersonagens()).some((p) => p.id === usados[item.id])) return usados[item.id];
+    const p = await importarPacote(new Map([[nomeArq(item.nome) + ".vrm", blob]]), null, { semAviso: true, abrir: false });
+    usados[item.id] = p.id;
+    gravarPref("loja-usados", JSON.stringify(usados));
+    return p.id;
+  }
+  /** "Usar" da loja: a personagem vira uma das minhas, o mundo vira cenário e a animação, um movimento. */
+  async function usarDaLoja(item, blob) {
+    if (item.tipo === "personagem") {
+      const id = await personagemDaLoja(item, blob);
+      if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: !jogando() });
+      LNUX.aviso(`${item.nome} está entre as suas personagens (Personagem › Trocar).`, "ok");
+      return;
+    }
+    if (item.tipo === "mundo") {
+      if (atual && atual.tipo === "vrm") await estudio.receberMapa(new Map([[item.arquivo, blob]]), item.nome);
+      else { await C.mapas.guardar(item.nome, new Map([[item.arquivo, blob]]), item.arquivo); LNUX.aviso(`"${item.nome}" foi para Movimento › Cenário: abra uma personagem VRoid para andar nele.`, "ok"); }
+      return;
+    }
+    const r = await C.movimentos.importar(new Map([[item.arquivo, blob]]), "Loja");
+    if (!r.novos.length) throw new Error(r.erros.join(" ") || "Essa animação não abriu.");
+    if (atual && atual.tipo === "vrm") await estudio.tocar(r.novos[0].id);
+    LNUX.aviso(`"${item.nome}" foi para Movimento › Pacotes de movimento.`, "ok");
+  }
+  const ctxLoja = {
+    usar: usarDaLoja,
+    autor: () => pref("sala-nome", ""),
+    lembrarAutor: (n) => { if (n) gravarPref("sala-nome", n); },
+    async fontes(tipo) {
+      if (tipo === "personagem") return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", "")).map((p) => ({ id: p.id, nome: p.nome }));
+      if (tipo === "mundo") return (await C.mapas.lista()).map((m) => ({ id: m.id, nome: m.nome }));
+      return (await C.movimentos.lista()).map((m) => ({ id: m.id, nome: m.nome }));
+    },
+    async arquivoDaFonte(tipo, id) {
+      if (tipo === "personagem") {
+        const p = await C.lerPersonagem(id), r = p.roupas.find((x) => x.id === p.roupaAtual) || p.roupas[0];
+        return { blob: r.blob, arquivo: nomeArq(p.perfil ? p.perfil.nome : p.nome) + ".vrm", nome: p.perfil ? p.perfil.nome : p.nome };
+      }
+      if (tipo === "mundo") {
+        const reg = (await C.mapas.lista()).find((m) => m.id === id), arqs = await C.mapas.ler(id);
+        if (!reg || !arqs) throw new Error("Esse cenário não está mais guardado.");
+        const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+        return { blob: glb, arquivo: nomeArq(reg.nome) + ".glb", nome: reg.nome };
+      }
+      const reg = (await C.movimentos.lista()).find((m) => m.id === id), a = await C.movimentos.arquivo(id);
+      if (!reg || !a) throw new Error("Esse movimento não está mais guardado.");
+      return { blob: a.blob, arquivo: nomeArq(reg.nome) + "." + a.tipo, nome: reg.nome };
+    },
+    async arquivoDoAparelho(tipo) {
+      if (tipo === "personagem") {
+        const [a] = await LNUX.arquivos.abrir({ titulo: "Personagem para publicar (.vrm, ZIP, .unitypackage ou .fbx)", aceitar: ".vrm,.zip,.unitypackage,.fbx,.glb" });
+        if (!a) return null;
+        const { arquivos } = await pacoteDoArquivo(a.nome, await a.blob());
+        if (!arquivos) return null;
+        const vrm = [...arquivos].find(([n]) => /\.vrm$/i.test(n));
+        if (!vrm) throw new Error("Na loja, as personagens são VRM (.vrm): modelos Live2D não entram.");
+        return { blob: vrm[1], arquivo: nomeArq(LNUX.nomeSemExtensao(vrm[0].split("/").pop())) + ".vrm", nome: LNUX.nomeSemExtensao(vrm[0].split("/").pop()) };
+      }
+      if (tipo === "mundo") {
+        const arqs = await LNUX.arquivos.abrir({ titulo: "Mundo para publicar (qualquer formato de cenário; vira .glb)", aceitar: C.conversor.ACEITAR, multiplos: true });
+        if (!arqs.length) return null;
+        const mapa = new Map();
+        for (const a of arqs) mapa.set(a.nome, await a.blob());
+        const pronto = await C.mapas.preparar(mapa), principal = C.conversor.modelos(pronto)[0];
+        if (!principal) throw new Error("Não achei um modelo de cenário nesses arquivos.");
+        const prog = LNUX.progresso("Convertendo o mundo para .glb");
+        let r;
+        try { r = await C.conversor.paraGLB(pronto, principal, { aoProgresso: (f, t) => prog.definir(f, t) }); } finally { prog.fechar(); }
+        const nome = LNUX.nomeSemExtensao(arqs[0].nome);
+        return { blob: r.glb, arquivo: nomeArq(nome) + ".glb", nome };
+      }
+      const [a] = await LNUX.arquivos.abrir({ titulo: "Animação para publicar (.vrma, .bvh, .fbx ou .glb)", aceitar: ".vrma,.bvh,.fbx,.glb" });
+      return a ? { blob: await a.blob(), arquivo: nomeArq(a.nome), nome: LNUX.nomeSemExtensao(a.nome) } : null;
+    },
+  };
+  /** Abre a loja (opcional: só um tipo, e o que "Usar" faz). */
+  function abrirLoja(tipo = "", aoUsar = null) {
+    palco.pausar();
+    const loja = C.abrirLoja(ctxLoja, { tipo, aoUsar });
+    loja.finally(() => palco.continuar());
+    return loja;
   }
 
   // ── Roupas ───────────────────────────────────────────────────────────
@@ -1420,10 +1513,9 @@
     return p.id;
   }
   /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
-  async function avatarParaOsOutros(mandar) {
-    if (!mandar || !atual || atual.tipo !== "vrm") return null;
-    if (atual.protegido && !(await LNUX.dialogo({ titulo: "Modelo com licença", corpo: `O autor de "${atual.perfil.nome}" não deixa redistribuir o modelo. Para os outros te verem com ela, o arquivo é mandado para o aparelho de cada pessoa da sala. ` +
-      "Sem mandar, você continua se vendo com ela e os outros veem um boneco simples.", botoes: [{ rotulo: "Aparecer como boneco", valor: false, primario: true }, { rotulo: "Mandar mesmo assim", valor: true }] }))) return null;
+  /** O .vrm da minha personagem (a roupa que estou usando), que vai para as outras pessoas da sala. */
+  function avatarParaOsOutros() {
+    if (!atual || atual.tipo !== "vrm") return null;
     const r = roupaAtual();
     return r ? r.blob : null;
   }
@@ -1434,7 +1526,6 @@
     const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
     const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem (.vrm, ZIP ou avatar do Unity)..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
     avatar.setAttribute("aria-label", "Sua personagem");
-    const mandar = el("input", { type: "checkbox", checked: pref("sala-mandar", "1") === "1" });
     const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
     const podeCriar = LNUX.ponte.disponivel && LNUX.ponte.tem("salas");
     const mapas = podeCriar ? await C.mapas.lista() : [];
@@ -1447,13 +1538,12 @@
       const n = nome.value.trim();
       if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
       gravarPref("sala-nome", n);
-      gravarPref("sala-mandar", mandar.checked ? "1" : "0");
       if (avatar.value === "importar") { d.fechar(); await importar("zip"); if (atual && atual.tipo === "vrm") gravarPref("sala-avatar", atual.id); janelaSala(codigo.value); return null; }
       gravarPref("sala-avatar", avatar.value);
       const id = avatar.value || (await idDoBoneco());
       if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
       if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
-      return { nome: n, avatar: avatar.value ? await avatarParaOsOutros(mandar.checked) : (await C.lerPersonagem(id)).roupas[0].blob }; // o boneco padrão sempre vai
+      return { nome: n, avatar: avatarParaOsOutros() }; // a personagem sempre vai para os outros (o boneco padrão também)
     };
     const entrar = async (cod, criada) => {
       const eu = await preparar();
@@ -1484,7 +1574,6 @@
     };
     const corpo = el("div", { class: "ajustes" },
       el("div", { class: "grade" }, el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome), el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), avatar)),
-      el("label", { class: "lnux-alternar" }, mandar, "Mostrar minha personagem para os outros (sem isso, eles me veem como um boneco simples)"),
       el("div", { class: "lnux-rotulo" }, "Entrar numa sala"),
       el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, codigo), el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigo.focus(); return; } entrar(c).catch(LNUX.erro); } }, "Entrar")),
       podeCriar ? el("div", { class: "lnux-rotulo" }, "Criar uma sala neste aparelho") : null,
@@ -1494,6 +1583,21 @@
         ? "A sala fica neste aparelho enquanto o LNUX estiver aberto. Depois de criar, mande o link para as pessoas: elas entram pelo navegador, sem instalar nada. Os cenários vêm de Movimento › Cenário."
         : "Para entrar, basta o link que a pessoa que criou a sala mandou. Para criar uma sala, abra a Companhia pelo LNUX (🌐 Apps Web) no aparelho que vai ser o servidor."));
     codigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#sala-entrar").click(); } });
+    // ver na loja (com a prévia em 3D) e escolher de lá a personagem ou o cenário da sala
+    const daLoja = (tipo) => async () => {
+      const voltar = codigo.value;
+      gravarPref("sala-nome", nome.value.trim());
+      d.fechar();
+      await abrirLoja(tipo, async (item, blob) => {
+        if (tipo === "personagem") gravarPref("sala-avatar", await personagemDaLoja(item, blob));
+        else gravarPref("mapa", (await C.mapas.guardar(item.nome, new Map([[item.arquivo, blob]]), item.arquivo)).id);
+      });
+      janelaSala(voltar);
+    };
+    if (lojaDisponivel) {
+      avatar.closest(".lnux-campo").after(el("button", { class: "lnux-botao", type: "button", id: "sala-loja-personagem", onclick: daLoja("personagem"), title: "Ver as personagens da loja, em 3D, e escolher uma" }, "🛍️ Personagens da loja"));
+      if (podeCriar) mapa.closest(".lnux-campo").after(el("button", { class: "lnux-botao", type: "button", id: "sala-loja-mundo", onclick: daLoja("mundo"), title: "Ver os mundos da loja, em 3D, e escolher um" }, "🛍️ Mundos da loja"));
+    }
     d = LNUX.dialogo({ titulo: "Jogar com outras pessoas", corpo, largo: true, botoes: [{ rotulo: "Fechar", valor: null }] });
     return d;
   }
@@ -1572,6 +1676,7 @@
       { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
       { rotulo: "Importar avatar do Unity (.unitypackage, .fbx)...", acao: () => importar("avatar") },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
+      { rotulo: "Loja: personagens, mundos e animações...", acao: () => abrirLoja(), ativo: () => lojaDisponivel },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },
       "-",
       { rotulo: "Perfil e personalidade...", acao: janelaPerfil, ativo: comPersonagem },
@@ -1642,10 +1747,10 @@
     const semIA = new Set(["Perfil e personalidade...", "Emoções e expressões...", "Áreas de toque...", "Voz desta personagem...", "Mostrar áreas de toque", "Primeiros passos", "Núcleo do Live2D..."]);
     const menuSala = { rotulo: "Sala", itens: [
       { rotulo: "Criar ou entrar numa sala...", acao: () => janelaSala() },
+      { rotulo: "Loja: personagens, mundos e animações...", acao: () => abrirLoja(), ativo: () => lojaDisponivel },
       { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
       { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
       { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
-      { rotulo: "Ver as personagens dos outros (senão, bonecos)", marcado: () => garantirSalaCfg().avatares, acao: () => { const c = garantirSalaCfg(); c.avatares = !c.avatares; LNUX.preferencia.gravar("companhia.sala", JSON.stringify(c)); if (sala) { sala.cfg.avatares = c.avatares; for (const r of sala.remotos.values()) r.buscarAvatar(); } } },
       "-",
       { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
       { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
@@ -1660,7 +1765,6 @@
     return [menus[0], menuSala, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
       .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
   }
-  const garantirSalaCfg = () => { if (sala) return sala.cfg; try { return Object.assign({ avatares: true }, JSON.parse(pref("sala", "{}") || "{}")); } catch (e) { return { avatares: true }; } };
 
   // ── Entrada de texto e controles ─────────────────────────────────────
 
@@ -1728,7 +1832,8 @@
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala, abrirLoja, usarDaLoja,
+    get lojaDisponivel() { return lojaDisponivel; },
     get sala() { return sala; }, get modo() { return MODO; },
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
   };
