@@ -48,12 +48,26 @@ abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
 
 ### Salas
 
-- **Criar** (*Sala › Criar ou entrar numa sala*): precisa da **ponte** (abrir a Companhia pelo LNUX, no aparelho
-  que vai receber a sala). Dê um nome, escolha o cenário (um dos guardados em *Movimento › Cenário*, ou o chão
-  simples) e mande o **link** para as pessoas. Quem criou pode trocar o cenário depois e fechar a sala para todos.
-- **Entrar**: abra o link no navegador (não precisa instalar nada nem ter a chave da ponte: o link só dá acesso à
-  sala), escolha um **nome** e uma **personagem** (uma das suas, `.vrm`, ZIP ou avatar do Unity; ou o boneco
-  simples) e entre. O cenário da sala chega sozinho.
+Ao jogar, aparece a **lista de salas** deste servidor (como a lista de servidores de um jogo): a miniatura do
+cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (👥 2/8), um 🔒 nas que têm senha e
+"Cheia" nas lotadas. Ela se atualiza sozinha. Em cima ficam o **seu nome** e a **sua personagem** (uma das suas,
+`.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou o boneco simples).
+
+- **Entrar**: um clique na sala (pede a senha, se tiver). Uma sala **privada** não aparece na lista: entra quem
+  tiver o link, que abre a Companhia já com ela em destaque ("A sala do seu link"); dá também para colar o link.
+- **Criar** (＋ Criar sala): **não precisa da ponte**. Pelo link isolado (veja "Site publicado só com a
+  Companhia"), quem chega cria a sala dele, se o dono do servidor deixar: ele vê na lista a opção *Deixar quem
+  entra pelo link criar salas* (ligada por padrão). As opções:
+  - **nome** e **descrição**;
+  - **pública** (aparece na lista) ou **privada** (só com o link);
+  - **senha** (opcional);
+  - **quantas pessoas** cabem (de 2 a 16);
+  - **bate-papo** por texto, ligado ou não;
+  - o **cenário**: o chão simples, um dos seus (*Movimento › Cenário*) ou um **mundo da loja**, com a prévia em
+    3D antes de escolher. A miniatura da sala na lista é tirada dessa prévia.
+- **Depois de criar**, aparece o link da sala para mandar. Quem criou continua dona dela neste navegador:
+  *Sala › Opções da sala* muda tudo (inclusive tirar a senha ou fechar o bate-papo, que trava a caixa de texto de
+  todos), *Trocar o cenário da sala* (também pelos mundos da loja) e *Fechar a sala para todos*.
 - **Na sala**: cada pessoa anda com a própria personagem (W A S D, Shift, Espaço). Os outros veem você andar,
   correr, pular, **acenar** e mudar de **expressão** (os botões 👋 😀 😂 😮 😢 😠 😐) e, com a captura de movimento
   ligada, mexer os braços, as mãos e o rosto. O **bate-papo** aparece na conversa e num balão em cima da cabeça.
@@ -63,9 +77,9 @@ abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
 - **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só a Companhia* (veja "Site publicado só com a
   Companhia", abaixo): o link abre só a Companhia, sem a ponte. A sala fica no servidor do aparelho de quem criou e
   existe enquanto ele estiver ligado. Na rede de casa também dá (`--endereco 0.0.0.0`).
-- Limites: 6 salas ao mesmo tempo e 16 pessoas por sala. O cenário e as personagens não têm limite de tamanho; só
-  não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem some por 20 segundos sai da sala; uma
-  sala vazia fecha depois de uma hora.
+- Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
+  personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
+  some por 20 segundos sai da sala; uma sala vazia fecha depois de 15 minutos.
 
 ### Loja: personagens, mundos e animações
 
@@ -95,7 +109,8 @@ Web › 💬 Publicar só a Companhia*, que também liga o túnel):
 - O endereço abre direto na Companhia; a página inicial dos Apps Web e os outros apps **não existem** nele, e o
   botão dos Apps Web some.
 - De fora (pela rede ou pela internet, pelo túnel) a **ponte não abre, nem com a chave**: só as salas e a loja.
-  A chave só vale para quem abre no próprio aparelho do servidor (`127.0.0.1`): é por ali que o dono cria as salas.
+  Quem chega pelo link vê a lista de salas, entra e cria a sua (se o dono deixar). A chave só vale para quem abre
+  no próprio aparelho do servidor (`127.0.0.1`).
 - O link para as pessoas nunca leva a chave.
 
 ## Personagens VRoid (.vrm) e troca de roupa
@@ -477,7 +492,8 @@ js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), câmera
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
-js/sala.js         salas para jogar com outras pessoas: entrar pelo link, as personagens dos outros, bate-papo
+js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
+js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
 js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)

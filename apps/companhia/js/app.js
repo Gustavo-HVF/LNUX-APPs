@@ -1491,7 +1491,9 @@
     $("#gestos").hidden = !(jogando() && atual && atual.tipo === "vrm");
     if (jogando()) {
       $("#conversa-titulo").textContent = dentro ? `Sala: ${sala.info.nome}` : "Sala";
-      campo.placeholder = dentro ? "Escreva para as pessoas da sala..." : "Entre numa sala para conversar com as pessoas...";
+      const semPapo = dentro && sala.info && sala.info.bate_papo === false;
+      campo.disabled = semPapo;
+      campo.placeholder = semPapo ? "Esta sala não tem bate-papo." : dentro ? "Escreva para as pessoas da sala..." : "Entre numa sala para conversar com as pessoas...";
       $("#titulo-doc").textContent = dentro ? `${sala.info.nome} (${sala.pessoas})` : atual ? atual.perfil.nome : "Jogar";
     }
     atualizarChipMovimento();
@@ -1519,87 +1521,95 @@
     const r = roupaAtual();
     return r ? r.blob : null;
   }
-  const codigoDe = (texto) => { const m = String(texto).match(/sala=([a-z0-9]+)/i); return (m ? m[1] : String(texto)).trim().toLowerCase(); };
-  /** Criar ou entrar numa sala: nome, personagem e o código (ou o cenário, para criar). */
-  async function janelaSala(codigoInicial = "") {
-    const personagens = (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", ""));
-    const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
-    const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem (.vrm, ZIP ou avatar do Unity)..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
-    avatar.setAttribute("aria-label", "Sua personagem");
-    const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
-    const podeCriar = LNUX.ponte.disponivel && LNUX.ponte.tem("salas");
-    const mapas = podeCriar ? await C.mapas.lista() : [];
-    const mapa = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], pref("mapa", ""));
-    mapa.setAttribute("aria-label", "Cenário da sala");
-    const titulo = el("input", { class: "lnux-entrada", value: pref("sala-titulo", "Minha sala"), maxlength: 40, "aria-label": "Nome da sala" });
-    let d = null;
-    /** Confere o nome e abre a personagem escolhida. Devolve {nome, avatar} (ou null se faltou algo). */
-    const preparar = async () => {
-      const n = nome.value.trim();
-      if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
-      gravarPref("sala-nome", n);
-      if (avatar.value === "importar") { d.fechar(); await importar("zip"); if (atual && atual.tipo === "vrm") gravarPref("sala-avatar", atual.id); janelaSala(codigo.value); return null; }
-      gravarPref("sala-avatar", avatar.value);
-      const id = avatar.value || (await idDoBoneco());
-      if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
-      if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
-      return { nome: n, avatar: avatarParaOsOutros() }; // a personagem sempre vai para os outros (o boneco padrão também)
-    };
-    const entrar = async (cod, criada) => {
-      const eu = await preparar();
-      if (!eu) return;
-      d.fechar();
-      $("#palco-carregando").hidden = false;
-      try {
-        const info = await garantirSala().entrar(cod, eu.nome, eu.avatar, (t) => { $("#palco-carregando").textContent = t; });
-        history.replaceState(null, "", location.pathname + location.search + "#sala=" + cod); // recarregar volta para a sala
-        listaMsgs.replaceChildren();
-        mensagemDaSala({ sistema: true, texto: `Você entrou em "${info.nome}"` + (info.mapa ? `, no cenário "${info.mapa.nome}".` : ".") + " W A S D andam, Shift corre, Espaço pula; escreva aqui para falar com as pessoas." });
-        if (criada) mostrarLinks(criada);
-      } finally { $("#palco-carregando").hidden = true; atualizarSala(); }
-    };
-    const criar = async () => {
-      gravarPref("sala-titulo", titulo.value.trim() || "Minha sala");
-      let m = null;
-      if (mapa.value) {
-        const reg = mapas.find((x) => x.id === mapa.value), arqs = await C.mapas.ler(mapa.value);
-        if (reg && arqs) {
-          const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
-          m = { glb, nome: reg.nome, ajuste: reg.ajuste || {} };
-        }
-      }
-      if (!(await preparar())) return;
-      const r = await garantirSala().criar(titulo.value.trim() || "Minha sala", m);
-      await entrar(r.codigo, r);
-    };
-    const corpo = el("div", { class: "ajustes" },
-      el("div", { class: "grade" }, el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome), el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), avatar)),
-      el("div", { class: "lnux-rotulo" }, "Entrar numa sala"),
-      el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, codigo), el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigo.focus(); return; } entrar(c).catch(LNUX.erro); } }, "Entrar")),
-      podeCriar ? el("div", { class: "lnux-rotulo" }, "Criar uma sala neste aparelho") : null,
-      podeCriar ? el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Nome da sala"), titulo), el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapa),
-        el("button", { class: "lnux-botao", type: "button", id: "sala-criar", onclick: () => criar().catch(LNUX.erro) }, "Criar sala")) : null,
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, podeCriar
-        ? "A sala fica neste aparelho enquanto o LNUX estiver aberto. Depois de criar, mande o link para as pessoas: elas entram pelo navegador, sem instalar nada. Os cenários vêm de Movimento › Cenário."
-        : "Para entrar, basta o link que a pessoa que criou a sala mandou. Para criar uma sala, abra a Companhia pelo LNUX (🌐 Apps Web) no aparelho que vai ser o servidor."));
-    codigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#sala-entrar").click(); } });
-    // ver na loja (com a prévia em 3D) e escolher de lá a personagem ou o cenário da sala
-    const daLoja = (tipo) => async () => {
-      const voltar = codigo.value;
-      gravarPref("sala-nome", nome.value.trim());
-      d.fechar();
-      await abrirLoja(tipo, async (item, blob) => {
-        if (tipo === "personagem") gravarPref("sala-avatar", await personagemDaLoja(item, blob));
-        else gravarPref("mapa", (await C.mapas.guardar(item.nome, new Map([[item.arquivo, blob]]), item.arquivo)).id);
-      });
-      janelaSala(voltar);
-    };
-    if (lojaDisponivel) {
-      avatar.closest(".lnux-campo").after(el("button", { class: "lnux-botao", type: "button", id: "sala-loja-personagem", onclick: daLoja("personagem"), title: "Ver as personagens da loja, em 3D, e escolher uma" }, "🛍️ Personagens da loja"));
-      if (podeCriar) mapa.closest(".lnux-campo").after(el("button", { class: "lnux-botao", type: "button", id: "sala-loja-mundo", onclick: daLoja("mundo"), title: "Ver os mundos da loja, em 3D, e escolher um" }, "🛍️ Mundos da loja"));
+  /** Um cenário guardado (Movimento › Cenário) em .glb, para mandar à sala ou mostrar na prévia. */
+  async function glbDoMapa(id) {
+    const reg = (await C.mapas.lista()).find((m) => m.id === id), arqs = await C.mapas.ler(id);
+    if (!reg || !arqs) throw new Error("Esse cenário não está mais guardado.");
+    return arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+  }
+  /** Antes de entrar numa sala: guarda o nome e abre a personagem escolhida (ou o boneco padrão). */
+  async function prepararJogador(j) {
+    gravarPref("sala-nome", j.nome);
+    gravarPref("sala-avatar", j.personagem || "");
+    const id = j.personagem || (await idDoBoneco());
+    if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
+    if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
+  }
+  async function entrarNaSala(codigo, j, criada = null) {
+    await prepararJogador(j);
+    const carregando = $("#palco-carregando");
+    carregando.hidden = false;
+    try {
+      const info = await garantirSala().entrar(codigo, j.nome, avatarParaOsOutros(), (t) => { carregando.textContent = t; }, { senha: j.senha || "" });
+      history.replaceState(null, "", location.pathname + location.search + "#sala=" + codigo);
+      listaMsgs.replaceChildren();
+      mensagemDaSala({ sistema: true, texto: `Você entrou em "${info.nome}"` + (info.mapa ? `, no cenário "${info.mapa.nome}".` : ".") + " W A S D andam, Shift corre, Espaço pula" +
+        (info.bate_papo === false ? ". Esta sala não tem bate-papo." : "; escreva aqui para falar com as pessoas.") });
+      if (criada) mostrarLinks(criada);
+    } finally { carregando.hidden = true; atualizarSala(); }
+  }
+  async function criarSala(f, j) {
+    await prepararJogador(j);
+    let mapa = null;
+    if (f.cenario && f.cenario.tipo === "loja") mapa = { loja: f.cenario.id, nome: f.cenario.nome };
+    else if (f.cenario) {
+      const reg = (await C.mapas.lista()).find((m) => m.id === f.cenario.id);
+      mapa = { glb: await glbDoMapa(f.cenario.id), nome: reg ? reg.nome : f.cenario.nome, ajuste: (reg && reg.ajuste) || {} };
     }
-    d = LNUX.dialogo({ titulo: "Jogar com outras pessoas", corpo, largo: true, botoes: [{ rotulo: "Fechar", valor: null }] });
-    return d;
+    const carregando = $("#palco-carregando");
+    carregando.hidden = false;
+    carregando.textContent = "Criando a sala...";
+    let r;
+    try { r = await garantirSala().criar({ ...f.opcoes, criador: j.nome }, mapa, f.miniatura); } finally { carregando.hidden = true; }
+    await entrarNaSala(r.codigo, j, r);
+  }
+  /** O que a lista de salas (js/salas.js) precisa do app. */
+  const ctxSalas = {
+    get lojaDisponivel() { return lojaDisponivel; },
+    nome: () => pref("sala-nome", ""),
+    personagem: () => pref("sala-avatar", (atual && atual.tipo === "vrm" && atual.id !== pref("sala-boneco", "") && atual.id) || ""),
+    async personagens() { return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", "")).map((p) => ({ id: p.id, nome: p.nome })); },
+    async escolherNaLoja() {
+      let escolhida = null;
+      await abrirLoja("personagem", async (item, blob) => { escolhida = await personagemDaLoja(item, blob); gravarPref("sala-avatar", escolhida); });
+      return escolhida;
+    },
+    async importarPersonagem() {
+      const antes = atual && atual.id;
+      await importar("zip");
+      return atual && atual.tipo === "vrm" && atual.id !== antes ? atual.id : null;
+    },
+    async cenarios() {
+      const meus = (await C.mapas.lista()).map((m) => ({ id: m.id, nome: m.nome }));
+      let loja = [];
+      if (lojaDisponivel) { try { loja = (await C.loja.lista()).itens.filter((i) => i.tipo === "mundo").map((i) => ({ id: i.id, nome: i.nome })); } catch (e) { loja = []; } }
+      return { meus, loja };
+    },
+    async arquivoDoCenario(v) {
+      if (v.tipo !== "loja") return glbDoMapa(v.id);
+      const item = (await C.loja.lista()).itens.find((i) => i.id === v.id);
+      if (!item) throw new Error("Esse mundo saiu da loja.");
+      return C.loja.baixar(item);
+    },
+    entrar: (codigo, j) => entrarNaSala(codigo, j),
+    criar: (f, j) => criarSala(f, j),
+  };
+  /** A lista de salas deste servidor: entrar numa, pelo link, ou criar a sua (com as opções). */
+  let listaDeSalas = null;
+  function janelaSala(codigo = "") {
+    if (listaDeSalas) return listaDeSalas;
+    listaDeSalas = C.abrirSalas(ctxSalas, { codigo });
+    listaDeSalas.finally(() => { listaDeSalas = null; });
+    return listaDeSalas;
+  }
+  /** Quem criou muda as opções da sala: nome, descrição, pública ou privada, senha, quantas pessoas, bate-papo. */
+  async function opcoesDaSala() {
+    if (!sala || !sala.dentro || !sala.chave) return;
+    const i = sala.info || {};
+    const f = await C.formularioDeSala(ctxSalas, { criar: false, inicial: { nome: i.nome, descricao: i.descricao, publica: i.publica, senha: i.senha, max: i.max, bate_papo: i.bate_papo } });
+    if (!f) return;
+    await sala.configurar(f.opcoes);
+    LNUX.aviso("Opções da sala salvas.", "ok");
   }
   /** Os links da sala para mandar aos outros (o do túnel, o da rede de casa e o deste endereço). */
   function mostrarLinks(criada) {
@@ -1613,7 +1623,7 @@
       el("p", { style: { margin: 0 } }, "Mande este link para quem vai jogar. A pessoa abre no navegador, escolhe um nome e entra:"),
       ...links.map((l) => el("div", { class: "linha link-sala" }, el("input", { class: "lnux-entrada", value: l, readonly: true, "aria-label": "Link da sala" }), el("button", { class: "lnux-botao", type: "button", onclick: () => copiar(l) }, "Copiar"))),
       el("p", { class: "fraco pequeno", style: { margin: 0 } }, local && !publicos.length
-        ? "Este endereço (127.0.0.1) só vale neste aparelho. Para pessoas de fora entrarem, ligue no LNUX o compartilhamento dos Apps Web pela internet (o túnel) e crie a sala abrindo a Companhia pelo endereço do túnel; na rede de casa, abra o servidor para a rede e use o endereço com o IP do aparelho."
+        ? "Este endereço (127.0.0.1) só vale neste aparelho. Para pessoas de fora entrarem, publique a Companhia no LNUX (🧩 Apps Web › 💬 Publicar só a Companhia) e crie a sala por lá; na rede de casa, abra o servidor para a rede e use o endereço com o IP do aparelho."
         : "A sala existe enquanto o servidor deste aparelho estiver ligado. O link só dá acesso à sala (o cenário, os avatares e o bate-papo): quem entra não vê as suas pastas nem usa a ponte.")) });
   }
   async function sairDaSala(fechar) {
@@ -1623,16 +1633,16 @@
     mensagemDaSala({ sistema: true, texto: fechar ? "Você fechou a sala." : "Você saiu da sala." });
     atualizarSala();
   }
-  /** Quem criou a sala troca o cenário dela: todos passam para o novo. */
+  /** Quem criou a sala troca o cenário dela (um dos seus ou um mundo da loja, com a prévia): todos passam para o novo. */
   async function trocarMapaDaSala() {
     if (!sala || !sala.dentro || !sala.chave) return;
-    const mapas = await C.mapas.lista();
-    const sel = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], "");
-    if (!(await LNUX.dialogo({ titulo: "Trocar o cenário da sala", corpo: el("div", { class: "ajustes" }, el("label", { class: "lnux-campo" }, el("span", {}, "Cenário (os de Movimento › Cenário)"), sel)), botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Trocar", primario: true, valor: true }] }))) return;
-    if (!sel.value) { await C.salaPedir("DELETE", sala.codigo + "/mapa", { chave: sala.chave }); return; }
-    const reg = mapas.find((x) => x.id === sel.value), arqs = await C.mapas.ler(sel.value);
-    const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
-    await sala.mandarMapa(sala.codigo, { glb, nome: reg.nome, ajuste: reg.ajuste || {} });
+    const r = await C.escolherCenarioDaSala(ctxSalas, sala.info && sala.info.mapa && sala.info.mapa.loja ? "loja:" + sala.info.mapa.loja : "");
+    if (!r) return;
+    if (!r.cenario) { await C.salaPedir("DELETE", sala.codigo + "/mapa", { chave: sala.chave }); return; }
+    if (r.cenario.tipo === "loja") { await sala.mandarMapa(sala.codigo, { loja: r.cenario.id }); return; }
+    const reg = (await C.mapas.lista()).find((m) => m.id === r.cenario.id);
+    await sala.mandarMapa(sala.codigo, { glb: await glbDoMapa(r.cenario.id), nome: reg ? reg.nome : r.cenario.nome, ajuste: (reg && reg.ajuste) || {} });
+    if (r.miniatura) await sala.trocarMiniatura(r.miniatura).catch(() => {});
   }
   /** Gestos e expressões que os outros veem. */
   function barraDeGestos() {
@@ -1746,10 +1756,11 @@
     const naSala = () => !!(sala && sala.dentro), dono = () => naSala() && !!sala.chave;
     const semIA = new Set(["Perfil e personalidade...", "Emoções e expressões...", "Áreas de toque...", "Voz desta personagem...", "Mostrar áreas de toque", "Primeiros passos", "Núcleo do Live2D..."]);
     const menuSala = { rotulo: "Sala", itens: [
-      { rotulo: "Criar ou entrar numa sala...", acao: () => janelaSala() },
+      { rotulo: "Salas: entrar ou criar...", acao: () => janelaSala() },
       { rotulo: "Loja: personagens, mundos e animações...", acao: () => abrirLoja(), ativo: () => lojaDisponivel },
       { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
       { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
+      { rotulo: "Opções da sala (pública, senha, pessoas, bate-papo)...", acao: () => opcoesDaSala().catch(LNUX.erro), ativo: dono },
       { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
       "-",
       { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },

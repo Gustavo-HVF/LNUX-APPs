@@ -99,7 +99,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     // ── a visita: entra pelo link (sem a chave), no modo de jogar ──
     await visita.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
     await visita.pagina.waitForSelector("#sala-loja-personagem", { timeout: 30000 });
-    ok(await visita.ev(() => !window.LNUX.ponte.disponivel && !document.querySelector("#sala-loja-mundo")), "quem entra pelo link (sem a ponte) acha a loja na janela da sala: \"Personagens da loja\"");
+    ok(await visita.ev(() => !window.LNUX.ponte.disponivel && !!document.querySelector(".salas #sala-loja-personagem")), "quem entra pelo link (sem a ponte) acha a loja na lista de salas: \"Personagens da loja\"");
     await visita.pagina.click("#sala-loja-personagem");
     await visita.pagina.waitForSelector(".cartao-loja");
     const grade = await visita.ev(() => ({ abas: [...document.querySelectorAll(".loja-aba")].map((a) => a.textContent), ativa: document.querySelector(".loja-aba.ativa").dataset.tipo,
@@ -112,11 +112,9 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     ok((await desenhado(visita)) > 150 && (await visita.ev(() => !document.querySelector(".loja-acoes .perigo"))), "antes de usar, a personagem aparece em 3D (e a visita não pode apagar o que não é dela)");
     await visita.pagina.screenshot({ path: path.join(PASTA, "companhia-loja-2.png") });
     await visita.pagina.click("#loja-usar");
-    await visita.pagina.waitForSelector('.lnux-dialogo select[aria-label="Sua personagem"]', { timeout: 60000 });
-    await visita.pagina.waitForTimeout(300);
-    ok(await visita.ev(() => document.querySelector('.lnux-dialogo select[aria-label="Sua personagem"]').selectedOptions[0].text === "Boneco de teste" && !document.querySelector(".loja")),
-      "\"Usar esta personagem\" volta para a sala com ela escolhida");
-    await visita.pagina.click('.lnux-dialogo footer button:text-is("Fechar")');
+    await visita.pagina.waitForFunction(() => !document.querySelector(".loja:not(.salas)") && document.querySelector('.salas select[aria-label="Sua personagem"]').selectedOptions[0].text === "Boneco de teste", null, { timeout: 60000 });
+    ok(true, "\"Usar esta personagem\" volta para a lista de salas com ela escolhida");
+    await visita.pagina.click('.salas button[aria-label="Fechar a lista de salas"]');
     // o mundo e a animação
     await visita.ev(() => { window.Companhia.abrirLoja(); });
     await visita.pagina.waitForSelector(".cartao-loja");
@@ -193,6 +191,19 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await local.pagina.goto(`${sozinho}/apps/companhia/#token=${chave}&modo=jogar`);
     await local.pagina.waitForSelector("#sala-criar", { timeout: 30000 });
     ok(await local.ev(() => window.LNUX.ponte.disponivel && !document.querySelector('a[href="../../"]')), "no próprio aparelho, o dono (com a chave) usa a ponte e cria as salas");
+    // e quem chega pelo link isolado (sem a ponte) também cria a sala dele, pela lista de salas
+    const jogador = await pessoa("jogador de fora", { "Cf-Connecting-Ip": "198.51.100.23", "Cf-Ray": "8a1b2c3d4e60-GRU" });
+    await jogador.pagina.goto(`${sozinho}/#modo=jogar`);
+    await jogador.pagina.waitForSelector(".salas #sala-criar:not([hidden])", { timeout: 30000 });
+    await jogador.pagina.fill('.salas input[aria-label="Seu nome"]', "Carla");
+    await jogador.pagina.click("#sala-criar");
+    await jogador.pagina.waitForSelector('.lnux-dialogo input[aria-label="Nome da sala"]');
+    await jogador.pagina.click('.lnux-dialogo footer button:text-is("Criar e entrar")');
+    await jogador.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro, null, { timeout: 90000 });
+    await jogador.pagina.waitForSelector(".link-sala input");
+    const linkDeFora = await jogador.pagina.inputValue(".link-sala input");
+    ok(!(await jogador.ev(() => window.LNUX.ponte.disponivel)) && /^https:\/\/abc\.trycloudflare\.com\/apps\/companhia\/#sala=[a-z0-9]{8}$/.test(linkDeFora),
+      `pelo link isolado, sem a ponte, quem chega cria a sala dela pela lista de salas (o link sai com o endereço público: ${linkDeFora})`);
     await fora.pagina.screenshot({ path: path.join(PASTA, "companhia-loja-4.png") });
     ok(consola.length === 0, "sem erros no console no site publicado" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {

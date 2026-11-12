@@ -164,17 +164,21 @@ while True:
 BLENDER_ACHADO: dict = {}
 BLENDER_TRAVA = threading.Lock()
 
-# Companhia, salas: jogar com outras pessoas no mesmo cenário. A sala fica na memória deste servidor; só quem tem a
-# chave da ponte cria uma, e quem recebe o link (com o código da sala) entra sem a chave: o código só dá acesso à
-# sala (o cenário, os avatares, as posições e o bate-papo dela), nunca às pastas do aparelho. Os arquivos da sala
-# ficam em ~/.lnux-apps/tmp/salas/<código>/ e somem quando ela fecha.
+# Companhia, salas: jogar com outras pessoas no mesmo cenário. A sala fica na memória deste servidor. Quem abre a
+# Companhia por este servidor vê a lista das salas públicas e entra; cria uma sala quem tem a chave da ponte e, se o
+# dono deixar ("salas_visitantes" em ponte.json, ligado por padrão), qualquer um que chegou pelo link. Quem cria
+# escolhe nome, descrição, se a sala é pública (aparece na lista) ou privada (só com o link), senha, quantas pessoas
+# cabem, se tem bate-papo e o cenário (enviado ou um mundo da loja). O código da sala só dá acesso a ela (o
+# cenário, as personagens, as posições e o bate-papo), nunca às pastas do aparelho. Os arquivos da sala ficam em
+# ~/.lnux-apps/tmp/salas/<código>/ e somem quando ela fecha.
 SALAS: dict = {}
 SALAS_TRAVA = threading.Lock()
-SALA_MAXIMO = 6            # salas ao mesmo tempo
-SALA_PESSOAS = 16          # pessoas por sala
+SALA_MAXIMO = 12           # salas ao mesmo tempo
+SALA_POR_PESSOA = 3        # salas abertas ao mesmo tempo por quem não é o dono (pelo endereço de quem criou)
+SALA_PESSOAS = 16          # pessoas por sala (no máximo; quem cria pode pôr menos)
 RESERVA_DISCO = 300 * 1024 * 1024  # envios (cenário, personagens, loja) não podem deixar o aparelho com menos que isto livre
 SALA_SUMIU = 20            # segundos sem notícia de uma pessoa: ela saiu
-SALA_VAZIA = 3600          # segundos sem ninguém: a sala fecha
+SALA_VAZIA = 900           # segundos sem ninguém: a sala fecha
 SALA_LETRAS = "abcdefghjkmnpqrstuvwxyz23456789"  # sem as que se confundem (i, l, o, 0, 1)
 
 # Companhia, loja: personagens, mundos e animações guardados NESTE aparelho, numa pasta própria (~/.lnux-apps/loja,
@@ -191,9 +195,18 @@ LOJA_TRAVA = threading.Lock()
 
 
 class Sala:
-    def __init__(self, codigo: str, nome: str, pasta: Path):
+    def __init__(self, codigo: str, nome: str, pasta: Path, origem: str = ""):
         self.codigo, self.nome, self.pasta = codigo, nome, pasta
-        self.chave = secrets.token_urlsafe(18)   # de quem criou: trocar o cenário e fechar a sala
+        self.chave = secrets.token_urlsafe(18)   # de quem criou: trocar o cenário, mudar as opções e fechar a sala
+        self.origem = origem                     # de onde veio quem criou (para o limite de salas por pessoa)
+        self.criada = int(time.time())
+        self.descricao = ""
+        self.publica = True                      # aparece na lista; privada: só com o link (o código)
+        self.senha = ""                          # hash da senha (vazio: sem senha)
+        self.max = SALA_PESSOAS
+        self.bate_papo = True
+        self.criador = ""                        # o nome de quem criou (aparece na lista)
+        self.miniatura = 0                       # versão da miniatura (0: sem)
         self.vista = time.time()
         self.pessoas: dict = {}                  # id → {nome, segredo, visto, estado, avatar}
         self.mensagens: list = []
@@ -203,7 +216,36 @@ class Sala:
         self.trava = threading.Lock()
 
     def resumo(self) -> dict:
-        return {"codigo": self.codigo, "nome": self.nome, "pessoas": len(self.pessoas), "max": SALA_PESSOAS, "mapa": self.mapa}
+        return {"codigo": self.codigo, "nome": self.nome, "descricao": self.descricao, "pessoas": len(self.pessoas), "max": self.max,
+                "publica": self.publica, "senha": bool(self.senha), "bate_papo": self.bate_papo, "criador": self.criador,
+                "criada": self.criada, "miniatura": self.miniatura, "mapa": self.mapa}
+
+    def configurar(self, d: dict):
+        """As opções de quem cria (ou de quem criou, depois): o que vier no pedido muda; o resto fica."""
+        if "nome" in d:
+            self.nome = sala_texto(d.get("nome"), 40) or self.nome
+        if "descricao" in d:
+            self.descricao = sala_texto(d.get("descricao"), 200)
+        if "publica" in d:
+            self.publica = bool(d["publica"])
+        if "senha" in d:
+            senha = str(d.get("senha") or "")[:64]
+            self.senha = hashlib.sha256((self.codigo + ":" + senha).encode()).hexdigest() if senha else ""
+        if "max" in d:
+            try:
+                self.max = max(2, min(SALA_PESSOAS, int(d["max"])))
+            except (TypeError, ValueError):
+                pass
+        if "bate_papo" in d:
+            self.bate_papo = bool(d["bate_papo"])
+        if "criador" in d and not self.criador:
+            self.criador = sala_texto(d.get("criador"), 24)
+
+    def senha_confere(self, senha) -> bool:
+        if not self.senha:
+            return True
+        tentativa = hashlib.sha256((self.codigo + ":" + str(senha or "")[:64]).encode()).hexdigest()
+        return hmac.compare_digest(tentativa.encode(), self.senha.encode())
 
     def limpar(self, agora: float):
         """Tira quem parou de dar notícia (fechou a aba, perdeu a internet)."""
@@ -522,7 +564,12 @@ class Ponte:
     def publico(self) -> dict:
         """O que qualquer um pode saber deste servidor (sem a chave): o que ele oferece aos visitantes."""
         return {"versao": VERSAO, "so_app": self.so_app["id"] if self.so_app else None, "ponte": self.ligada,
-                "salas": self.ligada, "loja": self.ligada, "loja_publicar": self.ligada and self.loja_publicar()}
+                "salas": self.ligada, "salas_criar": self.ligada and self.salas_visitantes(),
+                "loja": self.ligada, "loja_publicar": self.ligada and self.loja_publicar()}
+
+    def salas_visitantes(self) -> bool:
+        """Quem chega pelo link (sem a chave) pode criar salas? Ligado por padrão; o dono desliga."""
+        return self.config.get("salas_visitantes", True) is not False
 
     def loja_publicar(self) -> bool:
         return self.config.get("loja_publicar", True) is not False
@@ -1060,6 +1107,8 @@ class Manipulador(BaseHTTPRequestHandler):
         # As salas da Companhia têm acesso próprio: criar exige a chave da ponte; entrar, só o código da sala
         if rota == "sala" or rota.startswith("sala/"):
             return self.sala(self.command, rota[5:])
+        if rota in ("salas", "salas/ajustes"):
+            return self.salas(self.command, rota)
         # A loja também: ver e baixar, qualquer um; publicar, se o dono deixar; apagar, o dono ou quem publicou
         if rota == "loja" or rota.startswith("loja/"):
             return self.loja(self.command, rota[5:])
@@ -1315,18 +1364,23 @@ class Manipulador(BaseHTTPRequestHandler):
         partes = [x for x in resto.split("/") if x]
         if not partes:
             if m != "POST":
-                raise ErroPonte(405, "Use POST para criar uma sala.")
-            if not self.autorizado(False):
-                raise ErroPonte(401, "Só cria salas quem abriu a Companhia pelo LNUX (com a chave da ponte) no aparelho que vai ser o servidor.")
-            nome = sala_texto(self.ler_json().get("nome"), 40) or "Sala"
+                raise ErroPonte(405, "Use POST para criar uma sala (e GET /api/salas para ver as abertas).")
+            dono = self.autorizado(False)
+            if not dono and not self.ponte.salas_visitantes():
+                raise ErroPonte(403, "O dono deste servidor não está deixando criar salas por aqui. Entre numa das salas abertas.")
+            d = self.ler_json()
+            origem = self.origem_do_pedido()
             with SALAS_TRAVA:
                 if len(SALAS) >= SALA_MAXIMO:
-                    raise ErroPonte(429, f"Este servidor já tem {SALA_MAXIMO} salas abertas. Feche uma antes de criar outra.")
+                    raise ErroPonte(429, f"Este servidor já tem {SALA_MAXIMO} salas abertas. Entre numa delas ou espere uma fechar.")
+                if not dono and sum(1 for x in SALAS.values() if x.origem == origem) >= SALA_POR_PESSOA:
+                    raise ErroPonte(429, f"Você já tem {SALA_POR_PESSOA} salas abertas neste servidor. Feche uma antes de criar outra.")
                 codigo = "".join(secrets.choice(SALA_LETRAS) for _ in range(8))
                 pasta = self.ponte.temporarios / "salas" / codigo
                 shutil.rmtree(pasta, ignore_errors=True)
                 pasta.mkdir(parents=True, exist_ok=True)
-                nova = SALAS[codigo] = Sala(codigo, nome, pasta)
+                nova = SALAS[codigo] = Sala(codigo, "Sala", pasta, "" if dono else origem)
+                nova.configurar({"nome": "Sala", **d})
             # os endereços por onde outras pessoas alcançam este servidor: o túnel liberado e a rede de casa
             enderecos = [f"https://{h}" for h in self.ponte.hosts_extras]
             if self.server.server_address[0] not in ("127.0.0.1", "::1", "localhost"):
@@ -1372,6 +1426,41 @@ class Manipulador(BaseHTTPRequestHandler):
                 sala.mapa = {"nome": sala_texto(p.get("nome"), 80) or "Cenário", "tamanho": (sala.pasta / "mapa.glb").stat().st_size,
                              "versao": sala.versao_mapa, "ajuste": (sala.mapa or {}).get("ajuste", {})}
             return self.responder_json(sala.resumo(), 201)
+        if acao == "mapa" and m == "POST":  # um mundo da loja vira o cenário (sem precisar enviar o arquivo)
+            dono()
+            ident = str(self.ler_json().get("loja") or "")
+            with LOJA_TRAVA:
+                item = next((i for i in self.loja_itens() if i["id"] == ident and i["tipo"] == "mundo"), None)
+            if not item:
+                raise ErroPonte(404, "Esse mundo não está mais na loja.")
+            cabe_no_disco(sala.pasta, item["tamanho"])
+            shutil.copyfile(item["_arq"], sala.pasta / "mapa.glb")
+            with sala.trava:
+                sala.versao_mapa += 1
+                sala.mapa = {"nome": item["nome"], "tamanho": item["tamanho"], "versao": sala.versao_mapa, "ajuste": (sala.mapa or {}).get("ajuste", {}), "loja": item["id"]}
+                if item["_mini"]:
+                    for e in ("png", "jpg", "webp"):
+                        (sala.pasta / f"miniatura.{e}").unlink(missing_ok=True)
+                    shutil.copyfile(item["_mini"], sala.pasta / ("miniatura" + item["_mini"].suffix))
+                    sala.miniatura += 1
+            return self.responder_json(sala.resumo(), 201)
+        if acao == "miniatura" and m == "PUT":
+            dono()
+            dados = self.ler_corpo(LOJA_MINIATURA)
+            ext = tipo_de_imagem(dados)
+            if not ext:
+                raise ErroPonte(400, "A miniatura precisa ser PNG, JPEG ou WebP.")
+            for e in ("png", "jpg", "webp"):
+                (sala.pasta / f"miniatura.{e}").unlink(missing_ok=True)
+            (sala.pasta / f"miniatura.{ext}").write_bytes(dados)
+            with sala.trava:
+                sala.miniatura += 1
+            return self.responder_json(sala.resumo(), 201)
+        if acao == "miniatura" and m in ("GET", "HEAD"):
+            arquivo = next((sala.pasta / f"miniatura.{e}" for e in ("png", "jpg", "webp") if (sala.pasta / f"miniatura.{e}").is_file()), None)
+            if not arquivo:
+                raise ErroPonte(404, "Esta sala não tem miniatura.")
+            return self.enviar_arquivo(arquivo, {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}[arquivo.suffix], cache="private, max-age=3600")
         if acao == "mapa" and m == "DELETE":
             dono()
             with sala.trava:
@@ -1383,18 +1472,23 @@ class Manipulador(BaseHTTPRequestHandler):
             dono()
             d = self.ler_json()
             with sala.trava:
-                if "nome" in d:
-                    sala.nome = sala_texto(d.get("nome"), 40) or sala.nome
+                sala.configurar({k: v for k, v in d.items() if k != "criador"})
                 if sala.mapa and isinstance(d.get("ajuste"), dict) and len(json.dumps(d["ajuste"])) < 2000:
                     sala.versao_mapa += 1
                     sala.mapa = {**sala.mapa, "ajuste": d["ajuste"], "versao": sala.versao_mapa}
             return self.responder_json(sala.resumo())
         if acao == "entrar" and m == "POST":
-            nome = sala_texto(self.ler_json().get("nome"), 24) or "Visitante"
+            d = self.ler_json()
+            nome = sala_texto(d.get("nome"), 24) or "Visitante"
+            chave = self.headers.get("X-Sala-Chave", "")
+            de_quem_criou = bool(chave and hmac.compare_digest(chave.encode(), sala.chave.encode()))
+            if not de_quem_criou and not sala.senha_confere(d.get("senha")):
+                time.sleep(0.4)  # sem pressa para quem tenta adivinhar
+                raise ErroPonte(403, "Senha errada." if d.get("senha") else "Esta sala tem senha.")
             with sala.trava:
                 sala.limpar(agora)
-                if len(sala.pessoas) >= SALA_PESSOAS:
-                    raise ErroPonte(429, f"A sala está cheia ({SALA_PESSOAS} pessoas).")
+                if len(sala.pessoas) >= sala.max:
+                    raise ErroPonte(429, f"A sala está cheia ({sala.max} pessoas).")
                 pid = secrets.token_hex(4)
                 sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
@@ -1420,6 +1514,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 sala.tirar(str(d["id"]))
                 return self.responder_json({"ok": True})
             if acao == "falar":
+                if not sala.bate_papo:
+                    raise ErroPonte(403, "O bate-papo desta sala está desligado.")
                 texto = sala_texto(d.get("texto"), 300)
                 if not texto:
                     raise ErroPonte(400, "Faltou o texto.")
@@ -1437,7 +1533,7 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.responder_json({
                 "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "estado": x["estado"]} for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
-                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome})
+                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo})
 
     # ── loja da Companhia
 
@@ -1583,6 +1679,33 @@ class Manipulador(BaseHTTPRequestHandler):
             raise
         item = next(i for i in self.loja_itens() if i["id"] == ident)
         return self.responder_json({"item": {k: v for k, v in item.items() if not k.startswith("_")}, "segredo": segredo}, 201)
+
+    def origem_do_pedido(self) -> str:
+        """De onde vem o pedido: o endereço de verdade de quem está do outro lado (pela Cloudflare, o Cf-Connecting-Ip)."""
+        if self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1") and self.headers.get("Cf-Connecting-Ip"):
+            return str(self.headers.get("Cf-Connecting-Ip"))[:64]
+        return self.client_address[0]
+
+    def salas(self, m: str, rota: str):
+        """GET /api/salas: as salas públicas deste servidor (a lista para entrar) e se quem pede pode criar uma.
+        POST /api/salas/ajustes: o dono decide se quem chega pelo link cria salas."""
+        dono = self.autorizado(False)
+        salas_limpar(time.time())
+        if rota == "salas" and m in ("GET", "HEAD"):
+            with SALAS_TRAVA:
+                lista = [x.resumo() for x in SALAS.values() if x.publica]
+            lista.sort(key=lambda x: (-x["pessoas"], -x["criada"]))
+            return self.responder_json({"salas": lista, "criar": dono or self.ponte.salas_visitantes(), "visitantes_criam": self.ponte.salas_visitantes(),
+                                        "dono": dono, "abertas": len(SALAS), "maximo": SALA_MAXIMO, "pessoas_max": SALA_PESSOAS})
+        if rota == "salas/ajustes" and m == "POST":
+            if not dono:
+                raise ErroPonte(403, "Só o dono do servidor (com a chave da ponte, neste aparelho) muda isso.")
+            d = self.ler_json()
+            if "visitantes_criam" in d:
+                self.ponte.config["salas_visitantes"] = bool(d["visitantes_criam"])
+                gravar_config(self.ponte.config)
+            return self.responder_json({"visitantes_criam": self.ponte.salas_visitantes()})
+        raise ErroPonte(404, f"/api/{rota} não aceita {m}.")
 
     def blender(self, metodo: str, resto: str):
         """Converter .blend em .glb com o Blender do aparelho. GET /api/blender diz se há Blender; PUT /api/blender/<lote>/<nome>
