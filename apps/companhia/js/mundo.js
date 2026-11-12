@@ -441,11 +441,13 @@
       }
       cam.position.copy(k.alvo).addScaledVector(dir, dist);
       cam.lookAt(k.alvo);
-      // a luz acompanha a câmera, de cima
+      // a luz acompanha a câmera, de cima (com a luz realista, quem manda é o sol: palco.atualizarLuz)
       const luz = this.palco.luz;
-      luz.position.copy(k.alvo).addScaledVector(dir, 2).add(this._v.set(0.6, 2.2, 0));
-      luz.target.position.copy(k.alvo);
-      luz.target.updateMatrixWorld();
+      if (!this.palco.luzSol) {
+        luz.position.copy(k.alvo).addScaledVector(dir, 2).add(this._v.set(0.6, 2.2, 0));
+        luz.target.position.copy(k.alvo);
+        luz.target.updateMatrixWorld();
+      }
     }
 
     // ── cenário: abrir, ajustar, tirar ──────────────────────────────
@@ -500,6 +502,9 @@
       objeto.traverse((o) => {
         if (!o.isMesh) return;
         o.frustumCulled = true;
+        o.castShadow = o.receiveShadow = true; // só valem com "Luz e sombras realistas" ligada
+        // malha sem normais (o glTF permite: fica facetada): sem elas a conta da sombra dá "não é número" e a sombra some
+        if (o.geometry && o.geometry.attributes.position && !o.geometry.attributes.normal) o.geometry.computeVertexNormals();
         const g = o.geometry;
         triangulos += g.index ? g.index.count / 3 : (g.attributes.position ? g.attributes.position.count / 3 : 0);
       });

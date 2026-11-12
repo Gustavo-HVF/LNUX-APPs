@@ -232,6 +232,42 @@ async function baixar(url, destino) {
     await pagina.waitForFunction(() => window.Companhia.palco.mundo.andando, null, { timeout: 5000 });
     ok(await ev(() => !!document.querySelector(".controles-mundo .direcional") && window.Companhia.palco.zonasAtuais().length === 0 && window.Companhia.palco.camera.fov === 50),
       "andar pelo cenário: câmera em terceira pessoa, direcional na tela e toques desligados");
+    // ── luz e sombras realistas (dá para desligar) ──
+    const luz = await ev(async () => {
+      const p = window.Companhia.palco, T = window.THREE, r = p.renderer, gl = r.getContext();
+      const quadros = (n) => new Promise((fim) => { const f = () => (n-- > 0 ? requestAnimationFrame(f) : fim()); f(); });
+      // uma caixa no ar, de lado: a sombra dela cai no piso do cenário, num ponto que dá para calcular pelo sol
+      const caixa = new T.Mesh(new T.BoxGeometry(1, 1, 1), new T.MeshStandardMaterial({ color: 0xcc5533 }));
+      caixa.position.set(2.2, 2.5, 1.6);
+      caixa.castShadow = true;
+      p.cena.add(caixa);
+      const ler = async () => {
+        await quadros(4);
+        const a = p.luzCfg.sol * Math.PI / 180, t = 1.5 / Math.tan(p.luzCfg.altura * Math.PI / 180);
+        const ponto = new T.Vector3(2.2 - Math.sin(a) * t, 1, 1.6 - Math.cos(a) * t).project(p.camera), px = new Uint8Array(4), tela = r.domElement;
+        r.render(p.cena, p.camera);
+        gl.readPixels(Math.round((ponto.x + 1) / 2 * tela.width), Math.round((ponto.y + 1) / 2 * tela.height), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return { claro: px[0] + px[1] + px[2], naTela: Math.abs(ponto.x) < 0.95 && Math.abs(ponto.y) < 0.95 };
+      };
+      const estado = () => ({ sombras: r.shadowMap.enabled && p.luz.castShadow, tons: r.toneMapping !== T.NoToneMapping, redonda: p.mundo.sombra.material.opacity });
+      p.definirLuz({ realista: true, sombras: true, sol: 135, altura: 55 });
+      const com = await ler(), ligada = estado();
+      p.definirLuz({ sombras: false });
+      const sem = await ler(), semSombras = estado();
+      p.definirLuz({ sombras: true });
+      p.cena.remove(caixa);
+      let normais = true;
+      p.mundo.mapa.traverse((o) => { if (o.isMesh && !o.geometry.attributes.normal) normais = false; });
+      return { com, sem, ligada, semSombras, normais };
+    });
+    ok(luz.ligada.sombras && luz.ligada.tons && luz.ligada.redonda === 0 && luz.com.naTela && luz.normais && luz.com.claro < luz.sem.claro * 0.9,
+      `luz e sombras realistas: o sol faz sombra no piso do cenário (ponto na sombra ${luz.com.claro}, sem sombra ${luz.sem.claro}) e a sombra redonda some`);
+    ok(!luz.semSombras.sombras && luz.semSombras.tons && luz.semSombras.redonda === 1, "\"Sombras\" desligada: fica a luz do sol, sem sombra (a redonda volta)");
+    await pagina.click('.painel-estudio label:has-text("Luz e sombras realistas") input');
+    await esperar(300);
+    ok(await ev(() => { const p = window.Companhia.palco, r = p.renderer; return !p.luzCfg.realista && !r.shadowMap.enabled && !p.luz.castShadow && r.toneMapping === window.THREE.NoToneMapping && p.luzSol === false && JSON.parse(LNUX.preferencia.ler("companhia.luz", "{}")).realista === false; }),
+      "desligar \"Luz e sombras realistas\" no painel volta à luz simples de antes, e a escolha fica guardada");
+    await pagina.click('.painel-estudio label:has-text("Luz e sombras realistas") input');
     await pagina.mouse.click(200, 420); // o palco recebe as teclas
     const z0 = (await corpo()).raiz[2];
     await pagina.keyboard.down("KeyW");

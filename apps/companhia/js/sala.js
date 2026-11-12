@@ -77,7 +77,7 @@
   function criarBoneco(cor) {
     const T = window.THREE, g = new T.Group();
     const mat = new T.MeshStandardMaterial({ color: cor, roughness: 0.7 }), claro = new T.MeshStandardMaterial({ color: 0xf2e6da, roughness: 0.8 });
-    const parte = (geo, m, x, y, z) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); g.add(o); return o; };
+    const parte = (geo, m, x, y, z) => { const o = new T.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; g.add(o); return o; };
     parte(new T.CapsuleGeometry(0.2, 0.5, 6, 14), mat, 0, 0.95, 0);                 // tronco
     parte(new T.SphereGeometry(0.17, 18, 14), claro, 0, 1.47, 0);                    // cabeça
     parte(new T.BoxGeometry(0.2, 0.05, 0.06), new T.MeshStandardMaterial({ color: 0x1c2233 }), 0, 1.5, 0.15); // "olhos": mostra para onde olha
@@ -100,7 +100,7 @@
     V.VRMUtils.removeUnnecessaryVertices(gltf.scene);
     if (V.VRMUtils.combineSkeletons) V.VRMUtils.combineSkeletons(gltf.scene);
     V.VRMUtils.rotateVRM0(vrm);
-    vrm.scene.traverse((o) => { o.frustumCulled = false; });
+    vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) o.castShadow = o.receiveShadow = true; });
     if (limiteTextura) C.Palco3D.prototype.reduzirTexturas.call({ modelo: vrm.scene, texturas: [] }, limiteTextura); // os avatares dos outros pesam menos
     const ext = (gltf.parser.json && gltf.parser.json.extensions) || {};
     const v0 = vrm.meta ? vrm.meta.metaVersion === "0" : !!ext.VRM && !ext.VRMC_vrm;

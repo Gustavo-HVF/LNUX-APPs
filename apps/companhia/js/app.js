@@ -1543,6 +1543,7 @@
       "-",
       { rotulo: "Mostrar áreas de toque", marcado: () => mostrarZonas, acao: () => { mostrarZonas = !mostrarZonas; desenharZonas(); } },
       { rotulo: "Mostrar atalhos de expressão", marcado: () => pref("atalhos", "1") === "1", acao: () => { gravarPref("atalhos", pref("atalhos", "1") === "1" ? "0" : "1"); desenharAtalhos(); } },
+      { rotulo: "Luz e sombras realistas (no cenário)", marcado: () => !!(palco.luzCfg && palco.luzCfg.realista), acao: () => palco.definirLuz({ realista: !palco.luzCfg.realista }), ativo: () => !!(atual && atual.tipo === "vrm") },
       { rotulo: "Fundo...", acao: janelaFundo },
       { rotulo: "Salvar foto (PNG)...", acao: foto, ativo: comPersonagem },
       { rotulo: "Tela cheia", atalho: "F11", acao: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}) },
