@@ -7,7 +7,8 @@ Sobe o servidor numa porta livre, com uma pasta pessoal TEMPORÁRIA (não mexe n
 arquivos dos apps, chave da ponte, proteção contra outros sites e DNS rebinding, pastas liberadas (inclusive
 atalhos para fora), leitura com Range, gravação sem sobrescrever, mover/copiar/apagar, envio temporário,
 conversão com o ffmpeg (se estiver instalado), comandos desligados/ligados, o modo sem ponte, as salas e a loja da
-Companhia e o modo que publica só um app (--so-app), em que quem chega pela internet nunca usa a ponte.
+Companhia, as contas (cadastro com o código por e-mail, entrar, perfil, trocar a senha; com um servidor de e-mail de
+mentira) e o modo que publica só um app (--so-app), em que quem chega pela internet nunca usa a ponte.
 
 Uso:  python3 tests/testar_servidor.py
 """
@@ -648,6 +649,184 @@ def _():
     for codigo in list(lnux_apps.SALAS):
         lnux_apps.SALAS.pop(codigo)
     assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}")[0] == 200  # a loja volta vazia para o caso dela
+
+
+class SMTPFalso:
+    """Um servidor de e-mail de mentira (só o necessário do SMTP): guarda o que chega para o teste ler o código."""
+
+    def __init__(self):
+        import socketserver
+        caixa = self.mensagens = []
+        autenticacoes = self.autenticacoes = []
+
+        class Manipulador(socketserver.StreamRequestHandler):
+            def handle(self):
+                escrever = lambda t: self.wfile.write((t + "\r\n").encode())
+                escrever("220 falso ESMTP")
+                while True:
+                    linha = self.rfile.readline()
+                    if not linha:
+                        return
+                    cmd = linha.decode("utf-8", "replace").strip()
+                    up = cmd.upper()
+                    if up.startswith(("EHLO", "HELO")):
+                        escrever("250-falso")
+                        escrever("250 AUTH PLAIN LOGIN")
+                    elif up.startswith("AUTH"):
+                        autenticacoes.append(cmd)
+                        escrever("235 ok")
+                    elif up == "DATA":
+                        escrever("354 manda")
+                        linhas = []
+                        while True:
+                            l = self.rfile.readline()
+                            if l in (b".\r\n", b".\n", b""):
+                                break
+                            linhas.append(l)
+                        caixa.append(b"".join(linhas).decode("utf-8", "replace"))
+                        escrever("250 ok")
+                    elif up == "QUIT":
+                        escrever("221 tchau")
+                        return
+                    else:
+                        escrever("250 ok")
+
+        socketserver.ThreadingTCPServer.allow_reuse_address = True
+        self.servidor = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Manipulador)
+        self.servidor.daemon_threads = True
+        self.porta = self.servidor.server_address[1]
+        threading.Thread(target=self.servidor.serve_forever, daemon=True).start()
+
+    def ultima(self):
+        import email
+        import email.policy
+        return email.message_from_string(self.mensagens[-1], policy=email.policy.default)
+
+    def codigo(self):
+        import re
+        return re.search(r"\b(\d{6})\b", self.ultima()["Subject"]).group(1)
+
+    def parar(self):
+        self.servidor.shutdown()
+        self.servidor.server_close()
+
+
+@caso("Contas: cadastro com o código por e-mail, entrar, perfil (foto, bio...), esqueci a senha, apagar; tudo guardado no aparelho")
+def _():
+    import re
+    import stat
+    smtp = SMTPFalso()
+    visita = dict(token=False)
+    try:
+        sem = {"nome": "Ana", "email": "ana@exemplo.com", "senha": "segredo123", "idade": 20}
+        # sem o e-mail do servidor configurado, não dá para criar conta
+        assert S.json("GET", "/api/contas/config", **visita)[1]["email"] is False
+        assert S.json("POST", "/api/contas/cadastro", json_corpo=sem, **visita)[0] == 503
+        # o dono configura o e-mail (a senha do e-mail fica no aparelho e nunca volta)
+        assert S.json("GET", "/api/contas/ajustes", **visita)[0] == 403
+        assert S.json("POST", "/api/contas/ajustes", json_corpo={"email": {"servidor": "x"}}, **visita)[0] == 403
+        r = S.json("POST", "/api/contas/ajustes", json_corpo={"email": {"servidor": "127.0.0.1", "porta": smtp.porta, "seguranca": "nenhuma", "usuario": "dono",
+                                                                         "senha": "senha-do-email", "remetente": "dono@exemplo.com", "nome": "Servidor da Praça"}})[1]
+        assert r["email"] is True
+        aj = S.json("GET", "/api/contas/ajustes")[1]
+        assert aj["email"]["configurado"] and aj["email"]["tem_senha"] and "senha-do-email" not in json.dumps(aj) and aj["idade_minima"] == 13
+        assert (os.stat(Path(os.environ["LNUX_APPS_DADOS"]) / "email.json").st_mode & 0o777) == 0o600
+        assert S.json("POST", "/api/contas/email-teste", json_corpo={"para": "dono@exemplo.com"})[0] == 200
+        assert smtp.ultima()["To"] == "dono@exemplo.com" and smtp.autenticacoes, smtp.autenticacoes
+        assert S.json("GET", "/api/publico", **visita)[1]["contas_email"] is True
+        # cadastro: confere os dados
+        assert S.json("POST", "/api/contas/cadastro", json_corpo={**sem, "email": "ana@"}, **visita)[0] == 400
+        assert S.json("POST", "/api/contas/cadastro", json_corpo={**sem, "senha": "curta"}, **visita)[0] == 400
+        assert S.json("POST", "/api/contas/cadastro", json_corpo={**sem, "idade": 11}, **visita)[0] == 403  # menos que a idade mínima
+        status, r, _ = S.json("POST", "/api/contas/cadastro", json_corpo={**sem, "email": "Ana@Exemplo.com"}, **visita)
+        assert status == 201 and r["pendente"] and r["email"] == "an***@exemplo.com", r
+        msg = smtp.ultima()
+        assert msg["To"] == "ana@exemplo.com" and "Servidor da Praça" in msg["From"] and re.search(r"\b\d{6}\b", msg.get_content()), msg
+        codigo = smtp.codigo()
+        # antes de confirmar, não entra (e não manda outro código antes de 1 minuto)
+        status, r, _ = S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "segredo123"}, **visita)
+        assert status == 403 and r["pendente"], r
+        assert S.json("POST", "/api/contas/reenviar", json_corpo={"email": "ana@exemplo.com"}, **visita)[0] == 429
+        errado = "000000" if codigo != "000000" else "111111"
+        assert S.json("POST", "/api/contas/verificar", json_corpo={"email": "ana@exemplo.com", "codigo": errado}, **visita)[0] == 403
+        status, r, _ = S.json("POST", "/api/contas/verificar", json_corpo={"email": "ana@exemplo.com", "codigo": codigo}, **visita)
+        assert status == 200 and len(r["sessao"]) > 30 and r["conta"]["email"] == "ana@exemplo.com" and r["conta"]["idade"] == 20 and r["conta"]["verificada"], r
+        sessao = r["sessao"]
+        assert S.json("POST", "/api/contas/verificar", json_corpo={"email": "ana@exemplo.com", "codigo": codigo}, **visita)[0] == 410  # o código só vale uma vez
+        assert S.json("POST", "/api/contas/cadastro", json_corpo=sem, **visita)[0] == 409
+        # o que fica no aparelho: senha, código e sessão só como hash, com permissão 600
+        arquivo = Path(os.environ["LNUX_APPS_DADOS"]) / "contas" / "contas.json"
+        texto = arquivo.read_text()
+        assert (os.stat(arquivo).st_mode & 0o777) == 0o600 and "segredo123" not in texto and sessao not in texto and codigo not in texto
+        # entrar
+        assert S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "errada123"}, **visita)[0] == 401
+        status, r, _ = S.json("POST", "/api/contas/entrar", json_corpo={"email": "ANA@exemplo.com", "senha": "segredo123"}, **visita)
+        assert status == 200 and r["conta"]["nome"] == "Ana"
+        eu = {"X-Conta-Sessao": sessao}
+        assert S.json("GET", "/api/contas/eu", **visita)[0] == 401 and S.json("GET", "/api/contas/eu", cabecalhos=eu, **visita)[1]["email"] == "ana@exemplo.com"
+        # perfil: nome, bio, pronomes, local, links, cor, foto e capa
+        r = S.json("POST", "/api/contas/perfil", json_corpo={"nome": "Ana Clara", "bio": "Gosto de dançar\n<b>e de jogar</b>", "pronomes": "ela/dela", "local": "Recife",
+                                                            "links": ["https://exemplo.com/ana"], "cor": "#ff8800"}, cabecalhos=eu, **visita)[1]
+        assert r["nome"] == "Ana Clara" and r["bio"] == "Gosto de dançar\n<b>e de jogar</b>" and r["links"] == ["https://exemplo.com/ana"] and r["cor"] == "#ff8800"
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"links": ["javascript:alert(1)"]}, cabecalhos=eu, **visita)[0] == 400
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"bio": "x"}, **visita)[0] == 401
+        assert S.pedir("PUT", "/api/contas/midia?tipo=foto", corpo=b"<svg/>", cabecalhos=eu, **visita)[0] == 400
+        assert S.pedir("PUT", "/api/contas/midia?tipo=foto", corpo=PNG, cabecalhos=eu, **visita)[0] == 200
+        assert S.pedir("PUT", "/api/contas/midia?tipo=capa", corpo=PNG, cabecalhos=eu, **visita)[0] == 200
+        cid = r["id"]
+        publico = S.json("GET", f"/api/contas/perfil/{cid}", **visita)[1]
+        assert publico["nome"] == "Ana Clara" and publico["foto"] and publico["capa"] and "email" not in publico and "idade" not in publico
+        status, cab, dados = S.pedir("GET", f"/api/contas/midia/{cid}/foto", **visita)
+        assert status == 200 and cab["Content-Type"] == "image/png" and dados == PNG
+        assert (Path(os.environ["LNUX_APPS_DADOS"]) / "contas" / "midia" / f"{cid}-foto.png").is_file()
+        # nas salas: quem entra com a conta aparece com o nome e a conta dela
+        _, sala, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Da Ana", "criador": "outro nome"}, cabecalhos=eu, **visita)
+        assert sala["criador"] == "Ana Clara"
+        _, eu_na_sala, _ = S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "qualquer"}, cabecalhos={**eu, "X-Sala-Chave": sala["chave"]}, **visita)
+        pessoas = S.json("POST", f"/api/sala/{sala['codigo']}/estado", json_corpo={"id": eu_na_sala["id"], "segredo": eu_na_sala["segredo"]}, **visita)[1]["pessoas"]
+        assert pessoas[0]["nome"] == "Ana Clara" and pessoas[0]["conta"] == cid
+        # o dono pode exigir conta para jogar
+        S.json("POST", "/api/contas/ajustes", json_corpo={"exigir_conta": True})
+        assert S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "Sem conta"}, **visita)[0] == 401
+        assert S.json("POST", "/api/sala", json_corpo={"nome": "X"}, cabecalhos={"Cf-Connecting-Ip": "192.0.2.9"}, **visita)[0] == 401
+        assert S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={}, cabecalhos=eu, **visita)[0] == 201
+        assert S.json("GET", "/api/publico", **visita)[1]["exigir_conta"] is True
+        S.json("POST", "/api/contas/ajustes", json_corpo={"exigir_conta": False})
+        S.json("DELETE", f"/api/sala/{sala['codigo']}", cabecalhos={"X-Sala-Chave": sala["chave"]}, **visita)
+        # trocar a senha (as outras sessões saem)
+        _, outra, _ = S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "segredo123"}, **visita)
+        assert S.json("POST", "/api/contas/senha", json_corpo={"atual": "errada123", "nova": "novasenha1"}, cabecalhos=eu, **visita)[0] == 403
+        assert S.json("POST", "/api/contas/senha", json_corpo={"atual": "segredo123", "nova": "novasenha1"}, cabecalhos=eu, **visita)[0] == 200
+        assert S.json("GET", "/api/contas/eu", cabecalhos={"X-Conta-Sessao": outra["sessao"]}, **visita)[0] == 401 and S.json("GET", "/api/contas/eu", cabecalhos=eu, **visita)[0] == 200
+        # esqueci a senha: a mesma resposta com ou sem conta; o código chega; a senha nova vale e as sessões antigas saem
+        enviados = len(smtp.mensagens)
+        assert S.json("POST", "/api/contas/recuperar", json_corpo={"email": "ninguem@exemplo.com"}, **visita)[1]["ok"] and len(smtp.mensagens) == enviados
+        assert S.json("POST", "/api/contas/recuperar", json_corpo={"email": "ana@exemplo.com"}, **visita)[1]["ok"] and len(smtp.mensagens) == enviados + 1
+        assert S.json("POST", "/api/contas/redefinir", json_corpo={"email": "ana@exemplo.com", "codigo": "123", "senha": "outrasenha2"}, **visita)[0] == 403
+        status, r, _ = S.json("POST", "/api/contas/redefinir", json_corpo={"email": "ana@exemplo.com", "codigo": smtp.codigo(), "senha": "outrasenha2"}, **visita)
+        assert status == 200 and r["sessao"]
+        assert S.json("GET", "/api/contas/eu", cabecalhos=eu, **visita)[0] == 401
+        assert S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "outrasenha2"}, **visita)[0] == 200
+        eu = {"X-Conta-Sessao": r["sessao"]}
+        # tentativas demais de senha: espera
+        for _ in range(8):
+            S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "chutando1"}, **visita)
+        assert S.json("POST", "/api/contas/entrar", json_corpo={"email": "ana@exemplo.com", "senha": "outrasenha2"}, **visita)[0] == 429
+        lnux_apps.TENTATIVAS.clear()
+        # o dono vê a lista; a pessoa apaga a própria conta (com a senha), e as fotos somem
+        lista = S.json("GET", "/api/contas/lista")[1]["contas"]
+        assert [c["email"] for c in lista] == ["ana@exemplo.com"] and S.json("GET", "/api/contas/lista", **visita)[0] == 403
+        assert S.json("POST", "/api/contas/apagar", json_corpo={"senha": "errada123"}, cabecalhos=eu, **visita)[0] == 403
+        assert S.json("POST", "/api/contas/apagar", json_corpo={"senha": "outrasenha2"}, cabecalhos=eu, **visita)[0] == 200
+        assert S.json("GET", f"/api/contas/perfil/{cid}", **visita)[0] == 404 and not list((Path(os.environ["LNUX_APPS_DADOS"]) / "contas" / "midia").glob(f"{cid}-*"))
+        # um cadastro nunca confirmado some depois de 2 dias
+        S.json("POST", "/api/contas/cadastro", json_corpo={**sem, "email": "bia@exemplo.com", "nome": "Bia"}, **visita)
+        cadastro = lnux_apps.contas_de(lnux_apps.DADOS)
+        next(c for c in cadastro.ler()["contas"].values() if c["email"] == "bia@exemplo.com")["criada"] -= 3 * 86400
+        assert not any(c["email"] == "bia@exemplo.com" for c in cadastro.ler()["contas"].values())
+    finally:
+        smtp.parar()
+        lnux_apps.TENTATIVAS.clear()
 
 
 @caso("Salas: a personagem e o cenário não têm limite de tamanho (só o espaço livre do aparelho)")
