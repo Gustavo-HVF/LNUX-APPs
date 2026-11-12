@@ -408,12 +408,13 @@
       for (const n of p.ativas || []) if (this.expressoes.has(n)) Object.assign(this.expressoes.get(n), { alvo: 1, peso: 1 });
       this.acharMorfos(gltf);
       // peças de roupa (agrupadas pelo nome do material)
-      const porNome = new Map();
+      // (num avatar convertido os nomes não seguem os do VRoid: todo material é uma peça, para esconder ou pôr a textura)
+      const porNome = new Map(), extras = (gltf.parser && gltf.parser.json && gltf.parser.json.extras) || {}, convertido = !!(extras.companhia && extras.companhia.convertido);
       vrm.scene.traverse((o) => {
         if (!o.isMesh) return;
         for (const m of [].concat(o.material || [])) {
           const n = nomePeca(m.name);
-          if (!n || NAO_ROUPA.test(n) || !ROUPA.test(n)) continue;
+          if (!n || (!convertido && (NAO_ROUPA.test(n) || !ROUPA.test(n)))) continue;
           if (!porNome.has(n)) porNome.set(n, { nome: n, materiais: new Set(), visivel: true });
           porNome.get(n).materiais.add(m);
         }
@@ -1060,6 +1061,8 @@
     const autor = (m.authors || []).join(", ") || m.author || "";
     const redistribuir = v1 ? m.allowRedistribution !== false && m.modification !== "prohibited" : !/Redistribution_Prohibited/i.test(m.licenseName || "");
     return { nome, autor, versao: v1 ? "1.0" : "0.x", redistribuir, licenca: m.licenseUrl || m.licenseName || m.otherLicenseUrl || "",
-      materiais: (j.materials || []).map((x) => nomePeca(x.name)) };
+      materiais: (j.materials || []).map((x) => nomePeca(x.name)),
+      // um avatar convertido pela Companhia (de .unitypackage, .fbx...): o pacote de origem não dizia a licença
+      convertido: (j.extras && j.extras.companhia && j.extras.companhia.convertido) || "" };
   };
 })();

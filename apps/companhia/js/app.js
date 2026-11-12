@@ -576,26 +576,88 @@
         if (!files.length) return;
         arquivos = C.pacoteDaPasta(files);
       } else {
-        const [a] = await LNUX.arquivos.abrir({ titulo: "Importar personagem (ZIP, .vrm ou .model3.json)", aceitar: LNUX.ponte.disponivel ? ".zip,.vrm,.json" : ".zip,.vrm" });
+        const avatar = origem === "avatar";
+        const [a] = await LNUX.arquivos.abrir({ titulo: avatar ? "Importar avatar do Unity (.unitypackage, .fbx, .glb ou um ZIP com eles)" : "Importar personagem (ZIP, .vrm, .unitypackage ou .model3.json)",
+          aceitar: avatar ? C.avatar.ACEITAR + ",.zip" : (LNUX.ponte.disponivel ? ".zip,.vrm,.json," : ".zip,.vrm,") + C.avatar.ACEITAR });
         if (!a) return;
-        if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
-        else if (/\.json$/i.test(a.nome)) {
+        if (/\.json$/i.test(a.nome)) {
           if (a.origem !== "ponte") throw new Error("Pelo navegador, escolha o ZIP ou use Importar pasta.");
           const prog = LNUX.progresso("Lendo a pasta do modelo");
           try { arquivos = await C.pacoteDaPonte(a.caminho, (f, n) => prog.definir(f, n)); } finally { prog.fechar(); }
-        } else {
-          zip = await a.blob();
-          arquivos = await C.pacoteDoZip(zip);
-        }
+        } else ({ arquivos, zip } = await pacoteDoArquivo(a.nome, await a.blob()));
       }
       palco.continuar();
+      if (!arquivos) return; // desistiu na conversão do avatar
       await importarPacote(arquivos, zip);
     } catch (e) { erroAoImportar(e); } finally { palco.continuar(); }
+  }
+  /**
+   * Um arquivo escolhido ou solto → o pacote da personagem (Map caminho → Blob). ZIP e .vrm como sempre; o avatar de
+   * um .unitypackage (ou de um ZIP com ele dentro, como os do BOOTH), um .fbx ou um .glb com esqueleto é convertido
+   * para .vrm antes. arquivos: null quando a pessoa desiste no meio.
+   */
+  async function pacoteDoArquivo(nome, blob, { avatar = true } = {}) {
+    if (/\.vrm$/i.test(nome)) return { arquivos: new Map([[nome, blob]]), zip: null };
+    if (/\.unitypackage$/i.test(nome)) return { arquivos: await pacoteDoAvatar(await C.lerUnityPackage(blob), LNUX.nomeSemExtensao(nome)), zip: null };
+    if (C.avatar.MODELO.test(nome)) {
+      // um .glb pode já ser um VRM (só com o nome trocado)
+      if (/\.glb$/i.test(nome)) { try { await C.lerMetaVRM(blob); return { arquivos: new Map([[nome.replace(/\.glb$/i, ".vrm"), blob]]), zip: null }; } catch (e) { /* um .glb comum: converte */ } }
+      return { arquivos: await pacoteDoAvatar(new Map([[nome, blob]]), LNUX.nomeSemExtensao(nome)), zip: null };
+    }
+    const arquivos = await C.pacoteDoZip(blob), nomes = [...arquivos.keys()].filter((n) => !/(^|\/)(__MACOSX|\.)/.test(n));
+    if (avatar && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem|moc)$/i.test(n) || /(^|\/)model\.json$/i.test(n))) {
+      const pacote = nomes.filter((n) => /\.unitypackage$/i.test(n)).sort((a, b) => arquivos.get(b).size - arquivos.get(a).size)[0];
+      if (pacote) return { arquivos: await pacoteDoAvatar(await C.lerUnityPackage(arquivos.get(pacote)), LNUX.nomeSemExtensao(pacote.split("/").pop())), zip: null };
+      if (nomes.some((n) => C.avatar.MODELO.test(n))) return { arquivos: await pacoteDoAvatar(arquivos, LNUX.nomeSemExtensao(nome)), zip: null };
+    }
+    return { arquivos, zip: blob };
+  }
+  /**
+   * O avatar de um pacote do Unity (ou um .fbx/.glb com as texturas ao lado) → Map com o .vrm pronto para importar.
+   * Se o pacote já traz um .vrm, é ele. Senão escolhe o modelo, converte (js/avatar.js) e mostra o que saiu.
+   */
+  async function pacoteDoAvatar(arquivos, nome) {
+    const nomes = [...arquivos.keys()].filter((n) => !/(^|\/)(__MACOSX|\.)/.test(n));
+    const vrms = nomes.filter((n) => /\.vrm$/i.test(n));
+    if (vrms.length) return new Map(vrms.map((n) => [n.split("/").pop(), arquivos.get(n)]));
+    const candidatos = C.avatar.candidatos(arquivos);
+    if (!candidatos.length) {
+      throw new Error("Esse pacote não tem um modelo de avatar (.fbx, .glb ou .vrm)" + (nomes.some((n) => /\.(unity|prefab|anim|controller|cs|shader)$/i.test(n)) ? ": ele traz só cenas, animações, shaders ou scripts do Unity." : ".") +
+        (nomes.length ? ` Veio: ${nomes.slice(0, 6).map((n) => n.split("/").pop()).join(", ")}${nomes.length > 6 ? "..." : ""}.` : ""));
+    }
+    let principal = candidatos[0];
+    if (candidatos.length > 1) {
+      const s = el("select", { class: "lnux-selecao", size: Math.min(8, candidatos.length), style: { width: "100%" } }, candidatos.map((c, i) => el("option", { value: c, selected: i === 0 }, `${c.split("/").pop()} (${LNUX.bytes(arquivos.get(c).size)})`)));
+      const r = await LNUX.dialogo({ titulo: "Qual é o avatar?", corpo: el("div", { class: "ajustes" }, el("p", { style: { margin: 0 } }, "O pacote tem mais de um modelo. O primeiro costuma ser o avatar; os outros podem ser acessórios ou animações."), s),
+        botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Converter", primario: true, valor: () => s.value }] });
+      if (!r) return null;
+      principal = r;
+    }
+    const prog = LNUX.progresso("Convertendo o avatar para VRM");
+    let r;
+    try {
+      await LNUX.esperar(40); // a janela aparece antes do trabalho pesado
+      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, aoProgresso: (f, t) => prog.definir(f, t) });
+    } finally { prog.fechar(); }
+    const x = r.resumo, item = (...t) => el("li", {}, ...t);
+    const ok = await LNUX.dialogo({ titulo: `Avatar convertido: ${r.nome}`, largo: true,
+      corpo: el("div", { class: "ajustes", id: "avatar-convertido" },
+        el("ul", { style: { margin: 0, paddingLeft: "20px", display: "grid", gap: "4px" } },
+          item(el("b", {}, "Esqueleto: "), `${x.ossos} ossos reconhecidos ${x.comoMapeou}${x.dedos ? `, com os dedos (${x.dedos})` : ", sem os dedos"}${x.olhos ? " e os olhos" : ""}; ${x.altura.toLocaleString("pt-BR")} m de altura` + (x.poseEmT ? `; braços e pernas postos na pose em T (${x.poseEmT}°)` : "") + "."),
+          item(el("b", {}, "Rosto: "), x.expressoes.length ? `${x.expressoes.length} expressões (${x.expressoes.join(", ")})${x.atalhos.length ? ` e ${x.atalhos.length} atalhos (${x.atalhos.join(", ")})` : ""}, das ${x.formas} formas do modelo.` : x.formas ? `nenhuma das ${x.formas} formas do rosto tem um nome que eu conheça: ela não vai mexer a boca nem piscar.` : "o modelo não tem formas de rosto: ela não vai mexer a boca nem piscar."),
+          item(el("b", {}, "Materiais: "), `${x.comTextura} de ${x.materiais} com textura${x.doUnity ? ` (${x.doUnity} pelos materiais do Unity)` : ""}, no estilo de desenho das personagens VRoid.`),
+          item(el("b", {}, "Balanço: "), x.balanco.length ? x.balanco.join(", ") + "." : "nenhum osso de cabelo, saia ou rabo reconhecido pelo nome."),
+          item(el("b", {}, "Arquivo: "), `${LNUX.bytes(x.tamanho)}, ${x.triangulos.toLocaleString("pt-BR")} triângulos.`)),
+        r.avisos.length ? el("div", { class: "fraco" }, r.avisos.map((a) => el("p", { style: { margin: "4px 0 0" } }, "⚠ " + a))) : null,
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Não vêm: os efeitos dos shaders do Unity (lilToon, Poiyomi...), as físicas do VRChat e as peças ligadas e desligadas pelo prefab (esconda as que sobrarem em Personagem › Roupas). " +
+          "O pacote não diz a licença: avatares comprados quase nunca deixam redistribuir. A personagem fica só neste aparelho, marcada como \"não redistribuir\"; confira os termos de quem fez antes de mostrar para outras pessoas.")),
+      botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Importar", primario: true, valor: true }] });
+    return ok ? new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]) : null;
   }
   async function importarPacote(arquivos, zip) {
     pronto = false;
     const info = await C.lerPacote(arquivos);
-    if (info.protegido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
+    if (info.protegido && !info.convertido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
     const p = await C.importarPacote(arquivos, zip);
     if (info.tipo === "vrm") LNUX.aviso(`${p.nome} importada (VRoid): ${p.roupas.length} roupa${p.roupas.length > 1 ? "s" : ""}${p.variacoes.length ? `, ${p.variacoes.length} variações de textura` : ""}. Troque em Personagem › Roupas.`, "ok");
     else LNUX.aviso(`${p.nome} importada: ${info.expressoes.length} expressões${info.idle ? ", movimento parado" : ""}${info.vtube ? ", ajustes do VTube Studio" : ""}.`, "ok");
@@ -618,17 +680,30 @@
     LNUX.dialogo({ titulo: "Item de roupa do VRoid Studio", corpo: e.message, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
   }
   LNUX.soltarArquivos(palcoArea, async (arqs) => {
-    const a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
+    const noPalco3D = !!(atual && atual.tipo === "vrm");
+    let a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
     const outros = arqs.filter((x) => /\.(vrma|bvh|unitypackage|vrcw)$/i.test(x.nome) || C.conversor.MODELO.test(x.nome));
-    if (outros.length && atual && atual.tipo === "vrm") { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
-    if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
+    // um pacote do Unity: se tem cara de avatar (ou não há personagem 3D aberta para ele ser cenário), vira personagem
+    const pacote = !a && arqs.find((x) => /\.unitypackage$/i.test(x.nome));
+    if (pacote) {
+      try {
+        const dentro = await C.lerUnityPackage(await pacote.blob());
+        if (!noPalco3D || C.avatar.pareceAvatar(dentro)) {
+          const convertido = await pacoteDoAvatar(dentro, LNUX.nomeSemExtensao(pacote.nome));
+          if (convertido) await importarPacote(convertido, null);
+          return;
+        }
+      } catch (e) { if (!noPalco3D || e.semEsqueleto !== true) { erroAoImportar(e); return; } }
+    }
+    if (outros.length && noPalco3D) { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
+    if (!a) a = arqs.find((x) => C.avatar.MODELO.test(x.nome)); // sem uma personagem 3D aberta, um .fbx ou .glb solto é um avatar
+    if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo, o arquivo .vrm ou o avatar (.unitypackage, .fbx) — ou use Personagem › Importar pasta.", "alerta"); return; }
     palco.pausar();
     let arquivos, zip = null;
-    try {
-      if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
-      else { zip = await a.blob(); arquivos = await C.pacoteDoZip(zip); }
-    } catch (e) { palco.continuar(); LNUX.erro(e); return; }
+    try { ({ arquivos, zip } = await pacoteDoArquivo(a.nome, await a.blob(), { avatar: !noPalco3D })); }
+    catch (e) { palco.continuar(); erroAoImportar(e); return; }
     palco.continuar();
+    if (!arquivos) return;
     // um ZIP só de movimentos (ou só com um cenário) solto com uma personagem VRoid aberta
     const nomes = [...arquivos.keys()];
     if (zip && atual && atual.tipo === "vrm" && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem)$/i.test(n))) {
@@ -643,9 +718,10 @@
     for (const x of arqs) mapa.set(x.nome, await x.blob());
     const nomes = [...mapa.keys()];
     let destino = nomes.every((n) => /\.(vrma|bvh)$/i.test(n)) ? "movimento" : nomes.some((n) => /\.(blend|obj|dae|stl|ply|3ds|3mf|usdz|unitypackage|vrcw)$/i.test(n)) ? "cenario" : null;
-    if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem) ou um cenário (um mapa para ela andar).`,
-      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
-    if (destino === "movimento") await estudio.receberMovimentos(mapa);
+    if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem), um cenário (um mapa para ela andar) ou outra personagem (um avatar com esqueleto, convertido para VRM).`,
+      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Personagem", valor: "personagem" }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
+    if (destino === "personagem") { const convertido = await pacoteDoAvatar(mapa, LNUX.nomeSemExtensao(nomes.find((n) => C.avatar.MODELO.test(n)) || nomes[0])); if (convertido) await importarPacote(convertido, null); }
+    else if (destino === "movimento") await estudio.receberMovimentos(mapa);
     else if (destino === "cenario") await estudio.receberMapa(mapa, LNUX.nomeSemExtensao(nomes[0]));
   }
 
@@ -1494,6 +1570,7 @@
   const menus = [
     { rotulo: "Personagem", itens: [
       { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
+      { rotulo: "Importar avatar do Unity (.unitypackage, .fbx)...", acao: () => importar("avatar") },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },
       "-",

@@ -226,7 +226,7 @@
     const usadas = new Set(Object.values(roupas.flatMap((r) => Object.values(r.texturas))));
     const variacoes = C.variacoesDoPacote(new Map([...arquivos].filter(([c, b]) => !usadas.has(b) && !/(^|\/)texturas-da-companhia\//.test(c))));
     const nome = (companhia && companhia.perfil && companhia.perfil.nome) || meta.nome || roupas[0].nome;
-    return { tipo: "vrm", nome, roupas, variacoes, companhia, meta, protegido: roupas.some((r) => !r.meta.redistribuir) };
+    return { tipo: "vrm", nome, roupas, variacoes, companhia, meta, protegido: roupas.some((r) => !r.meta.redistribuir), convertido: roupas.some((r) => r.meta.convertido) };
   };
 
   async function importarVRM(info) {

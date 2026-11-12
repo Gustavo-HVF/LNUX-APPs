@@ -47,6 +47,8 @@
     return { lado, base };
   }
   const IGNORAR = /(^|[_\s.-])ik([_\s.-]|$)|twist|roll|helper|nub$|_end$|end$|site$|attach|socket|weapon|prop/i;
+  /** "left", "right" ou null, pelo nome do osso. */
+  C.ladoDoOsso = (nome) => partir(nome).lado;
 
   /**
    * ossos: [{nome, pai}] na ordem da árvore (pais antes dos filhos). Devolve {ossoDoVRM: nomeNoArquivo}.

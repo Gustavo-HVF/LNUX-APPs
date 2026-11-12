@@ -25,7 +25,11 @@
   const MODELO = /\.(glb|gltf|fbx|obj)$/i;
   const PIXEL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
-  /** Abre um .unitypackage (um .tar.gz do Unity: <guid>/pathname + <guid>/asset) e devolve Map caminho → Blob. */
+  /**
+   * Abre um .unitypackage (um .tar.gz do Unity: <guid>/pathname + <guid>/asset + <guid>/asset.meta) e devolve
+   * Map caminho → Blob. O Map leva junto .metas (caminho → texto da ficha .meta) e .guids (guid → caminho), que o
+   * conversor de avatares usa para ligar os materiais às texturas.
+   */
   C.lerUnityPackage = async function (blob) {
     if (!window.DecompressionStream) throw new Error("Este navegador não abre .unitypackage (falta a descompressão). Extraia o pacote e escolha os modelos .fbx/.glb.");
     let dados;
@@ -38,16 +42,24 @@
       if (!nome) break;
       const tamanho = parseInt(texto.decode(dados.subarray(p + 124, p + 136)).replace(/\0.*$/, "").trim() || "0", 8) || 0;
       const corpo = dados.subarray(p + 512, p + 512 + tamanho);
-      const m = nome.replace(/^\.\//, "").match(/^([0-9a-f]{32})\/(pathname|asset)$/i);
+      const m = nome.replace(/^\.\//, "").match(/^([0-9a-f]{32})\/(pathname|asset|asset\.meta)$/i);
       if (m) {
         if (!partes.has(m[1])) partes.set(m[1], {});
         if (m[2] === "pathname") partes.get(m[1]).pathname = texto.decode(corpo).split("\n")[0].trim();
-        else partes.get(m[1]).asset = corpo;
+        else if (m[2] === "asset") partes.get(m[1]).asset = corpo;
+        else partes.get(m[1]).meta = texto.decode(corpo);
       }
       p += 512 + Math.ceil(tamanho / 512) * 512;
     }
     const arquivos = new Map();
-    for (const { pathname, asset } of partes.values()) if (pathname && asset) arquivos.set(pathname, new Blob([asset]));
+    arquivos.metas = new Map();
+    arquivos.guids = new Map();
+    for (const [guid, { pathname, asset, meta }] of partes) {
+      if (!pathname || !asset) continue;
+      arquivos.set(pathname, new Blob([asset]));
+      arquivos.guids.set(guid.toLowerCase(), pathname);
+      if (meta) arquivos.metas.set(pathname, meta);
+    }
     if (!arquivos.size) throw new Error("Esse .unitypackage veio vazio (ou não é um pacote do Unity).");
     return arquivos;
   };
