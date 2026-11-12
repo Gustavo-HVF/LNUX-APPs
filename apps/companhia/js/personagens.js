@@ -226,15 +226,15 @@
     const usadas = new Set(Object.values(roupas.flatMap((r) => Object.values(r.texturas))));
     const variacoes = C.variacoesDoPacote(new Map([...arquivos].filter(([c, b]) => !usadas.has(b) && !/(^|\/)texturas-da-companhia\//.test(c))));
     const nome = (companhia && companhia.perfil && companhia.perfil.nome) || meta.nome || roupas[0].nome;
-    return { tipo: "vrm", nome, roupas, variacoes, companhia, meta, protegido: roupas.some((r) => !r.meta.redistribuir) };
+    return { tipo: "vrm", nome, roupas, variacoes, companhia, meta, protegido: roupas.some((r) => !r.meta.redistribuir), convertido: roupas.some((r) => r.meta.convertido) };
   };
 
   async function importarVRM(info) {
     const id = LNUX.id("p");
     const cfg = info.companhia || {};
     const p = {
-      id, tipo: "vrm", nome: info.nome, criado: Date.now(), atualizado: Date.now(), protegido: info.protegido,
-      roupas: info.roupas.map(({ meta, ...r }) => ({ ...r, autor: meta.autor, versao: meta.versao })),
+      id, tipo: "vrm", nome: info.nome, criado: Date.now(), atualizado: Date.now(), protegido: info.protegido, convertido: info.convertido || false,
+      roupas: info.roupas.map(({ meta, ...r }) => ({ ...r, autor: meta.autor, versao: meta.versao, ...(meta.convertido ? { convertido: meta.convertido } : {}) })),
       roupaAtual: info.roupas[0].id, variacoes: info.variacoes,
       perfil: Object.assign(C.perfilPadrao(info.nome), cfg.perfil || {}),
       emocoes: cfg.emocoes || {}, ativas: cfg.ativas || [], enquadramento: cfg.enquadramento || null,

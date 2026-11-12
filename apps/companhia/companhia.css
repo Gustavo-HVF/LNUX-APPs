@@ -230,3 +230,23 @@
   .painel-estudio { top: auto; left: 6px; right: 6px; bottom: 6px; width: auto; max-height: 62%; }
   .captura-previa { bottom: auto; top: 46px; width: 96px; }
 }
+
+/* ── Antes de entrar: conversar com o chat bot ou jogar com outras pessoas ── */
+.escolha-modo { display: grid; gap: 14px; }
+.escolha-modo .cartoes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cartao-modo { display: grid; gap: 6px; justify-items: start; text-align: left; padding: 18px 16px; border-radius: 14px; border: 1px solid var(--borda); background: var(--painel-2, var(--painel)); color: var(--texto); cursor: pointer; font: inherit; }
+.cartao-modo:hover, .cartao-modo:focus-visible { border-color: var(--destaque); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); outline: none; }
+.cartao-modo .emoji { font-size: 34px; line-height: 1; }
+.cartao-modo b { font-size: 1.08em; }
+@media (max-width: 560px) { .escolha-modo .cartoes { grid-template-columns: 1fr; } }
+
+/* ── Modo de jogar (salas): sem as coisas do chat bot ──────────────── */
+:root[data-modo="jogar"] #selo-ia, :root[data-modo="jogar"] #gasto, :root[data-modo="jogar"] #botao-mic, :root[data-modo="jogar"] .conversa-rodape,
+:root[data-modo="jogar"] #chip-afeto, :root[data-modo="jogar"] #nucleo-aviso, :root[data-modo="jogar"] #botoes-conversa, :root[data-modo="jogar"] .balao { display: none !important; }
+.msg .quem { color: var(--destaque); font-weight: 600; }
+.gestos { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 6px; z-index: 5; padding: 5px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--painel) 80%, transparent); border: 1px solid var(--borda); backdrop-filter: blur(6px); }
+.gestos[hidden] { display: none; }
+.gestos button { width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; font-size: 20px; cursor: pointer; line-height: 1; }
+.gestos button:hover { background: color-mix(in srgb, var(--destaque) 18%, transparent); }
+.link-sala .lnux-entrada { flex: 1; min-width: 200px; font-family: var(--mono, monospace); font-size: .86em; }

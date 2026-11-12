@@ -230,7 +230,18 @@
       const luz = new T.DirectionalLight(0xffffff, Math.PI * 0.9);
       luz.position.set(1, 1.5, 2);
       this.luz = luz;
-      this.cena.add(luz, new T.HemisphereLight(0xffffff, 0x8888aa, 0.9));
+      this.luzCeu = new T.HemisphereLight(0xffffff, 0x8888aa, 0.9);
+      this.cena.add(luz, luz.target, this.luzCeu);
+      // luz e sombras realistas (no cenário): sol com sombra, céu e chão, tons mais naturais. Dá para desligar.
+      this.luzCfg = { realista: !ehCelular(), sombras: true, sol: 135, altura: 55 };
+      try { Object.assign(this.luzCfg, JSON.parse(LNUX.preferencia.ler("companhia.luz", "{}"))); } catch (e) { /* padrão */ }
+      this.luzSol = false;
+      this.chaoSombra = new T.Mesh(new T.PlaneGeometry(80, 80), new T.ShadowMaterial({ opacity: 0.32 }));
+      this.chaoSombra.rotation.x = -Math.PI / 2;
+      this.chaoSombra.position.y = 0.004;
+      this.chaoSombra.receiveShadow = true;
+      this.chaoSombra.visible = false;
+      this.cena.add(this.chaoSombra);
       // onde a personagem está: no retrato fica parada na origem (ou no ponto de partida do cenário); no cenário, anda
       this.raiz = new T.Group();
       this.cena.add(this.raiz);
@@ -371,7 +382,7 @@
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       if (VRMUtils.combineSkeletons) VRMUtils.combineSkeletons(gltf.scene);
       VRMUtils.rotateVRM0(vrm); // os VRM 0.x olham para o outro lado
-      vrm.scene.traverse((o) => { o.frustumCulled = false; });
+      vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) o.castShadow = o.receiveShadow = true; }); // sombra: só com a luz realista ligada
       this.vrm = vrm;
       this.modelo = vrm.scene;
       this.roupa = roupa;
@@ -397,12 +408,13 @@
       for (const n of p.ativas || []) if (this.expressoes.has(n)) Object.assign(this.expressoes.get(n), { alvo: 1, peso: 1 });
       this.acharMorfos(gltf);
       // peças de roupa (agrupadas pelo nome do material)
-      const porNome = new Map();
+      // (num avatar convertido os nomes não seguem os do VRoid: todo material é uma peça, para esconder ou pôr a textura)
+      const porNome = new Map(), extras = (gltf.parser && gltf.parser.json && gltf.parser.json.extras) || {}, convertido = !!(extras.companhia && extras.companhia.convertido);
       vrm.scene.traverse((o) => {
         if (!o.isMesh) return;
         for (const m of [].concat(o.material || [])) {
           const n = nomePeca(m.name);
-          if (!n || NAO_ROUPA.test(n) || !ROUPA.test(n)) continue;
+          if (!n || (!convertido && (NAO_ROUPA.test(n) || !ROUPA.test(n)))) continue;
           if (!porNome.has(n)) porNome.set(n, { nome: n, materiais: new Set(), visivel: true });
           porNome.get(n).materiais.add(m);
         }
@@ -654,10 +666,12 @@
       this.alvoCam = this.raiz.localToWorld(this._v.copy(this.alvoLocal)).clone();
       this.camera.position.copy(this.raiz.localToWorld(this._v.set(this.alvoLocal.x, this.alvoLocal.y, this.alvoLocal.z + this.distBase * (1 - aproximar))));
       this.camera.lookAt(this.alvoCam);
-      // a luz acompanha a frente da personagem
-      this.luz.position.copy(this.raiz.localToWorld(this._v.set(1, 1.5, 2)));
-      this.luz.target.position.copy(this.raiz.position);
-      this.luz.target.updateMatrixWorld();
+      // a luz acompanha a frente da personagem (com a luz realista no cenário, quem manda é o sol: atualizarLuz)
+      if (!this.luzSol) {
+        this.luz.position.copy(this.raiz.localToWorld(this._v.set(1, 1.5, 2)));
+        this.luz.target.position.copy(this.raiz.position);
+        this.luz.target.updateMatrixWorld();
+      }
     }
     definirEnquadramento(mudancas) { Object.assign(this.enquadramento, mudancas); this.enquadrar(); this.emit("enquadramento", { ...this.enquadramento }); }
 
@@ -759,7 +773,58 @@
         try { this.animar(dt); vrm.update(dt); this.depois(); } catch (e) { console.error(e); }
       }
       if (this.mundo && this.mundo.andando) { try { this.mundo.camera(dt); } catch (e) { console.error(e); } }
+      this.atualizarLuz();
       this.renderer.render(this.cena, this.camera);
+    }
+
+    // ── luz e sombras
+    /** Muda a luz: {realista, sombras, sol (direção em graus), altura (do sol, em graus)}. Fica guardado. */
+    definirLuz(mudancas) {
+      Object.assign(this.luzCfg, mudancas);
+      LNUX.preferencia.gravar("companhia.luz", JSON.stringify(this.luzCfg));
+      this.luzSol = null; // aplica de novo no próximo quadro
+    }
+    /**
+     * No cenário (com um mapa aberto ou andando), a luz realista é um sol com sombra, com céu azulado e chão quente e
+     * tons naturais; fora dele (o retrato de conversa) e com a opção desligada, a luz de frente de sempre, sem sombra.
+     */
+    atualizarLuz() {
+      const T = window.THREE, cfg = this.luzCfg, mundo = this.mundo, r = this.renderer, luz = this.luz;
+      const sol = !!(cfg.realista && mundo && (mundo.andando || mundo.mapa));
+      const sombras = sol && !!cfg.sombras;
+      if (sol !== this.luzSol || sombras !== this.luzSombras) {
+        this.luzSol = sol;
+        this.luzSombras = sombras;
+        r.toneMapping = sol ? (T.NeutralToneMapping || T.ACESFilmicToneMapping) : T.NoToneMapping;
+        luz.color.set(sol ? 0xfff1dc : 0xffffff);
+        luz.intensity = sol ? 2.6 : Math.PI * 0.9;
+        this.luzCeu.color.set(sol ? 0xcfe2ff : 0xffffff);
+        this.luzCeu.groundColor.set(sol ? 0x8a7d6c : 0x8888aa);
+        this.luzCeu.intensity = sol ? 1.1 : 0.9;
+        this.cena.environmentIntensity = sol ? 0.4 : 0.7;
+        r.shadowMap.enabled = sombras;
+        r.shadowMap.type = T.PCFSoftShadowMap;
+        luz.castShadow = sombras;
+        if (sombras) {
+          const lado = 18, c = luz.shadow.camera;
+          luz.shadow.mapSize.set(ehCelular() ? 1024 : 2048, ehCelular() ? 1024 : 2048);
+          Object.assign(c, { left: -lado, right: lado, top: lado, bottom: -lado, near: 1, far: 90 });
+          c.updateProjectionMatrix();
+          luz.shadow.bias = -0.0005;
+          luz.shadow.normalBias = 0.04;
+        }
+        this.chaoSombra.visible = sombras && !(mundo && mundo.mapa);
+        if (mundo) mundo.sombra.material.opacity = sombras ? 0 : 1; // com sombra de verdade, a redonda some
+        this.cena.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material || [])) m.needsUpdate = true; }); // os materiais se refazem com/sem sombra
+      }
+      if (sol) {
+        // o sol fica longe, na direção escolhida, e acompanha a personagem (a sombra é calculada em volta dela)
+        const a = cfg.sol * Math.PI / 180, h = Math.max(10, Math.min(88, cfg.altura)) * Math.PI / 180, p = this.raiz.position;
+        luz.position.set(p.x + Math.sin(a) * Math.cos(h) * 45, p.y + Math.sin(h) * 45, p.z + Math.cos(a) * Math.cos(h) * 45);
+        luz.target.position.copy(p);
+        luz.target.updateMatrixWorld();
+        if (this.chaoSombra.visible) this.chaoSombra.position.set(p.x, 0.004, p.z);
+      }
     }
     animar(dt) {
       const vrm = this.vrm, t = performance.now() / 1000, agora = performance.now();
@@ -996,6 +1061,8 @@
     const autor = (m.authors || []).join(", ") || m.author || "";
     const redistribuir = v1 ? m.allowRedistribution !== false && m.modification !== "prohibited" : !/Redistribution_Prohibited/i.test(m.licenseName || "");
     return { nome, autor, versao: v1 ? "1.0" : "0.x", redistribuir, licenca: m.licenseUrl || m.licenseName || m.otherLicenseUrl || "",
-      materiais: (j.materials || []).map((x) => nomePeca(x.name)) };
+      materiais: (j.materials || []).map((x) => nomePeca(x.name)),
+      // um avatar convertido pela Companhia (de .unitypackage, .fbx...): o pacote de origem não dizia a licença
+      convertido: (j.extras && j.extras.companhia && j.extras.companhia.convertido) || "" };
   };
 })();

@@ -127,9 +127,11 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await pagina.waitForFunction(() => window.Companhia.palco.mundo.info && window.Companhia.palco.mundo.colisor, null, { timeout: 180000 });
     await esperar(500);
     const cena = await ev(async () => { const p = window.Companhia.palco, m = p.mundo, l = await C.mapas.lista(), arqs = await C.mapas.ler(m.info.id);
-      return { nome: m.info.nome, principal: m.info.principal, y: p.raiz.position.y, caixa: [m.caixa.min.y, m.caixa.max.y].map((v) => +v.toFixed(2)), guardados: l.length, arquivos: [...arqs.keys()], aviso: [...document.querySelectorAll(".lnux-aviso")].map((a) => a.textContent).join(" ") }; });
+      let tex = 0; m.mapa.traverse((o) => { if (o.isMesh) for (const mt of [].concat(o.material)) if (mt.map && mt.map.image) tex = Math.max(tex, mt.map.image.width || 0); });
+      return { tex, nome: m.info.nome, principal: m.info.principal, y: p.raiz.position.y, caixa: [m.caixa.min.y, m.caixa.max.y].map((v) => +v.toFixed(2)), guardados: l.length, arquivos: [...arqs.keys()], aviso: [...document.querySelectorAll(".lnux-aviso")].map((a) => a.textContent).join(" ") }; });
     ok(cena.principal === "cenario-blender-4.2.glb" && cena.arquivos.join() === "cenario-blender-4.2.glb" && Math.abs(cena.y - 1) < 0.03 && cena.caixa.join() === "1,4",
       `abrir um .blend pela tela: é convertido, guardado em .glb e vira o cenário; a personagem fica em cima do piso (y = ${cena.y.toFixed(2)} m)`);
+    ok(cena.tex === 8, `as texturas de dentro do .glb aparecem no cenário (a do piso tem ${cena.tex} px; antes viravam um ponto branco)`);
     ok(/convertido/.test(cena.aviso) && (temBlender ? /Blender do aparelho/ : /leitor próprio/).test(cena.aviso), "o aviso diz como foi convertido: " + cena.aviso.slice(0, 110));
     // mapa deitado (Z para cima)
     await pagina.locator('.painel-estudio label:has-text("O mapa veio deitado") input').check();

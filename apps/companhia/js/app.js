@@ -14,6 +14,12 @@
   const gravarPref = (k, v) => LNUX.preferencia.gravar("companhia." + k, String(v));
   ia.carregar();
   voz.carregar();
+  // Modo: "conversa" (o chat bot) ou "jogar" (com outras pessoas numa sala, sem nenhuma função de IA). O endereço pode
+  // já dizer (#modo=conversa, #modo=jogar ou #sala=<código>, o link de uma sala); senão a pessoa escolhe ao abrir.
+  const fragmento = new URLSearchParams(location.hash.replace(/^#/, ""));
+  let MODO = fragmento.get("sala") ? "jogar" : (["conversa", "jogar"].includes(fragmento.get("modo")) ? fragmento.get("modo") : null);
+  const jogando = () => MODO === "jogar";
+  let sala = null; // a sala em que estou (js/sala.js), no modo de jogar
 
   const palcoArea = $("#palco-area");
   // Dois palcos: Live2D (pixi) e 3D (VRoid/VRM, three.js). "palco" aponta para o da personagem aberta; os
@@ -224,6 +230,7 @@
 
   async function enviar(texto) {
     texto = texto.trim();
+    if (jogando()) { enviarParaSala(texto); return; } // jogar: a caixa de texto fala com as pessoas da sala (não há chat bot)
     if (!texto || !atual) return;
     voz.destravar();
     voz.parar();
@@ -300,7 +307,7 @@
   // ── Toques ───────────────────────────────────────────────────────────
 
   palco.on("toque", async (ev) => {
-    if (!atual) return;
+    if (!atual || jogando()) return; // jogar: a personagem é o avatar de quem joga, não uma companhia que reage
     voz.destravar();
     const r = C.reagirAoToque(ev, est.afeto || 0, atual.reacoes);
     palco.definirEmocao(r.emocao);
@@ -336,7 +343,7 @@
     atualizarGasto();
   });
   palco.on("carinho-continuo", (ev) => {
-    if (!atual) return;
+    if (!atual || jogando()) return;
     efeito(ev.x, ev.y, "carinho");
     est.afeto = Math.min(100, (est.afeto || 0) + 0.5);
     salvarEstado();
@@ -444,6 +451,7 @@
       atualizarChipRoupa();
       atualizarChipMovimento();
       await estudio.aoAbrirPersonagem(); // o cenário e os movimentos de andar em uso (só personagens VRoid)
+      if (jogando()) { est = { afeto: 0, fatos: [], pessoa: "" }; return; } // jogar: sem memória, saudação nem chat bot
       est = await mem.estado(id);
       atualizarAfeto();
       await desenharHistorico();
@@ -501,7 +509,7 @@
     $("#conversa-titulo").textContent = "Conversa";
     $("#atalhos").replaceChildren();
     $("#zonas").replaceChildren();
-    listaMsgs.replaceChildren(el("div", { class: "msg sistema" }, "Importe uma personagem para conversar."));
+    listaMsgs.replaceChildren(el("div", { class: "msg sistema" }, jogando() ? "Modo de jogar: crie uma sala ou entre numa pelo link (menu Sala). As mensagens das pessoas da sala aparecem aqui." : "Importe uma personagem para conversar."));
     const lista = await C.listarPersonagens();
     const cartao = $("#palco-vazio .cartao");
     cartao.querySelector(".lista-personagens") && cartao.querySelector(".lista-personagens").remove();
@@ -568,26 +576,88 @@
         if (!files.length) return;
         arquivos = C.pacoteDaPasta(files);
       } else {
-        const [a] = await LNUX.arquivos.abrir({ titulo: "Importar personagem (ZIP, .vrm ou .model3.json)", aceitar: LNUX.ponte.disponivel ? ".zip,.vrm,.json" : ".zip,.vrm" });
+        const avatar = origem === "avatar";
+        const [a] = await LNUX.arquivos.abrir({ titulo: avatar ? "Importar avatar do Unity (.unitypackage, .fbx, .glb ou um ZIP com eles)" : "Importar personagem (ZIP, .vrm, .unitypackage ou .model3.json)",
+          aceitar: avatar ? C.avatar.ACEITAR + ",.zip" : (LNUX.ponte.disponivel ? ".zip,.vrm,.json," : ".zip,.vrm,") + C.avatar.ACEITAR });
         if (!a) return;
-        if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
-        else if (/\.json$/i.test(a.nome)) {
+        if (/\.json$/i.test(a.nome)) {
           if (a.origem !== "ponte") throw new Error("Pelo navegador, escolha o ZIP ou use Importar pasta.");
           const prog = LNUX.progresso("Lendo a pasta do modelo");
           try { arquivos = await C.pacoteDaPonte(a.caminho, (f, n) => prog.definir(f, n)); } finally { prog.fechar(); }
-        } else {
-          zip = await a.blob();
-          arquivos = await C.pacoteDoZip(zip);
-        }
+        } else ({ arquivos, zip } = await pacoteDoArquivo(a.nome, await a.blob()));
       }
       palco.continuar();
+      if (!arquivos) return; // desistiu na conversão do avatar
       await importarPacote(arquivos, zip);
     } catch (e) { erroAoImportar(e); } finally { palco.continuar(); }
+  }
+  /**
+   * Um arquivo escolhido ou solto → o pacote da personagem (Map caminho → Blob). ZIP e .vrm como sempre; o avatar de
+   * um .unitypackage (ou de um ZIP com ele dentro, como os do BOOTH), um .fbx ou um .glb com esqueleto é convertido
+   * para .vrm antes. arquivos: null quando a pessoa desiste no meio.
+   */
+  async function pacoteDoArquivo(nome, blob, { avatar = true } = {}) {
+    if (/\.vrm$/i.test(nome)) return { arquivos: new Map([[nome, blob]]), zip: null };
+    if (/\.unitypackage$/i.test(nome)) return { arquivos: await pacoteDoAvatar(await C.lerUnityPackage(blob), LNUX.nomeSemExtensao(nome)), zip: null };
+    if (C.avatar.MODELO.test(nome)) {
+      // um .glb pode já ser um VRM (só com o nome trocado)
+      if (/\.glb$/i.test(nome)) { try { await C.lerMetaVRM(blob); return { arquivos: new Map([[nome.replace(/\.glb$/i, ".vrm"), blob]]), zip: null }; } catch (e) { /* um .glb comum: converte */ } }
+      return { arquivos: await pacoteDoAvatar(new Map([[nome, blob]]), LNUX.nomeSemExtensao(nome)), zip: null };
+    }
+    const arquivos = await C.pacoteDoZip(blob), nomes = [...arquivos.keys()].filter((n) => !/(^|\/)(__MACOSX|\.)/.test(n));
+    if (avatar && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem|moc)$/i.test(n) || /(^|\/)model\.json$/i.test(n))) {
+      const pacote = nomes.filter((n) => /\.unitypackage$/i.test(n)).sort((a, b) => arquivos.get(b).size - arquivos.get(a).size)[0];
+      if (pacote) return { arquivos: await pacoteDoAvatar(await C.lerUnityPackage(arquivos.get(pacote)), LNUX.nomeSemExtensao(pacote.split("/").pop())), zip: null };
+      if (nomes.some((n) => C.avatar.MODELO.test(n))) return { arquivos: await pacoteDoAvatar(arquivos, LNUX.nomeSemExtensao(nome)), zip: null };
+    }
+    return { arquivos, zip: blob };
+  }
+  /**
+   * O avatar de um pacote do Unity (ou um .fbx/.glb com as texturas ao lado) → Map com o .vrm pronto para importar.
+   * Se o pacote já traz um .vrm, é ele. Senão escolhe o modelo, converte (js/avatar.js) e mostra o que saiu.
+   */
+  async function pacoteDoAvatar(arquivos, nome) {
+    const nomes = [...arquivos.keys()].filter((n) => !/(^|\/)(__MACOSX|\.)/.test(n));
+    const vrms = nomes.filter((n) => /\.vrm$/i.test(n));
+    if (vrms.length) return new Map(vrms.map((n) => [n.split("/").pop(), arquivos.get(n)]));
+    const candidatos = C.avatar.candidatos(arquivos);
+    if (!candidatos.length) {
+      throw new Error("Esse pacote não tem um modelo de avatar (.fbx, .glb ou .vrm)" + (nomes.some((n) => /\.(unity|prefab|anim|controller|cs|shader)$/i.test(n)) ? ": ele traz só cenas, animações, shaders ou scripts do Unity." : ".") +
+        (nomes.length ? ` Veio: ${nomes.slice(0, 6).map((n) => n.split("/").pop()).join(", ")}${nomes.length > 6 ? "..." : ""}.` : ""));
+    }
+    let principal = candidatos[0];
+    if (candidatos.length > 1) {
+      const s = el("select", { class: "lnux-selecao", size: Math.min(8, candidatos.length), style: { width: "100%" } }, candidatos.map((c, i) => el("option", { value: c, selected: i === 0 }, `${c.split("/").pop()} (${LNUX.bytes(arquivos.get(c).size)})`)));
+      const r = await LNUX.dialogo({ titulo: "Qual é o avatar?", corpo: el("div", { class: "ajustes" }, el("p", { style: { margin: 0 } }, "O pacote tem mais de um modelo. O primeiro costuma ser o avatar; os outros podem ser acessórios ou animações."), s),
+        botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Converter", primario: true, valor: () => s.value }] });
+      if (!r) return null;
+      principal = r;
+    }
+    const prog = LNUX.progresso("Convertendo o avatar para VRM");
+    let r;
+    try {
+      await LNUX.esperar(40); // a janela aparece antes do trabalho pesado
+      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, aoProgresso: (f, t) => prog.definir(f, t) });
+    } finally { prog.fechar(); }
+    const x = r.resumo, item = (...t) => el("li", {}, ...t);
+    const ok = await LNUX.dialogo({ titulo: `Avatar convertido: ${r.nome}`, largo: true,
+      corpo: el("div", { class: "ajustes", id: "avatar-convertido" },
+        el("ul", { style: { margin: 0, paddingLeft: "20px", display: "grid", gap: "4px" } },
+          item(el("b", {}, "Esqueleto: "), `${x.ossos} ossos reconhecidos ${x.comoMapeou}, ${x.olhos ? "com" : "sem"} os olhos e ${x.dedos ? `com os dedos (${x.dedos} ossos)` : "sem os dedos"}; ${x.altura.toLocaleString("pt-BR")} m de altura` + (x.poseEmT ? `; braços e pernas postos na pose em T (${x.poseEmT}°)` : "") + "."),
+          item(el("b", {}, "Rosto: "), x.expressoes.length ? `${x.expressoes.length} ${x.expressoes.length > 1 ? "expressões" : "expressão"} (${x.expressoes.join(", ")})${x.atalhos.length ? ` e ${x.atalhos.length} ${x.atalhos.length > 1 ? "atalhos" : "atalho"} (${x.atalhos.join(", ")})` : ""}, das ${x.formas} formas do modelo.` : x.formas ? `nenhuma das ${x.formas} formas do rosto tem um nome que eu conheça: ela não vai mexer a boca nem piscar.` : "o modelo não tem formas de rosto: ela não vai mexer a boca nem piscar."),
+          item(el("b", {}, "Materiais: "), `${x.comTextura} de ${x.materiais} com textura${x.doUnity ? ` (${x.doUnity} pelos materiais do Unity)` : ""}, no estilo de desenho das personagens VRoid.`),
+          item(el("b", {}, "Balanço: "), x.balanco.length ? x.balanco.join(", ") + "." : "nenhum osso de cabelo, saia ou rabo reconhecido pelo nome."),
+          item(el("b", {}, "Arquivo: "), `${LNUX.bytes(x.tamanho)}, ${x.triangulos.toLocaleString("pt-BR")} triângulos.`)),
+        r.avisos.length ? el("div", { class: "fraco" }, r.avisos.map((a) => el("p", { style: { margin: "4px 0 0" } }, "⚠ " + a))) : null,
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Não vêm: os efeitos dos shaders do Unity (lilToon, Poiyomi...), as físicas do VRChat e as peças ligadas e desligadas pelo prefab (esconda as que sobrarem em Personagem › Roupas). " +
+          "O pacote não diz a licença: avatares comprados quase nunca deixam redistribuir. A personagem fica só neste aparelho, marcada como \"não redistribuir\"; confira os termos de quem fez antes de mostrar para outras pessoas.")),
+      botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Importar", primario: true, valor: true }] });
+    return ok ? new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]) : null;
   }
   async function importarPacote(arquivos, zip) {
     pronto = false;
     const info = await C.lerPacote(arquivos);
-    if (info.protegido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
+    if (info.protegido && !info.convertido && !(await LNUX.confirmar("Modelo com licença", `O autor de "${info.nome}" não deixa redistribuir o modelo${info.tipo === "vrm" ? " (licença gravada no .vrm)" : " (VTube Studio)"}. Ele fica só neste aparelho; não compartilhe o ZIP exportado. Importar?`, { rotulo: "Importar" }))) return;
     const p = await C.importarPacote(arquivos, zip);
     if (info.tipo === "vrm") LNUX.aviso(`${p.nome} importada (VRoid): ${p.roupas.length} roupa${p.roupas.length > 1 ? "s" : ""}${p.variacoes.length ? `, ${p.variacoes.length} variações de textura` : ""}. Troque em Personagem › Roupas.`, "ok");
     else LNUX.aviso(`${p.nome} importada: ${info.expressoes.length} expressões${info.idle ? ", movimento parado" : ""}${info.vtube ? ", ajustes do VTube Studio" : ""}.`, "ok");
@@ -610,17 +680,30 @@
     LNUX.dialogo({ titulo: "Item de roupa do VRoid Studio", corpo: e.message, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
   }
   LNUX.soltarArquivos(palcoArea, async (arqs) => {
-    const a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
+    const noPalco3D = !!(atual && atual.tipo === "vrm");
+    let a = arqs.find((x) => /\.(zip|vrm)$/i.test(x.nome));
     const outros = arqs.filter((x) => /\.(vrma|bvh|unitypackage|vrcw)$/i.test(x.nome) || C.conversor.MODELO.test(x.nome));
-    if (outros.length && atual && atual.tipo === "vrm") { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
-    if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo ou o arquivo .vrm (ou use Personagem › Importar pasta).", "alerta"); return; }
+    // um pacote do Unity: se tem cara de avatar (ou não há personagem 3D aberta para ele ser cenário), vira personagem
+    const pacote = !a && arqs.find((x) => /\.unitypackage$/i.test(x.nome));
+    if (pacote) {
+      try {
+        const dentro = await C.lerUnityPackage(await pacote.blob());
+        if (!noPalco3D || C.avatar.pareceAvatar(dentro)) {
+          const convertido = await pacoteDoAvatar(dentro, LNUX.nomeSemExtensao(pacote.nome));
+          if (convertido) await importarPacote(convertido, null);
+          return;
+        }
+      } catch (e) { if (!noPalco3D || e.semEsqueleto !== true) { erroAoImportar(e); return; } }
+    }
+    if (outros.length && noPalco3D) { soltarNoPalco3D(outros).catch(LNUX.erro); return; }
+    if (!a) a = arqs.find((x) => C.avatar.MODELO.test(x.nome)); // sem uma personagem 3D aberta, um .fbx ou .glb solto é um avatar
+    if (!a) { LNUX.aviso(outros.length ? "Movimentos e cenários são para personagens VRoid (.vrm): abra uma primeiro." : "Solte o ZIP do modelo, o arquivo .vrm ou o avatar (.unitypackage, .fbx) — ou use Personagem › Importar pasta.", "alerta"); return; }
     palco.pausar();
     let arquivos, zip = null;
-    try {
-      if (/\.vrm$/i.test(a.nome)) arquivos = new Map([[a.nome, await a.blob()]]);
-      else { zip = await a.blob(); arquivos = await C.pacoteDoZip(zip); }
-    } catch (e) { palco.continuar(); LNUX.erro(e); return; }
+    try { ({ arquivos, zip } = await pacoteDoArquivo(a.nome, await a.blob(), { avatar: !noPalco3D })); }
+    catch (e) { palco.continuar(); erroAoImportar(e); return; }
     palco.continuar();
+    if (!arquivos) return;
     // um ZIP só de movimentos (ou só com um cenário) solto com uma personagem VRoid aberta
     const nomes = [...arquivos.keys()];
     if (zip && atual && atual.tipo === "vrm" && !nomes.some((n) => /\.(vrm|model3\.json|vroidcustomitem)$/i.test(n))) {
@@ -635,9 +718,10 @@
     for (const x of arqs) mapa.set(x.nome, await x.blob());
     const nomes = [...mapa.keys()];
     let destino = nomes.every((n) => /\.(vrma|bvh)$/i.test(n)) ? "movimento" : nomes.some((n) => /\.(blend|obj|dae|stl|ply|3ds|3mf|usdz|unitypackage|vrcw)$/i.test(n)) ? "cenario" : null;
-    if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem) ou um cenário (um mapa para ela andar).`,
-      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
-    if (destino === "movimento") await estudio.receberMovimentos(mapa);
+    if (!destino) destino = await LNUX.dialogo({ titulo: "O que é esse arquivo?", corpo: `${nomes.join(", ")}: um .fbx ou .glb pode ser um movimento (uma animação para a personagem), um cenário (um mapa para ela andar) ou outra personagem (um avatar com esqueleto, convertido para VRM).`,
+      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Personagem", valor: "personagem" }, { rotulo: "Cenário", valor: "cenario" }, { rotulo: "Movimento", primario: true, valor: "movimento" }] });
+    if (destino === "personagem") { const convertido = await pacoteDoAvatar(mapa, LNUX.nomeSemExtensao(nomes.find((n) => C.avatar.MODELO.test(n)) || nomes[0])); if (convertido) await importarPacote(convertido, null); }
+    else if (destino === "movimento") await estudio.receberMovimentos(mapa);
     else if (destino === "cenario") await estudio.receberMapa(mapa, LNUX.nomeSemExtensao(nomes[0]));
   }
 
@@ -1288,12 +1372,205 @@
       botoes: [{ rotulo: "Fechar", primario: true, valor: true }] });
   }
 
+  // ── Jogar com outras pessoas (salas) ─────────────────────────────────
+
+  const copiar = async (texto) => {
+    try { await navigator.clipboard.writeText(texto); } catch (e) { try { await LNUX.ponte.areaDeTransferencia.escrever(texto); } catch (e2) { await LNUX.dialogo({ titulo: "Copie o link", corpo: el("input", { class: "lnux-entrada", value: texto, readonly: true }) }); return; } }
+    LNUX.aviso("Link copiado.", "ok");
+  };
+  function garantirSala() {
+    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala });
+    return sala;
+  }
+  function mensagemDaSala(m) {
+    if (!jogando()) return;
+    const e = m.sistema ? el("div", { class: "msg sistema" }, m.texto)
+      : el("div", { class: "msg " + (m.meu ? "eu" : "ela") }, m.meu ? null : el("b", { class: "quem" }, m.nome + ": "), el("span", { class: "t" }, m.texto), el("span", { class: "info" }, hora(Date.now())));
+    listaMsgs.append(e);
+    rolarFim();
+  }
+  function atualizarSala() {
+    const dentro = !!(sala && sala.dentro);
+    const chip = $("#chip-sala");
+    chip.hidden = !jogando();
+    chip.textContent = dentro ? `🎮 ${sala.info.nome} · ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}` : "🎮 Entrar numa sala";
+    chip.classList.toggle("ligado", dentro);
+    $("#gestos").hidden = !(jogando() && atual && atual.tipo === "vrm");
+    if (jogando()) {
+      $("#conversa-titulo").textContent = dentro ? `Sala: ${sala.info.nome}` : "Sala";
+      campo.placeholder = dentro ? "Escreva para as pessoas da sala..." : "Entre numa sala para conversar com as pessoas...";
+      $("#titulo-doc").textContent = dentro ? `${sala.info.nome} (${sala.pessoas})` : atual ? atual.perfil.nome : "Jogar";
+    }
+    atualizarChipMovimento();
+  }
+  function enviarParaSala(texto) {
+    if (!texto) return;
+    if (!sala || !sala.dentro) { LNUX.aviso("Entre numa sala primeiro (menu Sala).", "alerta"); return; }
+    campo.value = "";
+    ajustarCampo();
+    sala.falar(texto).catch(LNUX.erro);
+  }
+  /** O avatar padrão (um boneco de caixas), guardado como uma personagem qualquer na primeira vez. */
+  async function idDoBoneco() {
+    const id = pref("sala-boneco", "");
+    if (id && (await C.listarPersonagens()).some((p) => p.id === id)) return id;
+    await C.prepararVRM();
+    const p = await C.importarPacote(new Map([["Boneco.vrm", C.bonecoPadrao()]]));
+    gravarPref("sala-boneco", p.id);
+    return p.id;
+  }
+  /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
+  async function avatarParaOsOutros(mandar) {
+    if (!mandar || !atual || atual.tipo !== "vrm") return null;
+    if (atual.protegido && !(await LNUX.dialogo({ titulo: "Modelo com licença", corpo: `O autor de "${atual.perfil.nome}" não deixa redistribuir o modelo. Para os outros te verem com ela, o arquivo é mandado para o aparelho de cada pessoa da sala. ` +
+      "Sem mandar, você continua se vendo com ela e os outros veem um boneco simples.", botoes: [{ rotulo: "Aparecer como boneco", valor: false, primario: true }, { rotulo: "Mandar mesmo assim", valor: true }] }))) return null;
+    const r = roupaAtual();
+    return r ? r.blob : null;
+  }
+  const codigoDe = (texto) => { const m = String(texto).match(/sala=([a-z0-9]+)/i); return (m ? m[1] : String(texto)).trim().toLowerCase(); };
+  /** Criar ou entrar numa sala: nome, personagem e o código (ou o cenário, para criar). */
+  async function janelaSala(codigoInicial = "") {
+    const personagens = (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", ""));
+    const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
+    const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem (.vrm, ZIP ou avatar do Unity)..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
+    avatar.setAttribute("aria-label", "Sua personagem");
+    const mandar = el("input", { type: "checkbox", checked: pref("sala-mandar", "1") === "1" });
+    const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
+    const podeCriar = LNUX.ponte.disponivel && LNUX.ponte.tem("salas");
+    const mapas = podeCriar ? await C.mapas.lista() : [];
+    const mapa = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], pref("mapa", ""));
+    mapa.setAttribute("aria-label", "Cenário da sala");
+    const titulo = el("input", { class: "lnux-entrada", value: pref("sala-titulo", "Minha sala"), maxlength: 40, "aria-label": "Nome da sala" });
+    let d = null;
+    /** Confere o nome e abre a personagem escolhida. Devolve {nome, avatar} (ou null se faltou algo). */
+    const preparar = async () => {
+      const n = nome.value.trim();
+      if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
+      gravarPref("sala-nome", n);
+      gravarPref("sala-mandar", mandar.checked ? "1" : "0");
+      if (avatar.value === "importar") { d.fechar(); await importar("zip"); if (atual && atual.tipo === "vrm") gravarPref("sala-avatar", atual.id); janelaSala(codigo.value); return null; }
+      gravarPref("sala-avatar", avatar.value);
+      const id = avatar.value || (await idDoBoneco());
+      if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
+      if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
+      return { nome: n, avatar: avatar.value ? await avatarParaOsOutros(mandar.checked) : (await C.lerPersonagem(id)).roupas[0].blob }; // o boneco padrão sempre vai
+    };
+    const entrar = async (cod, criada) => {
+      const eu = await preparar();
+      if (!eu) return;
+      d.fechar();
+      $("#palco-carregando").hidden = false;
+      try {
+        const info = await garantirSala().entrar(cod, eu.nome, eu.avatar, (t) => { $("#palco-carregando").textContent = t; });
+        history.replaceState(null, "", location.pathname + location.search + "#sala=" + cod); // recarregar volta para a sala
+        listaMsgs.replaceChildren();
+        mensagemDaSala({ sistema: true, texto: `Você entrou em "${info.nome}"` + (info.mapa ? `, no cenário "${info.mapa.nome}".` : ".") + " W A S D andam, Shift corre, Espaço pula; escreva aqui para falar com as pessoas." });
+        if (criada) mostrarLinks(criada);
+      } finally { $("#palco-carregando").hidden = true; atualizarSala(); }
+    };
+    const criar = async () => {
+      gravarPref("sala-titulo", titulo.value.trim() || "Minha sala");
+      let m = null;
+      if (mapa.value) {
+        const reg = mapas.find((x) => x.id === mapa.value), arqs = await C.mapas.ler(mapa.value);
+        if (reg && arqs) {
+          const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+          m = { glb, nome: reg.nome, ajuste: reg.ajuste || {} };
+        }
+      }
+      if (!(await preparar())) return;
+      const r = await garantirSala().criar(titulo.value.trim() || "Minha sala", m);
+      await entrar(r.codigo, r);
+    };
+    const corpo = el("div", { class: "ajustes" },
+      el("div", { class: "grade" }, el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome), el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), avatar)),
+      el("label", { class: "lnux-alternar" }, mandar, "Mostrar minha personagem para os outros (sem isso, eles me veem como um boneco simples)"),
+      el("div", { class: "lnux-rotulo" }, "Entrar numa sala"),
+      el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, codigo), el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigo.focus(); return; } entrar(c).catch(LNUX.erro); } }, "Entrar")),
+      podeCriar ? el("div", { class: "lnux-rotulo" }, "Criar uma sala neste aparelho") : null,
+      podeCriar ? el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Nome da sala"), titulo), el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapa),
+        el("button", { class: "lnux-botao", type: "button", id: "sala-criar", onclick: () => criar().catch(LNUX.erro) }, "Criar sala")) : null,
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, podeCriar
+        ? "A sala fica neste aparelho enquanto o LNUX estiver aberto. Depois de criar, mande o link para as pessoas: elas entram pelo navegador, sem instalar nada. Os cenários vêm de Movimento › Cenário."
+        : "Para entrar, basta o link que a pessoa que criou a sala mandou. Para criar uma sala, abra a Companhia pelo LNUX (🌐 Apps Web) no aparelho que vai ser o servidor."));
+    codigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#sala-entrar").click(); } });
+    d = LNUX.dialogo({ titulo: "Jogar com outras pessoas", corpo, largo: true, botoes: [{ rotulo: "Fechar", valor: null }] });
+    return d;
+  }
+  /** Os links da sala para mandar aos outros (o do túnel, o da rede de casa e o deste endereço). */
+  function mostrarLinks(criada) {
+    if (!sala || !sala.codigo) return;
+    const caminho = location.pathname + "#sala=" + sala.codigo;
+    const publicos = ((criada && criada.enderecos) || sala.enderecos || []).map((e) => e + caminho);
+    if (criada) sala.enderecos = criada.enderecos || [];
+    const local = /^(127\.|localhost|\[::1\])/.test(location.hostname);
+    const links = [...new Set([...publicos, ...(local && publicos.length ? [] : [location.origin + caminho])])];
+    LNUX.dialogo({ titulo: "Link da sala", largo: true, botoes: [{ rotulo: "Fechar", primario: true, valor: null }], corpo: el("div", { class: "ajustes" },
+      el("p", { style: { margin: 0 } }, "Mande este link para quem vai jogar. A pessoa abre no navegador, escolhe um nome e entra:"),
+      ...links.map((l) => el("div", { class: "linha link-sala" }, el("input", { class: "lnux-entrada", value: l, readonly: true, "aria-label": "Link da sala" }), el("button", { class: "lnux-botao", type: "button", onclick: () => copiar(l) }, "Copiar"))),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, local && !publicos.length
+        ? "Este endereço (127.0.0.1) só vale neste aparelho. Para pessoas de fora entrarem, ligue no LNUX o compartilhamento dos Apps Web pela internet (o túnel) e crie a sala abrindo a Companhia pelo endereço do túnel; na rede de casa, abra o servidor para a rede e use o endereço com o IP do aparelho."
+        : "A sala existe enquanto o servidor deste aparelho estiver ligado. O link só dá acesso à sala (o cenário, os avatares e o bate-papo): quem entra não vê as suas pastas nem usa a ponte.")) });
+  }
+  async function sairDaSala(fechar) {
+    if (!sala || !sala.dentro) return;
+    if (fechar) await sala.fechar(); else await sala.sair();
+    history.replaceState(null, "", location.pathname + location.search + "#modo=jogar");
+    mensagemDaSala({ sistema: true, texto: fechar ? "Você fechou a sala." : "Você saiu da sala." });
+    atualizarSala();
+  }
+  /** Quem criou a sala troca o cenário dela: todos passam para o novo. */
+  async function trocarMapaDaSala() {
+    if (!sala || !sala.dentro || !sala.chave) return;
+    const mapas = await C.mapas.lista();
+    const sel = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], "");
+    if (!(await LNUX.dialogo({ titulo: "Trocar o cenário da sala", corpo: el("div", { class: "ajustes" }, el("label", { class: "lnux-campo" }, el("span", {}, "Cenário (os de Movimento › Cenário)"), sel)), botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Trocar", primario: true, valor: true }] }))) return;
+    if (!sel.value) { await C.salaPedir("DELETE", sala.codigo + "/mapa", { chave: sala.chave }); return; }
+    const reg = mapas.find((x) => x.id === sel.value), arqs = await C.mapas.ler(sel.value);
+    const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+    await sala.mandarMapa(sala.codigo, { glb, nome: reg.nome, ajuste: reg.ajuste || {} });
+  }
+  /** Gestos e expressões que os outros veem. */
+  function barraDeGestos() {
+    const rosto = (emoji, emocao, dica) => el("button", { type: "button", title: dica, "aria-label": dica, onclick: () => { palco.definirEmocao(emocao); clearTimeout(voltarNeutraT); if (emocao !== "neutra") voltarNeutraT = setTimeout(() => palco.definirEmocao("neutra"), 8000); } }, emoji);
+    $("#gestos").replaceChildren(
+      el("button", { type: "button", title: "Acenar", "aria-label": "Acenar", onclick: () => { palco.gesto("acenar"); if (sala) sala.gestoMeu("acenar"); } }, "👋"),
+      rosto("😀", "feliz", "Feliz"), rosto("😂", "rindo", "Rindo"), rosto("😮", "surpresa", "Surpresa"), rosto("😢", "triste", "Triste"), rosto("😠", "brava", "Brava"), rosto("😐", "neutra", "Neutra"));
+  }
+  /** O começo do modo de jogar: sem o núcleo do Live2D nem a memória; abre a janela da sala (com o código do link, se veio). */
+  async function iniciarJogo() {
+    live2d = null;
+    barraDeGestos();
+    await mostrarVazio();
+    atualizarSala();
+    await janelaSala(fragmento.get("sala") || "");
+  }
+  /** Pergunta de novo o que a pessoa quer fazer (recarrega sem o modo no endereço). */
+  async function trocarModo() {
+    if (sala && sala.dentro) await sala.sair();
+    history.replaceState(null, "", location.pathname + location.search);
+    location.reload();
+  }
+  /** Antes de entrar: conversar com o chat bot ou jogar com outras pessoas? */
+  async function escolherModo() {
+    if (MODO) return MODO;
+    let d = null;
+    const cartao = (modo, emoji, titulo, texto) => el("button", { class: "cartao-modo", type: "button", "data-modo": modo, onclick: () => d.fechar(modo) }, el("span", { class: "emoji" }, emoji), el("b", {}, titulo), el("span", { class: "fraco" }, texto));
+    d = LNUX.dialogo({ titulo: "Companhia", largo: true, botoes: [], corpo: el("div", { class: "escolha-modo" },
+      el("p", { style: { margin: 0 } }, "O que você quer fazer?"),
+      el("div", { class: "cartoes" },
+        cartao("conversa", "💬", "Conversar com a personagem", "O chat bot: ela responde (com uma IA ou sem), fala, reage aos toques e lembra de você."),
+        cartao("jogar", "🎮", "Jogar com outras pessoas", "Entrar num cenário com outras pessoas, pelo link de uma sala. Sem chat bot nem IA: quem fala são as pessoas."))) });
+    return (await d) || "conversa";
+  }
+
   // ── Menus ────────────────────────────────────────────────────────────
 
   const comPersonagem = () => !!atual;
   const menus = [
     { rotulo: "Personagem", itens: [
       { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
+      { rotulo: "Importar avatar do Unity (.unitypackage, .fbx)...", acao: () => importar("avatar") },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },
       "-",
@@ -1343,6 +1620,7 @@
       "-",
       { rotulo: "Mostrar áreas de toque", marcado: () => mostrarZonas, acao: () => { mostrarZonas = !mostrarZonas; desenharZonas(); } },
       { rotulo: "Mostrar atalhos de expressão", marcado: () => pref("atalhos", "1") === "1", acao: () => { gravarPref("atalhos", pref("atalhos", "1") === "1" ? "0" : "1"); desenharAtalhos(); } },
+      { rotulo: "Luz e sombras realistas (no cenário)", marcado: () => !!(palco.luzCfg && palco.luzCfg.realista), acao: () => palco.definirLuz({ realista: !palco.luzCfg.realista }), ativo: () => !!(atual && atual.tipo === "vrm") },
       { rotulo: "Fundo...", acao: janelaFundo },
       { rotulo: "Salvar foto (PNG)...", acao: foto, ativo: comPersonagem },
       { rotulo: "Tela cheia", atalho: "F11", acao: () => (document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen()).catch(() => {}) },
@@ -1355,6 +1633,34 @@
       { rotulo: "Atalhos de teclado", acao: () => LNUX.ajudaAtalhos() },
     ] },
   ];
+
+  /** Os menus do modo escolhido. Jogando, somem a conversa com o chat bot, a IA, a voz e a memória; entra o menu Sala. */
+  function menusDoModo() {
+    const trocar = { rotulo: jogando() ? "Trocar de modo (conversar com a personagem)..." : "Trocar de modo (jogar com outras pessoas)...", acao: trocarModo };
+    if (!jogando()) return menus.map((m) => (m.rotulo === "Ajuda" ? { ...m, itens: [...m.itens, "-", trocar] } : m));
+    const naSala = () => !!(sala && sala.dentro), dono = () => naSala() && !!sala.chave;
+    const semIA = new Set(["Perfil e personalidade...", "Emoções e expressões...", "Áreas de toque...", "Voz desta personagem...", "Mostrar áreas de toque", "Primeiros passos", "Núcleo do Live2D..."]);
+    const menuSala = { rotulo: "Sala", itens: [
+      { rotulo: "Criar ou entrar numa sala...", acao: () => janelaSala() },
+      { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
+      { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
+      { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
+      { rotulo: "Ver as personagens dos outros (senão, bonecos)", marcado: () => garantirSalaCfg().avatares, acao: () => { const c = garantirSalaCfg(); c.avatares = !c.avatares; LNUX.preferencia.gravar("companhia.sala", JSON.stringify(c)); if (sala) { sala.cfg.avatares = c.avatares; for (const r of sala.remotos.values()) r.buscarAvatar(); } } },
+      "-",
+      { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
+      { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
+      "-", trocar,
+    ] };
+    const ajudaJogo = { rotulo: "Como jogar", acao: () => LNUX.dialogo({ titulo: "Jogar com outras pessoas", largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }], corpo: el("div", { class: "ajustes" },
+      el("p", { style: { margin: 0 } }, el("b", {}, "Entrar: "), "abra o link que a pessoa mandou (ou Sala › Criar ou entrar e cole o link), escolha um nome e uma personagem. Sem uma personagem .vrm, você entra com um boneco simples."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Criar uma sala: "), "abra a Companhia pelo LNUX (a ponte), escolha o cenário (os de Movimento › Cenário; qualquer mapa é convertido para .glb) e mande o link. Para pessoas de fora, o LNUX precisa estar com os Apps Web compartilhados pela internet (o túnel)."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Interagir: "), "escreva na caixa de texto (aparece um balão em cima da sua personagem), use os gestos e as expressões embaixo do palco e, com Movimento › Captura de movimento, mexa os braços, as mãos e o rosto da personagem pela câmera: os outros veem."),
+      el("p", { class: "fraco", style: { margin: 0 } }, "Neste modo não há chat bot nem funções de IA. O link só dá acesso à sala, nunca às pastas do aparelho de quem criou.")) }) };
+    return [menus[0], menuSala, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
+      .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
+  }
+  const garantirSalaCfg = () => { if (sala) return sala.cfg; try { return Object.assign({ avatares: true }, JSON.parse(pref("sala", "{}") || "{}")); } catch (e) { return { avatares: true }; } };
 
   // ── Entrada de texto e controles ─────────────────────────────────────
 
@@ -1381,6 +1687,8 @@
     LNUX.botaoIcone("info", "O que ela lembra", janelaMemoria));
   $("#marca-icone").innerHTML = LNUX.icone("ia");
   $("#chip-roupa").addEventListener("click", menuRoupa);
+  $("#chip-sala").addEventListener("click", () => { if (sala && sala.dentro) mostrarLinks(); else janelaSala(); });
+  window.addEventListener("pagehide", () => { if (sala && sala.dentro) sala.sair(); });
   $("#chip-movimento").addEventListener("click", () => { const r = $("#chip-movimento").getBoundingClientRect(); LNUX.abrirMenu(estudio.itensDoMenu(), r.left, r.bottom + 4, $("#chip-movimento")); });
   palco.on("mundo", () => atualizarChipMovimento());
   palco.on("movimento-terminou", () => estudio.atualizar());
@@ -1395,27 +1703,33 @@
 
   // ── Começar ──────────────────────────────────────────────────────────
 
-  LNUX.iniciar({
-    app: "companhia", nome: "Companhia",
-    descricao: "Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA ou motor local, voz, expressões, toques e memória no aparelho; nas VRoid, captura de movimento pela câmera, pacotes de movimento e cenários para andar.",
-    layouts: [
-      { id: "lado", nome: "Personagem e conversa", descricao: "A personagem e a conversa lado a lado", icone: "layout" },
-      { id: "foco", nome: "Foco na personagem", descricao: "A personagem grande, a conversa flutuando", icone: "imagem" },
-      { id: "celular", nome: "Celular", descricao: "Personagem em cima, conversa embaixo", icone: "tela", celular: true },
-    ],
-    menus,
-    aoMudarLayout: () => setTimeout(() => palco.enquadrar(), 50),
+  escolherModo().then((modo) => {
+    MODO = modo;
+    document.documentElement.dataset.modo = modo;
+    return LNUX.iniciar({
+      app: "companhia", nome: "Companhia",
+      descricao: "Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA ou motor local, voz, expressões, toques e memória no aparelho; nas VRoid, captura de movimento pela câmera, pacotes de movimento, cenários para andar e salas para jogar com outras pessoas.",
+      layouts: [
+        { id: "lado", nome: jogando() ? "Personagem e sala" : "Personagem e conversa", descricao: "A personagem e a conversa lado a lado", icone: "layout" },
+        { id: "foco", nome: "Foco na personagem", descricao: "A personagem grande, a conversa flutuando", icone: "imagem" },
+        { id: "celular", nome: "Celular", descricao: "Personagem em cima, conversa embaixo", icone: "tela", celular: true },
+      ],
+      menus: menusDoModo(),
+      aoMudarLayout: () => setTimeout(() => palco.enquadrar(), 50),
+    });
   }).then(async () => {
+    aplicarFundo();
+    if (jogando()) { await iniciarJogo(); return; } // jogar: nada de IA, voz, memória nem núcleo do Live2D
     atualizarSeloIA();
     atualizarGasto();
-    aplicarFundo();
     await ia.atualizarChaves();
     await tentarNucleo(false);
-  });
+  }).catch(LNUX.erro);
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala,
+    get sala() { return sala; }, get modo() { return MODO; },
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
   };
 })();

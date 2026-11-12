@@ -32,7 +32,7 @@
     gerente.setURLModifier((url) => {
       // os endereços que este gerente criou (blob:) e os dados embutidos passam direto; um "blob:.../textura.png" é um
       // arquivo vizinho do modelo (o carregador montou o endereço em cima do endereço do próprio modelo)
-      if (/^data:/i.test(url) || urls.includes(url)) return url;
+      if (/^data:/i.test(url) || urls.includes(url) || /^blob:[^/]*\/\/[^/]+\/[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(url)) return url; // dados embutidos e objetos de verdade (as texturas de dentro de um .glb)
       let limpo = url;
       try { limpo = decodeURIComponent(url); } catch (e) { /* fica como veio */ }
       limpo = limpo.replace(/^blob:/i, "").replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
