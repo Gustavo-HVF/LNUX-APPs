@@ -146,15 +146,19 @@
     const d = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
     if (d[0] === 0x89 && d[1] === 0x50 && d[2] === 0x4e && d[3] === 0x47) return { direto: { blob, mime: "image/png" } };
     if (d[0] === 0xff && d[1] === 0xd8) return { direto: { blob, mime: "image/jpeg" } };
+    const tudo = async () => new Uint8Array(await blob.arrayBuffer());
     try {
-      if (d[0] === 0x38 && d[1] === 0x42 && d[2] === 0x50 && d[3] === 0x53) return { tela: telaDe(lerPSD(new Uint8Array(await blob.arrayBuffer()))) };
-      if (ext(nome) === "tga") return { tela: telaDe(lerTGA(new Uint8Array(await blob.arrayBuffer()))) };
+      if (d[0] === 0x38 && d[1] === 0x42 && d[2] === 0x50 && d[3] === 0x53) return { tela: telaDe(lerPSD(await tudo())) };
+      if (ext(nome) === "tga") return { tela: telaDe(lerTGA(await tudo())) };
       const bmp = await createImageBitmap(blob), t = document.createElement("canvas");
       t.width = bmp.width; t.height = bmp.height;
       t.getContext("2d").drawImage(bmp, 0, 0);
       bmp.close();
       return { tela: t };
-    } catch (e) { return null; }
+    } catch (e) {
+      // sem nome (uma textura embutida no .fbx) o TGA não tem marca no começo: tenta como TGA por último
+      try { return { tela: telaDe(lerTGA(await tudo())) }; } catch (e2) { return null; }
+    }
   }
 
   // ── Expressões: das formas do rosto (blendshapes) para os nomes do VRM ─────
@@ -310,13 +314,16 @@
       const pedidos = new Map(), urls = [], porNome = new Map([...arquivos.keys()].map((n) => [base(n).toLowerCase(), n]));
       const gerente = new T.LoadingManager(), andamento = { carregados: 0, total: 0 };
       gerente.onProgress = (_, carregados, total) => { andamento.carregados = carregados; andamento.total = total; };
+      const pontinho = new Blob([Uint8Array.from(atob(PIXEL.split(",")[1]), (c) => c.charCodeAt(0))], { type: "image/png" });
       gerente.setURLModifier((url) => {
         if (/^data:/i.test(url) || urls.includes(url) || /^blob:[^/]*\/\/[^/]+\/[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(url)) return url;
         let limpo = url;
         try { limpo = decodeURIComponent(url); } catch (e) { /* fica como veio */ }
         const achado = porNome.get(base(limpo.replace(/[?#].*$/, "")).toLowerCase());
-        if (!achado || !/\.(png|jpe?g|webp|bmp|gif|bin)$/i.test(achado)) { pedidos.set(url, achado || null); return PIXEL; }
-        const u = URL.createObjectURL(arquivos.get(achado));
+        if (!achado) return PIXEL; // textura que não veio no pacote
+        // o navegador não abre TGA nem PSD: o modelo recebe um pontinho no lugar, com um endereço só dele, e a
+        // imagem de verdade é lida depois (abrirImagem), quando o material é refeito
+        const u = URL.createObjectURL(/\.(png|jpe?g|webp|bmp|gif|bin)$/i.test(achado) ? arquivos.get(achado) : pontinho);
         urls.push(u);
         pedidos.set(u, achado);
         return u;
@@ -558,12 +565,26 @@
         texturas.set(caminho, tex);
         return tex;
       };
+      const embutidas = new Map(); // endereço → textura (as imagens embutidas no .fbx)
       const texturaDoModelo = async (tex) => {
-        // a textura que o próprio modelo pede: um arquivo do pacote (entra direto) ou uma imagem embutida (regravada)
+        // a textura que o próprio modelo pede: um arquivo do pacote (entra direto) ou uma imagem embutida
         if (!tex || !tex.image) return null;
         const src = tex.image.src || "";
         if (pedidos.has(src)) { const c = pedidos.get(src); return c && IMAGEM.test(c) ? texturaDoArquivo(c) : null; }
         if (/^data:/.test(src) && src.length < 400) return null; // o pontinho branco de "não achei"
+        if (tex.image.naturalWidth === 0 && /^blob:/.test(src)) {
+          // embutida num formato que o navegador não abre (TGA, PSD): lê os bytes e decodifica aqui
+          if (!embutidas.has(src)) {
+            let nova = null;
+            try {
+              const lida = await abrirImagem(await (await fetch(src)).blob(), "");
+              if (lida) { nova = new T.CanvasTexture(lida.tela || await createImageBitmap(lida.direto.blob)); nova.flipY = false; nova.colorSpace = T.SRGBColorSpace; nova.wrapS = nova.wrapT = T.RepeatWrapping; }
+            } catch (e) { nova = null; }
+            if (!nova) naoAbriu++;
+            embutidas.set(src, nova);
+          }
+          return embutidas.get(src);
+        }
         if (ehFBX) { tex.flipY = false; tex.needsUpdate = true; }
         return tex;
       };

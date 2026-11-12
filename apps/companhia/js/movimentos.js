@@ -56,6 +56,8 @@
   C.mapearOssos = function (ossos) {
     const mapa = {}, coluna = [];
     const por = (vrm, nome) => { if (!mapa[vrm]) mapa[vrm] = nome; };
+    // nos esqueletos em que a canela se chama "knee" (os do VRChat feitos no Blender: leg, knee, ankle), "leg" é a coxa
+    const temJoelho = ossos.some((o) => /knee/.test(partir(o.nome).base));
     for (const { nome } of ossos) {
       if (IGNORAR.test(nome)) continue;
       const { lado, base } = partir(nome);
@@ -80,7 +82,7 @@
       if (/toe/.test(base)) { if (lado) por(L + "Toes", nome); continue; }
       if (/foot|ankle/.test(base)) { if (lado) por(L + "Foot", nome); continue; }
       if (/hipjoint/.test(base)) continue;
-      if (/upleg|upperleg|thigh/.test(base)) { if (lado) por(L + "UpperLeg", nome); continue; }
+      if (/upleg|upperleg|thigh/.test(base) || (temJoelho && base === "leg")) { if (lado) por(L + "UpperLeg", nome); continue; }
       if (/lowerleg|leg|calf|shin|knee/.test(base)) { if (lado) por(L + "LowerLeg", nome); continue; }
       if (/shoulder|clavicle|collar/.test(base)) { if (lado) por(L + "Shoulder", nome); continue; }
       if (/forearm|lowerarm|elbow/.test(base)) { if (lado) por(L + "LowerArm", nome); continue; }

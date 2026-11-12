@@ -233,8 +233,8 @@
     const id = LNUX.id("p");
     const cfg = info.companhia || {};
     const p = {
-      id, tipo: "vrm", nome: info.nome, criado: Date.now(), atualizado: Date.now(), protegido: info.protegido,
-      roupas: info.roupas.map(({ meta, ...r }) => ({ ...r, autor: meta.autor, versao: meta.versao })),
+      id, tipo: "vrm", nome: info.nome, criado: Date.now(), atualizado: Date.now(), protegido: info.protegido, convertido: info.convertido || false,
+      roupas: info.roupas.map(({ meta, ...r }) => ({ ...r, autor: meta.autor, versao: meta.versao, ...(meta.convertido ? { convertido: meta.convertido } : {}) })),
       roupaAtual: info.roupas[0].id, variacoes: info.variacoes,
       perfil: Object.assign(C.perfilPadrao(info.nome), cfg.perfil || {}),
       emocoes: cfg.emocoes || {}, ativas: cfg.ativas || [], enquadramento: cfg.enquadramento || null,
