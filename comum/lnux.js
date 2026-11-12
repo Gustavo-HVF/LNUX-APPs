@@ -1114,6 +1114,24 @@
     for (const l of config.layouts) LNUX.comando({ grupo: "Layout", rotulo: l.nome, acao: () => LNUX.layout.definir(l.id) });
     LNUX.layout.aplicar();
     LNUX.divisores();
-    return ponte.verificar();
+    return Promise.all([ponte.verificar(), publicadoSozinho()]).then(([ligada]) => ligada);
   };
+
+  /**
+   * Publicado sozinho (o servidor com --so-app): este app é o site inteiro. Some o caminho para a página inicial dos
+   * Apps Web (ela nem existe nesse endereço) e, para quem chega de fora (sem a ponte), o selo da ponte.
+   */
+  async function publicadoSozinho() {
+    let p = null;
+    try { const r = await fetch("/api/publico", { cache: "no-store" }); if (r.ok) p = await r.json(); } catch (e) { p = null; }
+    LNUX.publico = p || {};
+    if (!p || !p.so_app) return;
+    document.documentElement.dataset.soApp = p.so_app;
+    for (const a of document.querySelectorAll('a[href="../../"]')) {
+      if (a.classList.contains("lnux-marca")) { a.setAttribute("href", "./"); a.removeAttribute("title"); } else a.remove();
+    }
+    const mostrarSelo = () => { for (const s of document.querySelectorAll(".lnux-selo")) s.hidden = !ponte.disponivel; };
+    mostrarSelo();
+    document.addEventListener("lnux:ponte", mostrarSelo);
+  }
 })();

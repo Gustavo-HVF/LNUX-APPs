@@ -250,3 +250,56 @@
 .gestos button { width: 36px; height: 36px; border-radius: 50%; border: 0; background: transparent; font-size: 20px; cursor: pointer; line-height: 1; }
 .gestos button:hover { background: color-mix(in srgb, var(--destaque) 18%, transparent); }
 .link-sala .lnux-entrada { flex: 1; min-width: 200px; font-family: var(--mono, monospace); font-size: .86em; }
+
+/* ── Loja: personagens, mundos e animações do servidor ─────────────── */
+.loja { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; background: var(--fundo); color: var(--texto); animation: lnux-aparecer .12s ease-out; }
+.loja-topo { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--borda); background: var(--painel); flex-wrap: wrap; }
+.loja-titulo { display: grid; gap: 1px; margin-right: auto; }
+.loja-titulo b { font-size: 1.15em; }
+.loja-busca { width: min(320px, 100%); }
+.loja-abas { display: flex; gap: 6px; padding: 10px 16px 0; flex-wrap: wrap; }
+.loja-abas[hidden] { display: none; }
+.loja-aba { border: 1px solid var(--borda); background: var(--painel); color: var(--texto); border-radius: 999px; padding: 6px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; font: inherit; }
+.loja-aba.ativa { background: var(--destaque); border-color: var(--destaque); color: var(--destaque-texto); }
+.loja-aba .conta { font-size: .8em; opacity: .75; }
+.loja-dono { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; margin: 10px 16px 0; padding: 8px 12px; border-radius: 10px; background: var(--destaque-suave); }
+.loja-dono[hidden] { display: none; }
+.loja-dono code { font-size: .92em; word-break: break-all; }
+.loja-grade { flex: 1; overflow: auto; padding: 14px 16px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; align-content: start; }
+.loja-grade[hidden] { display: none; }
+.cartao-loja { display: grid; gap: 4px; text-align: left; padding: 0 0 10px; border-radius: 14px; border: 1px solid var(--borda); background: var(--painel); color: var(--texto); cursor: pointer; overflow: hidden; font: inherit; transition: transform .12s, box-shadow .12s, border-color .12s; }
+.cartao-loja:hover, .cartao-loja:focus-visible { transform: translateY(-2px); border-color: var(--destaque); box-shadow: var(--sombra); outline: none; }
+.cartao-loja > .nome, .cartao-loja > .fraco { padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cartao-loja > .nome { font-weight: 600; margin-top: 4px; }
+.cartao-loja .capa { position: relative; aspect-ratio: 1; background: linear-gradient(160deg, var(--trilha-alt), var(--trilha)); display: grid; place-items: center; }
+.cartao-loja .capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cartao-loja .sem-miniatura { font-size: 56px; opacity: .8; }
+.selo-tipo { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78em; background: color-mix(in srgb, var(--painel) 82%, transparent); border: 1px solid var(--borda); }
+.capa .selo-tipo { position: absolute; left: 8px; top: 8px; backdrop-filter: blur(4px); }
+.capa .selo-novo { position: absolute; right: 8px; top: 8px; padding: 2px 8px; border-radius: 999px; font-size: .75em; font-weight: 600; background: var(--ok); color: #fff; }
+.loja-vazio { flex: 1; display: grid; place-content: center; gap: 6px; text-align: center; padding: 24px; }
+.loja-vazio[hidden] { display: none; }
+.loja-detalhe { flex: 1; overflow: auto; padding: 10px 16px 24px; display: grid; gap: 10px; align-content: start; }
+.loja-detalhe[hidden] { display: none; }
+.loja-voltar { justify-self: start; }
+.loja-produto { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(260px, 1fr); gap: 20px; align-items: start; }
+.vitrine { position: relative; aspect-ratio: 4 / 3; border-radius: 16px; overflow: hidden; background: var(--trilha-alt); border: 1px solid var(--borda); touch-action: none; }
+.vitrine-tela { width: 100% !important; height: 100% !important; display: block; cursor: grab; }
+.vitrine-tela:active { cursor: grabbing; }
+.vitrine-aviso { position: absolute; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center; color: var(--texto-2, var(--texto)); }
+.vitrine-escondida { position: fixed; left: -2000px; top: 0; width: 384px; height: 384px; pointer-events: none; }
+.loja-ficha { display: grid; gap: 10px; align-content: start; }
+.loja-ficha h2 { margin: 0; font-size: 1.5em; }
+.loja-descricao { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+.loja-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.loja-acoes .primario { font-size: 1.05em; padding-inline: 18px; }
+.loja-publicar .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.loja-tipos { display: flex; gap: 6px; flex-wrap: wrap; }
+.vitrine-publicar { aspect-ratio: 1; }
+@media (max-width: 760px) {
+  .loja-produto, .loja-publicar .grade { grid-template-columns: 1fr; }
+  .loja-grade { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 10px; }
+  .loja-topo { padding: 8px 10px; }
+  .loja-busca { order: 5; width: 100%; }
+}
+.loja-ficha .selo-tipo { justify-self: start; }
