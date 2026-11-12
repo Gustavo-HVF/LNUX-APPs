@@ -97,7 +97,7 @@ function zip(arquivos) {
   const contarDela = () => ev(() => document.querySelectorAll("#mensagens .msg.ela").length);
 
   try {
-    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pagina.waitForFunction(() => window.Companhia && window.Companhia.live2d !== undefined && document.querySelector("#nucleo-aviso:not([hidden])"), null, { timeout: 20000 });
     ok(await ev(() => window.Companhia.live2d) === null, "sem o núcleo do Live2D (para provar que o VRoid não precisa dele)");
 

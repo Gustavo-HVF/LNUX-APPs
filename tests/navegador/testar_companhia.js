@@ -113,7 +113,7 @@ const mock = http.createServer((req, res) => {
 
   try {
     // ── abrir: núcleo pela ponte, tela vazia ──
-    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pagina.waitForFunction(() => window.Companhia && window.Companhia.live2d !== undefined && document.querySelector(".lnux-selo"), null, { timeout: 15000 });
     await pagina.waitForFunction(() => window.Companhia.live2d, null, { timeout: 15000 });
     ok(await ev(() => window.Companhia.live2d) === "ponte", "núcleo do Live2D carregado pela ponte (sem internet)");
@@ -374,7 +374,7 @@ const mock = http.createServer((req, res) => {
       }
     });
     const pf = await fraco.newPage();
-    await pf.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pf.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pf.waitForFunction(() => window.Companhia && window.Companhia.live2d, null, { timeout: 15000 });
     await pf.click('.lnux-menubar > button:text-is("Personagem")');
     await pf.click('.lnux-menu button:has(.rotulo:text-is("Importar ZIP ou .vrm..."))');
@@ -407,7 +407,7 @@ const mock = http.createServer((req, res) => {
     // ── celular ──
     const cel = await navegador.newContext({ ...devices["Pixel 7"] });
     const pc = await cel.newPage();
-    await pc.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pc.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pc.waitForFunction(() => window.Companhia && window.Companhia.live2d, null, { timeout: 15000 });
     ok(await pc.evaluate(() => document.documentElement.dataset.layout) === "celular", "no celular, layout de celular");
     const caixas = await pc.evaluate(() => { const a = document.querySelector("#palco-area").getBoundingClientRect(), b = document.querySelector("#conversa").getBoundingClientRect(); return { a: a.bottom, b: b.top, w: b.width, W: innerWidth }; });

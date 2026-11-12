@@ -141,7 +141,7 @@
       this.estado = "parado";
       this.andar = { fase: 0, andar: 0, correr: 0, pulo: 0, subindo: false, altura: 1.5 };
       this.emocao = "neutra";
-      this.gestoVisto = 0;
+      this.gestoVisto = null;    // o número do último gesto dela que já vi (null: ainda não vi nenhum estado)
       this.acenar = 0;           // quando começou o aceno (s)
       this.avatar = null;        // {vrm, ...} quando o VRM dela chegou
       this.avatarVersao = 0;
@@ -169,7 +169,10 @@
       this.rumoAlvo = e.r || 0;
       this.estado = e.e || "parado";
       this.emocao = e.emo || "neutra";
-      if (Array.isArray(e.g) && e.g[0] !== this.gestoVisto) { if (this.gestoVisto && e.g[1] === "acenar") this.acenar = performance.now() / 1000; this.gestoVisto = e.g[0]; }
+      if (Array.isArray(e.g) && e.g[0] !== this.gestoVisto) { // um gesto novo (o que já tinha acontecido antes de eu chegar não repete)
+        if (this.gestoVisto !== null && e.g[1] === "acenar") this.acenar = performance.now() / 1000;
+        this.gestoVisto = e.g[0];
+      }
       if (e.pose) {
         this.poseRecebida = this.poseRecebida || {};
         for (const n of Object.keys(this.poseRecebida)) if (!e.pose[n]) delete this.poseRecebida[n];
@@ -282,7 +285,7 @@
       this.ocupado = false;
       this.falhas = 0;
       this.relogio = new window.THREE.Clock();
-      this.quadro = () => { if (!this.codigo) return; const dt = Math.min(0.1, this.relogio.getDelta()); for (const r of this.remotos.values()) { try { r.atualizar(dt); } catch (e) { console.error(e); } } this.pedidoQuadro = requestAnimationFrame(this.quadro); };
+      this.quadro = () => { if (!this.codigo) return; const dt = Math.min(0.3, this.relogio.getDelta()); for (const r of this.remotos.values()) { try { r.atualizar(dt); } catch (e) { console.error(e); } } this.pedidoQuadro = requestAnimationFrame(this.quadro); };
     }
     get dentro() { return !!(this.codigo && this.eu); }
     get pessoas() { return this.remotos.size + (this.dentro ? 1 : 0); }

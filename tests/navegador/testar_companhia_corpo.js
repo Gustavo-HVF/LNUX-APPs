@@ -100,7 +100,7 @@ async function baixar(url, destino) {
     const consola = [];
     pagina.on("console", (m) => { if (m.type() === "error" && !RUIDO.test(m.text())) consola.push(m.text()); });
     pagina.on("pageerror", (e) => consola.push("[pageerror] " + e.message));
-    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
+    await pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pagina.waitForFunction(() => window.Companhia && window.Companhia.live2d !== undefined && document.querySelector("#nucleo-aviso:not([hidden])"), null, { timeout: 20000 });
     return { navegador, pagina, consola };
   };
