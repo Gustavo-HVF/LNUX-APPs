@@ -7,8 +7,12 @@ num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** 
 
 Nas personagens VRoid há ainda o menu **Movimento**: **captura de movimento** pela câmera (rosto, olhos, tronco,
 braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bvh`), **cenários** para andar
-(W A S D, Espaço pula), um **conversor de mapas** para `.glb` (inclusive `.blend`, do Blender) e **ajuste do
-esqueleto**.
+(W A S D, Espaço pula), com **luz e sombras realistas** (dá para desligar), um **conversor de mapas** para `.glb`
+(inclusive `.blend`, do Blender) e **ajuste do esqueleto**. Avatares do **Unity / VRChat** (`.unitypackage`,
+`.fbx`) são convertidos para `.vrm` ao importar.
+
+Ao abrir, a Companhia pergunta o que você quer fazer: **conversar com a personagem** (o chat bot) ou **jogar com
+outras pessoas** numa **sala**, pelo link, sem chat bot nem nenhuma função de IA.
 
 Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
 chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
@@ -26,6 +30,40 @@ a memória pode ter uma cópia numa pasta do aparelho.
    "qual meu nome"...) sem gastar nada. Para uma conversa de verdade, ligue uma IA em *IA › Provedores*.
 3. **Voz**: *Voz › Configurar*. O 🎤 ao lado da caixa de texto escuta você; **Mãos livres** abre o microfone
    sozinho depois que ela fala, então dá para conversar só por voz.
+
+## Conversar ou jogar com outras pessoas
+
+Antes de entrar, a Companhia pergunta:
+
+- **💬 Conversar com a personagem**: o chat bot, como descrito no resto deste guia (IA ou motor local, voz,
+  toques, memória).
+- **🎮 Jogar com outras pessoas**: entrar num cenário com outras pessoas, pelo link de uma sala. Neste modo **não
+  há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas da personagem
+  e os toques com reação; quem fala são as pessoas, num bate-papo por texto.
+
+A escolha fica no endereço (`#modo=conversa` ou `#modo=jogar`); *Ajuda › Trocar de modo* pergunta de novo. Quem
+abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
+
+### Salas
+
+- **Criar** (*Sala › Criar ou entrar numa sala*): precisa da **ponte** (abrir a Companhia pelo LNUX, no aparelho
+  que vai receber a sala). Dê um nome, escolha o cenário (um dos guardados em *Movimento › Cenário*, ou o chão
+  simples) e mande o **link** para as pessoas. Quem criou pode trocar o cenário depois e fechar a sala para todos.
+- **Entrar**: abra o link no navegador (não precisa instalar nada nem ter a chave da ponte: o link só dá acesso à
+  sala), escolha um **nome** e uma **personagem** (uma das suas, `.vrm`, ZIP ou avatar do Unity; ou o boneco
+  simples) e entre. O cenário da sala chega sozinho.
+- **Na sala**: cada pessoa anda com a própria personagem (W A S D, Shift, Espaço). Os outros veem você andar,
+  correr, pular, **acenar** e mudar de **expressão** (os botões 👋 😀 😂 😮 😢 😠 😐) e, com a captura de movimento
+  ligada, mexer os braços, as mãos e o rosto. O **bate-papo** aparece na conversa e num balão em cima da cabeça.
+- **Personagens dos outros**: por padrão você vê a personagem que cada um mandou (o `.vrm` passa pelo servidor da
+  sala uma vez). Em *Sala › Ver as personagens dos outros* dá para ver só bonecos (mais leve). Se a licença da sua
+  personagem não deixa redistribuir, a Companhia pergunta antes de mandar; dá para entrar como boneco.
+- **Para pessoas de fora**: a sala fica no servidor do aparelho de quem criou e existe enquanto ele estiver ligado.
+  O link de `127.0.0.1` só vale nesse aparelho; para outras pessoas, use o compartilhamento dos Apps Web pela
+  internet do LNUX (o túnel) ou abra o servidor para a rede de casa (`--endereco 0.0.0.0`), e crie a sala abrindo
+  a Companhia por esse endereço.
+- Limites: 6 salas ao mesmo tempo, 16 pessoas por sala, cenário de até 200 MB e personagem de até 40 MB. Quem some
+  por 20 segundos sai da sala; uma sala vazia fecha depois de uma hora.
 
 ## Personagens VRoid (.vrm) e troca de roupa
 
@@ -62,6 +100,37 @@ O núcleo do Live2D não é preciso para elas.
 
 Nos modelos **Live2D**, as roupas e os acessórios que o autor separou ficam nas expressões (como os atalhos do
 VTube Studio). Quando o nome parece roupa (clothe, outfit, hat...), elas também aparecem no botão 👗.
+
+## Avatares do Unity e do VRChat (.unitypackage, .fbx)
+
+*Personagem › Importar avatar do Unity* (ou arrastar o arquivo para a tela) aceita o **`.unitypackage`** de um
+avatar (como os do VRChat e os vendidos no BOOTH), um **ZIP** com o `.unitypackage` dentro, um **`.fbx`** com as
+texturas ao lado (num ZIP) ou um **`.glb`** com esqueleto. O avatar é **convertido para `.vrm`** (VRM 1.0) no
+próprio aparelho e vira uma personagem como as do VRoid: conversa, roupas, captura de movimento, pacotes de
+movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
+
+- **Esqueleto**: os ossos de pessoa vêm da ficha que o Unity guarda ao lado do `.fbx` (o `.meta`, com o avatar
+  "Humanoid") ou, sem ela, dos nomes dos ossos (mixamo, Unity, VRoid, Blender: `Left arm`, `Left elbow`,
+  `Left knee`...). O avatar é posto **de pé, de frente, em metros** (os `.fbx` costumam vir em centímetros), sem as
+  escalas escondidas no esqueleto, com os braços e as pernas na **pose em T** (avatares em A também servem).
+- **Materiais e texturas**: os materiais `.mat` do Unity são ligados às texturas do pacote (pela ficha e pelo
+  nome): cor, textura principal, recorte (cabelo, cílios), transparência, dois lados e brilho próprio. Entram no
+  estilo de desenho das personagens VRoid (MToon). PNG e JPEG entram como vieram; **TGA** e **PSD** (do Photoshop)
+  são convertidos. Num avatar convertido, cada material é uma peça em *Personagem › Roupas* (para esconder o que
+  sobrar ou trocar a textura).
+- **Rosto**: as formas do rosto viram expressões do VRM: boca (`vrc.v_aa`, `vrc.v_oh`..., `あ`, `A`), piscar
+  (`vrc.blink`, `まばたき`), alegre (`Joy`, `笑い`), brava, triste, surpresa; outras como `照れ` (rubor), lágrima e
+  língua viram atalhos. Só as formas usadas ficam no arquivo.
+- **Balanço**: os ossos soltos de **cabelo, saia, rabo, orelhas e fitas** (pelo nome) ganham balanço, com
+  colisores na cabeça, no corpo e nas coxas. Os olhos (ossos `LeftEye`/`RightEye`) seguem a pessoa.
+- Antes de importar, um **resumo** mostra o que foi reconhecido (ossos, expressões, texturas, balanço) e o que não
+  veio. Se o pacote tem mais de um modelo, a Companhia pergunta qual é o avatar.
+- **Não vêm**: os efeitos dos shaders do Unity (lilToon, Poiyomi: contornos, brilhos, matcaps), as físicas do
+  VRChat (PhysBones, que ficam no prefab, não no modelo), as animações, os menus e as peças ligadas ou desligadas
+  pelo prefab.
+- **Licença**: um pacote do Unity não diz o que o autor deixa fazer, e avatares comprados quase nunca deixam
+  redistribuir. O `.vrm` convertido fica marcado como **"não redistribuir"**: a personagem fica só neste aparelho e
+  a Companhia avisa antes de mandá-la para outras pessoas numa sala. Confira os termos de quem fez o avatar.
 
 ## Movimento: captura, pacotes de movimento, cenário e esqueleto (personagens VRoid)
 
@@ -146,6 +215,19 @@ personagem; em **Andar pelo cenário** ela anda por ele:
 - Andar tem um movimento próprio (andar, correr, pular); os movimentos de um pacote podem ficar no lugar.
   A captura pela câmera funciona junto: você anda com as teclas e os braços e o rosto seguem a câmera.
 - Rosto / Busto / Corpo voltam ao retrato.
+
+### Luz e sombras
+
+No cenário (com um mapa aberto ou andando), a **luz realista** troca a luz de frente por um **sol que faz sombra**:
+a personagem, as outras pessoas da sala e o próprio mapa fazem e recebem sombra, com céu azulado, chão quente e
+tons mais naturais. No painel *Cenário* (e em *Exibir*):
+
+- **Luz e sombras realistas**: liga e desliga tudo (desligada, volta a luz simples de antes, mais leve).
+- **Sombras**: só as sombras (o sol continua). Sem elas, volta a sombra redonda embaixo da personagem.
+- **Direção do sol** e **altura do sol** (de 10° a 85°: baixo, sombras compridas; alto, sombras curtas).
+
+A escolha fica guardada. No **celular** começa desligada, porque as sombras pesam; ligue se o aparelho aguentar.
+No retrato de conversa (sem cenário) a luz é sempre a de frente.
 
 ### Converter mapas para `.glb`
 
@@ -360,6 +442,9 @@ js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → 
 js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), câmera em terceira pessoa e controles de toque
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
+js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
+                   materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
+js/sala.js         salas para jogar com outras pessoas: entrar pelo link, as personagens dos outros, bate-papo
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
@@ -387,7 +472,15 @@ As personagens VRoid têm testes próprios, que baixam o modelo de exemplo da pi
 python3 tests/testar_navegador.py companhia_vrm     # importar, roupas, emoções, toques
 python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
+python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
+python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
 ```
+
+O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se
+veem andar, acenar, mudar de expressão e conversar; confere também que o modo de jogar não tem nada de IA. O
+`companhia_avatar` monta um avatar no jeito dos do VRChat (`.fbx` em centímetros, de costas, braços em A, ossos
+com nomes do Blender, formas do rosto, materiais `.mat` e texturas PNG, TGA e PSD) e confere a personagem
+convertida: de frente, braços para baixo, pés no chão, textura do lado certo, expressões, balanço e licença.
 
 O `companhia_corpo` monta os próprios arquivos de teste (um boneco VRM 0.x só de ossos, um `.bvh`, um cenário
 `.glb` e um `.unitypackage`), então a maior parte roda sem internet: braços para baixo no VRM 0.x, captura com
@@ -413,7 +506,11 @@ na hora. Se o aparelho tiver o Blender (ou o módulo `bpy`), ele confere também
 - **Captura de movimento**: é de uma câmera só, então a profundidade (um braço para a frente, as pernas) é
   estimada; mãos muito rápidas ou escondidas somem por instantes; uma pessoa por vez. Não há ainda gravação da
   captura em arquivo nem entrada de rastreadores externos (VMC/OSC).
-- As físicas de roupa além das do próprio VRM (spring bones) ainda não estão incluídas.
+- As físicas de roupa além das do próprio VRM (spring bones) ainda não estão incluídas. Nos avatares do Unity, as
+  físicas do VRChat (PhysBones) e os efeitos dos shaders (lilToon, Poiyomi) não vêm; o balanço é dado pelos nomes
+  dos ossos.
+- **Salas**: só bate-papo por texto (ainda não há voz entre as pessoas) e a sala vive no servidor de quem criou:
+  para pessoas de fora, o servidor precisa estar num endereço que elas alcancem (o túnel do LNUX ou a rede de casa).
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.

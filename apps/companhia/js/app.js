@@ -1432,7 +1432,7 @@
   async function janelaSala(codigoInicial = "") {
     const personagens = (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", ""));
     const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
-    const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem .vrm..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
+    const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem (.vrm, ZIP ou avatar do Unity)..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
     avatar.setAttribute("aria-label", "Sua personagem");
     const mandar = el("input", { type: "checkbox", checked: pref("sala-mandar", "1") === "1" });
     const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
