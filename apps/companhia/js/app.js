@@ -14,6 +14,12 @@
   const gravarPref = (k, v) => LNUX.preferencia.gravar("companhia." + k, String(v));
   ia.carregar();
   voz.carregar();
+  // Modo: "conversa" (o chat bot) ou "jogar" (com outras pessoas numa sala, sem nenhuma função de IA). O endereço pode
+  // já dizer (#modo=conversa, #modo=jogar ou #sala=<código>, o link de uma sala); senão a pessoa escolhe ao abrir.
+  const fragmento = new URLSearchParams(location.hash.replace(/^#/, ""));
+  let MODO = fragmento.get("sala") ? "jogar" : (["conversa", "jogar"].includes(fragmento.get("modo")) ? fragmento.get("modo") : null);
+  const jogando = () => MODO === "jogar";
+  let sala = null; // a sala em que estou (js/sala.js), no modo de jogar
 
   const palcoArea = $("#palco-area");
   // Dois palcos: Live2D (pixi) e 3D (VRoid/VRM, three.js). "palco" aponta para o da personagem aberta; os
@@ -224,6 +230,7 @@
 
   async function enviar(texto) {
     texto = texto.trim();
+    if (jogando()) { enviarParaSala(texto); return; } // jogar: a caixa de texto fala com as pessoas da sala (não há chat bot)
     if (!texto || !atual) return;
     voz.destravar();
     voz.parar();
@@ -300,7 +307,7 @@
   // ── Toques ───────────────────────────────────────────────────────────
 
   palco.on("toque", async (ev) => {
-    if (!atual) return;
+    if (!atual || jogando()) return; // jogar: a personagem é o avatar de quem joga, não uma companhia que reage
     voz.destravar();
     const r = C.reagirAoToque(ev, est.afeto || 0, atual.reacoes);
     palco.definirEmocao(r.emocao);
@@ -336,7 +343,7 @@
     atualizarGasto();
   });
   palco.on("carinho-continuo", (ev) => {
-    if (!atual) return;
+    if (!atual || jogando()) return;
     efeito(ev.x, ev.y, "carinho");
     est.afeto = Math.min(100, (est.afeto || 0) + 0.5);
     salvarEstado();
@@ -444,6 +451,7 @@
       atualizarChipRoupa();
       atualizarChipMovimento();
       await estudio.aoAbrirPersonagem(); // o cenário e os movimentos de andar em uso (só personagens VRoid)
+      if (jogando()) { est = { afeto: 0, fatos: [], pessoa: "" }; return; } // jogar: sem memória, saudação nem chat bot
       est = await mem.estado(id);
       atualizarAfeto();
       await desenharHistorico();
@@ -501,7 +509,7 @@
     $("#conversa-titulo").textContent = "Conversa";
     $("#atalhos").replaceChildren();
     $("#zonas").replaceChildren();
-    listaMsgs.replaceChildren(el("div", { class: "msg sistema" }, "Importe uma personagem para conversar."));
+    listaMsgs.replaceChildren(el("div", { class: "msg sistema" }, jogando() ? "Modo de jogar: crie uma sala ou entre numa pelo link (menu Sala). As mensagens das pessoas da sala aparecem aqui." : "Importe uma personagem para conversar."));
     const lista = await C.listarPersonagens();
     const cartao = $("#palco-vazio .cartao");
     cartao.querySelector(".lista-personagens") && cartao.querySelector(".lista-personagens").remove();
@@ -1288,6 +1296,198 @@
       botoes: [{ rotulo: "Fechar", primario: true, valor: true }] });
   }
 
+  // ── Jogar com outras pessoas (salas) ─────────────────────────────────
+
+  const copiar = async (texto) => {
+    try { await navigator.clipboard.writeText(texto); } catch (e) { try { await LNUX.ponte.areaDeTransferencia.escrever(texto); } catch (e2) { await LNUX.dialogo({ titulo: "Copie o link", corpo: el("input", { class: "lnux-entrada", value: texto, readonly: true }) }); return; } }
+    LNUX.aviso("Link copiado.", "ok");
+  };
+  function garantirSala() {
+    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala });
+    return sala;
+  }
+  function mensagemDaSala(m) {
+    if (!jogando()) return;
+    const e = m.sistema ? el("div", { class: "msg sistema" }, m.texto)
+      : el("div", { class: "msg " + (m.meu ? "eu" : "ela") }, m.meu ? null : el("b", { class: "quem" }, m.nome + ": "), el("span", { class: "t" }, m.texto), el("span", { class: "info" }, hora(Date.now())));
+    listaMsgs.append(e);
+    rolarFim();
+  }
+  function atualizarSala() {
+    const dentro = !!(sala && sala.dentro);
+    const chip = $("#chip-sala");
+    chip.hidden = !jogando();
+    chip.textContent = dentro ? `🎮 ${sala.info.nome} · ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}` : "🎮 Entrar numa sala";
+    chip.classList.toggle("ligado", dentro);
+    $("#gestos").hidden = !(jogando() && atual && atual.tipo === "vrm");
+    if (jogando()) {
+      $("#conversa-titulo").textContent = dentro ? `Sala: ${sala.info.nome}` : "Sala";
+      campo.placeholder = dentro ? "Escreva para as pessoas da sala..." : "Entre numa sala para conversar com as pessoas...";
+      $("#titulo-doc").textContent = dentro ? `${sala.info.nome} (${sala.pessoas})` : atual ? atual.perfil.nome : "Jogar";
+    }
+    atualizarChipMovimento();
+  }
+  function enviarParaSala(texto) {
+    if (!texto) return;
+    if (!sala || !sala.dentro) { LNUX.aviso("Entre numa sala primeiro (menu Sala).", "alerta"); return; }
+    campo.value = "";
+    ajustarCampo();
+    sala.falar(texto).catch(LNUX.erro);
+  }
+  /** O avatar padrão (um boneco de caixas), guardado como uma personagem qualquer na primeira vez. */
+  async function idDoBoneco() {
+    const id = pref("sala-boneco", "");
+    if (id && (await C.listarPersonagens()).some((p) => p.id === id)) return id;
+    await C.prepararVRM();
+    const p = await C.importarPacote(new Map([["Boneco.vrm", C.bonecoPadrao()]]));
+    gravarPref("sala-boneco", p.id);
+    return p.id;
+  }
+  /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
+  async function avatarParaOsOutros(mandar) {
+    if (!mandar || !atual || atual.tipo !== "vrm") return null;
+    if (atual.protegido && !(await LNUX.dialogo({ titulo: "Modelo com licença", corpo: `O autor de "${atual.perfil.nome}" não deixa redistribuir o modelo. Para os outros te verem com ela, o arquivo é mandado para o aparelho de cada pessoa da sala. ` +
+      "Sem mandar, você continua se vendo com ela e os outros veem um boneco simples.", botoes: [{ rotulo: "Aparecer como boneco", valor: false, primario: true }, { rotulo: "Mandar mesmo assim", valor: true }] }))) return null;
+    const r = roupaAtual();
+    return r ? r.blob : null;
+  }
+  const codigoDe = (texto) => { const m = String(texto).match(/sala=([a-z0-9]+)/i); return (m ? m[1] : String(texto)).trim().toLowerCase(); };
+  /** Criar ou entrar numa sala: nome, personagem e o código (ou o cenário, para criar). */
+  async function janelaSala(codigoInicial = "") {
+    const personagens = (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", ""));
+    const nome = el("input", { class: "lnux-entrada", value: pref("sala-nome", ""), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
+    const avatar = seletor([["", "Boneco simples (padrão)"], ...personagens.map((p) => [p.id, p.nome]), ["importar", "Importar uma personagem .vrm..."]], pref("sala-avatar", (atual && atual.tipo === "vrm" && personagens.some((p) => p.id === atual.id) && atual.id) || ""));
+    avatar.setAttribute("aria-label", "Sua personagem");
+    const mandar = el("input", { type: "checkbox", checked: pref("sala-mandar", "1") === "1" });
+    const codigo = el("input", { class: "lnux-entrada", value: codigoInicial || (sala && sala.codigo) || "", placeholder: "cole o link (ou o código) da sala", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
+    const podeCriar = LNUX.ponte.disponivel && LNUX.ponte.tem("salas");
+    const mapas = podeCriar ? await C.mapas.lista() : [];
+    const mapa = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], pref("mapa", ""));
+    mapa.setAttribute("aria-label", "Cenário da sala");
+    const titulo = el("input", { class: "lnux-entrada", value: pref("sala-titulo", "Minha sala"), maxlength: 40, "aria-label": "Nome da sala" });
+    let d = null;
+    /** Confere o nome e abre a personagem escolhida. Devolve {nome, avatar} (ou null se faltou algo). */
+    const preparar = async () => {
+      const n = nome.value.trim();
+      if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
+      gravarPref("sala-nome", n);
+      gravarPref("sala-mandar", mandar.checked ? "1" : "0");
+      if (avatar.value === "importar") { d.fechar(); await importar("zip"); if (atual && atual.tipo === "vrm") gravarPref("sala-avatar", atual.id); janelaSala(codigo.value); return null; }
+      gravarPref("sala-avatar", avatar.value);
+      const id = avatar.value || (await idDoBoneco());
+      if (!atual || atual.id !== id) await abrirPersonagem(id, { saudar: false });
+      if (!atual || atual.tipo !== "vrm") throw new Error("Não consegui abrir essa personagem.");
+      return { nome: n, avatar: avatar.value ? await avatarParaOsOutros(mandar.checked) : (await C.lerPersonagem(id)).roupas[0].blob }; // o boneco padrão sempre vai
+    };
+    const entrar = async (cod, criada) => {
+      const eu = await preparar();
+      if (!eu) return;
+      d.fechar();
+      $("#palco-carregando").hidden = false;
+      try {
+        const info = await garantirSala().entrar(cod, eu.nome, eu.avatar, (t) => { $("#palco-carregando").textContent = t; });
+        history.replaceState(null, "", location.pathname + location.search + "#sala=" + cod); // recarregar volta para a sala
+        listaMsgs.replaceChildren();
+        mensagemDaSala({ sistema: true, texto: `Você entrou em "${info.nome}"` + (info.mapa ? `, no cenário "${info.mapa.nome}".` : ".") + " W A S D andam, Shift corre, Espaço pula; escreva aqui para falar com as pessoas." });
+        if (criada) mostrarLinks(criada);
+      } finally { $("#palco-carregando").hidden = true; atualizarSala(); }
+    };
+    const criar = async () => {
+      gravarPref("sala-titulo", titulo.value.trim() || "Minha sala");
+      let m = null;
+      if (mapa.value) {
+        const reg = mapas.find((x) => x.id === mapa.value), arqs = await C.mapas.ler(mapa.value);
+        if (reg && arqs) {
+          const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+          m = { glb, nome: reg.nome, ajuste: reg.ajuste || {} };
+        }
+      }
+      if (!(await preparar())) return;
+      const r = await garantirSala().criar(titulo.value.trim() || "Minha sala", m);
+      await entrar(r.codigo, r);
+    };
+    const corpo = el("div", { class: "ajustes" },
+      el("div", { class: "grade" }, el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome), el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), avatar)),
+      el("label", { class: "lnux-alternar" }, mandar, "Mostrar minha personagem para os outros (sem isso, eles me veem como um boneco simples)"),
+      el("div", { class: "lnux-rotulo" }, "Entrar numa sala"),
+      el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, codigo), el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigo.focus(); return; } entrar(c).catch(LNUX.erro); } }, "Entrar")),
+      podeCriar ? el("div", { class: "lnux-rotulo" }, "Criar uma sala neste aparelho") : null,
+      podeCriar ? el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Nome da sala"), titulo), el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapa),
+        el("button", { class: "lnux-botao", type: "button", id: "sala-criar", onclick: () => criar().catch(LNUX.erro) }, "Criar sala")) : null,
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, podeCriar
+        ? "A sala fica neste aparelho enquanto o LNUX estiver aberto. Depois de criar, mande o link para as pessoas: elas entram pelo navegador, sem instalar nada. Os cenários vêm de Movimento › Cenário."
+        : "Para entrar, basta o link que a pessoa que criou a sala mandou. Para criar uma sala, abra a Companhia pelo LNUX (🌐 Apps Web) no aparelho que vai ser o servidor."));
+    codigo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); $("#sala-entrar").click(); } });
+    d = LNUX.dialogo({ titulo: "Jogar com outras pessoas", corpo, largo: true, botoes: [{ rotulo: "Fechar", valor: null }] });
+    return d;
+  }
+  /** Os links da sala para mandar aos outros (o do túnel, o da rede de casa e o deste endereço). */
+  function mostrarLinks(criada) {
+    if (!sala || !sala.codigo) return;
+    const caminho = location.pathname + "#sala=" + sala.codigo;
+    const publicos = ((criada && criada.enderecos) || sala.enderecos || []).map((e) => e + caminho);
+    if (criada) sala.enderecos = criada.enderecos || [];
+    const local = /^(127\.|localhost|\[::1\])/.test(location.hostname);
+    const links = [...new Set([...publicos, ...(local && publicos.length ? [] : [location.origin + caminho])])];
+    LNUX.dialogo({ titulo: "Link da sala", largo: true, botoes: [{ rotulo: "Fechar", primario: true, valor: null }], corpo: el("div", { class: "ajustes" },
+      el("p", { style: { margin: 0 } }, "Mande este link para quem vai jogar. A pessoa abre no navegador, escolhe um nome e entra:"),
+      ...links.map((l) => el("div", { class: "linha link-sala" }, el("input", { class: "lnux-entrada", value: l, readonly: true, "aria-label": "Link da sala" }), el("button", { class: "lnux-botao", type: "button", onclick: () => copiar(l) }, "Copiar"))),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, local && !publicos.length
+        ? "Este endereço (127.0.0.1) só vale neste aparelho. Para pessoas de fora entrarem, ligue no LNUX o compartilhamento dos Apps Web pela internet (o túnel) e crie a sala abrindo a Companhia pelo endereço do túnel; na rede de casa, abra o servidor para a rede e use o endereço com o IP do aparelho."
+        : "A sala existe enquanto o servidor deste aparelho estiver ligado. O link só dá acesso à sala (o cenário, os avatares e o bate-papo): quem entra não vê as suas pastas nem usa a ponte.")) });
+  }
+  async function sairDaSala(fechar) {
+    if (!sala || !sala.dentro) return;
+    if (fechar) await sala.fechar(); else await sala.sair();
+    history.replaceState(null, "", location.pathname + location.search + "#modo=jogar");
+    mensagemDaSala({ sistema: true, texto: fechar ? "Você fechou a sala." : "Você saiu da sala." });
+    atualizarSala();
+  }
+  /** Quem criou a sala troca o cenário dela: todos passam para o novo. */
+  async function trocarMapaDaSala() {
+    if (!sala || !sala.dentro || !sala.chave) return;
+    const mapas = await C.mapas.lista();
+    const sel = seletor([["", "Sem cenário (chão simples)"], ...mapas.map((m) => [m.id, m.nome])], "");
+    if (!(await LNUX.dialogo({ titulo: "Trocar o cenário da sala", corpo: el("div", { class: "ajustes" }, el("label", { class: "lnux-campo" }, el("span", {}, "Cenário (os de Movimento › Cenário)"), sel)), botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Trocar", primario: true, valor: true }] }))) return;
+    if (!sel.value) { await C.salaPedir("DELETE", sala.codigo + "/mapa", { chave: sala.chave }); return; }
+    const reg = mapas.find((x) => x.id === sel.value), arqs = await C.mapas.ler(sel.value);
+    const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
+    await sala.mandarMapa(sala.codigo, { glb, nome: reg.nome, ajuste: reg.ajuste || {} });
+  }
+  /** Gestos e expressões que os outros veem. */
+  function barraDeGestos() {
+    const rosto = (emoji, emocao, dica) => el("button", { type: "button", title: dica, "aria-label": dica, onclick: () => { palco.definirEmocao(emocao); clearTimeout(voltarNeutraT); if (emocao !== "neutra") voltarNeutraT = setTimeout(() => palco.definirEmocao("neutra"), 8000); } }, emoji);
+    $("#gestos").replaceChildren(
+      el("button", { type: "button", title: "Acenar", "aria-label": "Acenar", onclick: () => { palco.gesto("acenar"); if (sala) sala.gestoMeu("acenar"); } }, "👋"),
+      rosto("😀", "feliz", "Feliz"), rosto("😂", "rindo", "Rindo"), rosto("😮", "surpresa", "Surpresa"), rosto("😢", "triste", "Triste"), rosto("😠", "brava", "Brava"), rosto("😐", "neutra", "Neutra"));
+  }
+  /** O começo do modo de jogar: sem o núcleo do Live2D nem a memória; abre a janela da sala (com o código do link, se veio). */
+  async function iniciarJogo() {
+    live2d = null;
+    barraDeGestos();
+    await mostrarVazio();
+    atualizarSala();
+    await janelaSala(fragmento.get("sala") || "");
+  }
+  /** Pergunta de novo o que a pessoa quer fazer (recarrega sem o modo no endereço). */
+  async function trocarModo() {
+    if (sala && sala.dentro) await sala.sair();
+    history.replaceState(null, "", location.pathname + location.search);
+    location.reload();
+  }
+  /** Antes de entrar: conversar com o chat bot ou jogar com outras pessoas? */
+  async function escolherModo() {
+    if (MODO) return MODO;
+    let d = null;
+    const cartao = (modo, emoji, titulo, texto) => el("button", { class: "cartao-modo", type: "button", "data-modo": modo, onclick: () => d.fechar(modo) }, el("span", { class: "emoji" }, emoji), el("b", {}, titulo), el("span", { class: "fraco" }, texto));
+    d = LNUX.dialogo({ titulo: "Companhia", largo: true, botoes: [], corpo: el("div", { class: "escolha-modo" },
+      el("p", { style: { margin: 0 } }, "O que você quer fazer?"),
+      el("div", { class: "cartoes" },
+        cartao("conversa", "💬", "Conversar com a personagem", "O chat bot: ela responde (com uma IA ou sem), fala, reage aos toques e lembra de você."),
+        cartao("jogar", "🎮", "Jogar com outras pessoas", "Entrar num cenário com outras pessoas, pelo link de uma sala. Sem chat bot nem IA: quem fala são as pessoas."))) });
+    return (await d) || "conversa";
+  }
+
   // ── Menus ────────────────────────────────────────────────────────────
 
   const comPersonagem = () => !!atual;
@@ -1356,6 +1556,34 @@
     ] },
   ];
 
+  /** Os menus do modo escolhido. Jogando, somem a conversa com o chat bot, a IA, a voz e a memória; entra o menu Sala. */
+  function menusDoModo() {
+    const trocar = { rotulo: jogando() ? "Trocar de modo (conversar com a personagem)..." : "Trocar de modo (jogar com outras pessoas)...", acao: trocarModo };
+    if (!jogando()) return menus.map((m) => (m.rotulo === "Ajuda" ? { ...m, itens: [...m.itens, "-", trocar] } : m));
+    const naSala = () => !!(sala && sala.dentro), dono = () => naSala() && !!sala.chave;
+    const semIA = new Set(["Perfil e personalidade...", "Emoções e expressões...", "Áreas de toque...", "Voz desta personagem...", "Mostrar áreas de toque", "Primeiros passos", "Núcleo do Live2D..."]);
+    const menuSala = { rotulo: "Sala", itens: [
+      { rotulo: "Criar ou entrar numa sala...", acao: () => janelaSala() },
+      { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
+      { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
+      { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
+      { rotulo: "Ver as personagens dos outros (senão, bonecos)", marcado: () => garantirSalaCfg().avatares, acao: () => { const c = garantirSalaCfg(); c.avatares = !c.avatares; LNUX.preferencia.gravar("companhia.sala", JSON.stringify(c)); if (sala) { sala.cfg.avatares = c.avatares; for (const r of sala.remotos.values()) r.buscarAvatar(); } } },
+      "-",
+      { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
+      { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
+      "-", trocar,
+    ] };
+    const ajudaJogo = { rotulo: "Como jogar", acao: () => LNUX.dialogo({ titulo: "Jogar com outras pessoas", largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }], corpo: el("div", { class: "ajustes" },
+      el("p", { style: { margin: 0 } }, el("b", {}, "Entrar: "), "abra o link que a pessoa mandou (ou Sala › Criar ou entrar e cole o link), escolha um nome e uma personagem. Sem uma personagem .vrm, você entra com um boneco simples."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Criar uma sala: "), "abra a Companhia pelo LNUX (a ponte), escolha o cenário (os de Movimento › Cenário; qualquer mapa é convertido para .glb) e mande o link. Para pessoas de fora, o LNUX precisa estar com os Apps Web compartilhados pela internet (o túnel)."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Interagir: "), "escreva na caixa de texto (aparece um balão em cima da sua personagem), use os gestos e as expressões embaixo do palco e, com Movimento › Captura de movimento, mexa os braços, as mãos e o rosto da personagem pela câmera: os outros veem."),
+      el("p", { class: "fraco", style: { margin: 0 } }, "Neste modo não há chat bot nem funções de IA. O link só dá acesso à sala, nunca às pastas do aparelho de quem criou.")) }) };
+    return [menus[0], menuSala, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
+      .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
+  }
+  const garantirSalaCfg = () => { if (sala) return sala.cfg; try { return Object.assign({ avatares: true }, JSON.parse(pref("sala", "{}") || "{}")); } catch (e) { return { avatares: true }; } };
+
   // ── Entrada de texto e controles ─────────────────────────────────────
 
   function ajustarCampo() { campo.style.height = "auto"; campo.style.height = Math.min(140, campo.scrollHeight + 2) + "px"; }
@@ -1381,6 +1609,8 @@
     LNUX.botaoIcone("info", "O que ela lembra", janelaMemoria));
   $("#marca-icone").innerHTML = LNUX.icone("ia");
   $("#chip-roupa").addEventListener("click", menuRoupa);
+  $("#chip-sala").addEventListener("click", () => { if (sala && sala.dentro) mostrarLinks(); else janelaSala(); });
+  window.addEventListener("pagehide", () => { if (sala && sala.dentro) sala.sair(); });
   $("#chip-movimento").addEventListener("click", () => { const r = $("#chip-movimento").getBoundingClientRect(); LNUX.abrirMenu(estudio.itensDoMenu(), r.left, r.bottom + 4, $("#chip-movimento")); });
   palco.on("mundo", () => atualizarChipMovimento());
   palco.on("movimento-terminou", () => estudio.atualizar());
@@ -1395,27 +1625,33 @@
 
   // ── Começar ──────────────────────────────────────────────────────────
 
-  LNUX.iniciar({
-    app: "companhia", nome: "Companhia",
-    descricao: "Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA ou motor local, voz, expressões, toques e memória no aparelho; nas VRoid, captura de movimento pela câmera, pacotes de movimento e cenários para andar.",
-    layouts: [
-      { id: "lado", nome: "Personagem e conversa", descricao: "A personagem e a conversa lado a lado", icone: "layout" },
-      { id: "foco", nome: "Foco na personagem", descricao: "A personagem grande, a conversa flutuando", icone: "imagem" },
-      { id: "celular", nome: "Celular", descricao: "Personagem em cima, conversa embaixo", icone: "tela", celular: true },
-    ],
-    menus,
-    aoMudarLayout: () => setTimeout(() => palco.enquadrar(), 50),
+  escolherModo().then((modo) => {
+    MODO = modo;
+    document.documentElement.dataset.modo = modo;
+    return LNUX.iniciar({
+      app: "companhia", nome: "Companhia",
+      descricao: "Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA ou motor local, voz, expressões, toques e memória no aparelho; nas VRoid, captura de movimento pela câmera, pacotes de movimento, cenários para andar e salas para jogar com outras pessoas.",
+      layouts: [
+        { id: "lado", nome: jogando() ? "Personagem e sala" : "Personagem e conversa", descricao: "A personagem e a conversa lado a lado", icone: "layout" },
+        { id: "foco", nome: "Foco na personagem", descricao: "A personagem grande, a conversa flutuando", icone: "imagem" },
+        { id: "celular", nome: "Celular", descricao: "Personagem em cima, conversa embaixo", icone: "tela", celular: true },
+      ],
+      menus: menusDoModo(),
+      aoMudarLayout: () => setTimeout(() => palco.enquadrar(), 50),
+    });
   }).then(async () => {
+    aplicarFundo();
+    if (jogando()) { await iniciarJogo(); return; } // jogar: nada de IA, voz, memória nem núcleo do Live2D
     atualizarSeloIA();
     atualizarGasto();
-    aplicarFundo();
     await ia.atualizarChaves();
     await tentarNucleo(false);
-  });
+  }).catch(LNUX.erro);
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala,
+    get sala() { return sala; }, get modo() { return MODO; },
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
   };
 })();

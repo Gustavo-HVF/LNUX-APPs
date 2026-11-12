@@ -28,6 +28,7 @@
           <span class="chip afeto" id="chip-afeto" title="Afeto (sobe com carinho e conversa, desce com provocação)"><span class="coracao">♥</span><span class="barra"><span id="afeto-barra"></span></span></span>
           <button class="chip botao-roupa" id="chip-roupa" type="button" title="Trocar de roupa" hidden>👗 Roupa</button>
           <button class="chip botao-roupa" id="chip-movimento" type="button" title="Captura de movimento, pacotes de movimento, cenário e esqueleto" hidden>🎬 Movimento</button>
+          <button class="chip botao-roupa" id="chip-sala" type="button" title="A sala em que você está (jogar com outras pessoas)" hidden>🎮 Entrar numa sala</button>
           <span class="espaco"></span>
           <div class="lnux-segmentos pequeno" id="enquadramento" role="group" aria-label="Enquadramento">
             <button type="button" data-modo="rosto">Rosto</button><button type="button" data-modo="busto">Busto</button><button type="button" data-modo="corpo">Corpo</button>
@@ -36,6 +37,7 @@
 
         <div class="balao" id="balao" role="status" hidden></div>
         <div class="atalhos" id="atalhos" role="toolbar" aria-label="Expressões"></div>
+        <div class="gestos" id="gestos" role="toolbar" aria-label="Gestos e expressões que os outros veem" hidden></div>
 
         <div class="palco-vazio" id="palco-vazio">
           <div class="cartao">
@@ -91,6 +93,7 @@
   <script src="js/movimentos.js"></script>
   <script src="js/blend.js"></script>
   <script src="js/conversor.js"></script>
+  <script src="js/sala.js"></script>
   <script src="js/personagens.js"></script>
   <script src="js/ia.js"></script>
   <script src="js/voz.js"></script>

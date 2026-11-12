@@ -416,4 +416,64 @@
   }
   C.Sala = Sala;
   C.salaPedir = pedir;
+
+  /**
+   * O avatar padrão: um boneco de caixas, montado aqui mesmo como um VRM 1.0 (só ossos e caixinhas presas neles), para
+   * quem entra numa sala sem ter uma personagem .vrm. cor: [r, g, b] da roupa (0 a 1). Devolve um Blob (.vrm).
+   */
+  C.bonecoPadrao = function (cor = [0.31, 0.56, 0.97]) {
+    const ossos = [["hips", null, [0, 0.92, 0]], ["spine", "hips", [0, 1.0, 0]], ["chest", "spine", [0, 1.15, 0]], ["neck", "chest", [0, 1.38, 0]], ["head", "neck", [0, 1.46, 0]]];
+    for (const [l, s] of [["left", 1], ["right", -1]]) {
+      ossos.push([l + "Shoulder", "chest", [0.06 * s, 1.34, 0]], [l + "UpperArm", l + "Shoulder", [0.17 * s, 1.34, 0]], [l + "LowerArm", l + "UpperArm", [0.42 * s, 1.34, 0]], [l + "Hand", l + "LowerArm", [0.66 * s, 1.34, 0]],
+        [l + "UpperLeg", "hips", [0.09 * s, 0.88, 0]], [l + "LowerLeg", l + "UpperLeg", [0.09 * s, 0.49, 0]], [l + "Foot", l + "LowerLeg", [0.09 * s, 0.09, 0]], [l + "Toes", l + "Foot", [0.09 * s, 0.02, 0.12]]);
+    }
+    // caixas presas nos ossos: [osso, material, centro em relação ao osso, tamanho]
+    const PELE = 0, ROUPA = 1, CALCA = 2, ESCURO = 3;
+    const caixas = [["hips", CALCA, [0, 0.02, 0], [0.3, 0.2, 0.19]], ["spine", ROUPA, [0, 0.08, 0], [0.3, 0.16, 0.19]], ["chest", ROUPA, [0, 0.11, 0], [0.36, 0.24, 0.21]], ["neck", PELE, [0, 0.03, 0], [0.09, 0.1, 0.09]],
+      ["head", PELE, [0, 0.1, 0.01], [0.21, 0.24, 0.22]], ["head", ESCURO, [0, 0.2, -0.02], [0.23, 0.1, 0.24]], ["head", ESCURO, [0.05, 0.11, 0.12], [0.035, 0.035, 0.02]], ["head", ESCURO, [-0.05, 0.11, 0.12], [0.035, 0.035, 0.02]]];
+    for (const [l, s] of [["left", 1], ["right", -1]]) {
+      caixas.push([l + "UpperArm", ROUPA, [0.125 * s, 0, 0], [0.25, 0.09, 0.09]], [l + "LowerArm", PELE, [0.12 * s, 0, 0], [0.24, 0.075, 0.075]], [l + "Hand", PELE, [0.05 * s, 0, 0], [0.1, 0.04, 0.08]],
+        [l + "UpperLeg", CALCA, [0, -0.195, 0], [0.125, 0.39, 0.125]], [l + "LowerLeg", CALCA, [0, -0.2, 0], [0.105, 0.4, 0.105]], [l + "Foot", ESCURO, [0, -0.045, 0.06], [0.1, 0.08, 0.24]]);
+    }
+    // um cubo de lado 1 (24 vértices, com as normais), usado por todas as caixas
+    const pos = [], nor = [], idx = [];
+    for (const [n, u, v] of [[[1, 0, 0], [0, 1, 0], [0, 0, 1]], [[-1, 0, 0], [0, 0, 1], [0, 1, 0]], [[0, 1, 0], [0, 0, 1], [1, 0, 0]], [[0, -1, 0], [1, 0, 0], [0, 0, 1]], [[0, 0, 1], [1, 0, 0], [0, 1, 0]], [[0, 0, -1], [0, 1, 0], [1, 0, 0]]]) {
+      const b = pos.length / 3;
+      for (const [a, c] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { for (let k = 0; k < 3; k++) pos.push((n[k] + u[k] * a + v[k] * c) / 2); nor.push(...n); }
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+    }
+    const P = new Float32Array(pos), N = new Float32Array(nor), I = new Uint16Array(idx);
+    const bin = new Uint8Array(P.byteLength + N.byteLength + I.byteLength);
+    bin.set(new Uint8Array(P.buffer), 0); bin.set(new Uint8Array(N.buffer), P.byteLength); bin.set(new Uint8Array(I.buffer), P.byteLength + N.byteLength);
+    const lugar = Object.fromEntries(ossos.map(([n, , p]) => [n, p]));
+    const nodes = ossos.map(([n, pai, p]) => ({ name: "Osso_" + n, translation: pai ? p.map((v, k) => +(v - lugar[pai][k]).toFixed(4)) : p }));
+    ossos.forEach(([, pai], i) => { if (pai) { const o = nodes[ossos.findIndex((x) => x[0] === pai)]; (o.children = o.children || []).push(i); } });
+    caixas.forEach(([osso, material, centro, tamanho], i) => {
+      nodes.push({ name: "Caixa_" + i, mesh: material, translation: centro, scale: tamanho });
+      const o = nodes[ossos.findIndex((x) => x[0] === osso)];
+      (o.children = o.children || []).push(nodes.length - 1);
+    });
+    const mat = (nome, c) => ({ name: nome, pbrMetallicRoughness: { baseColorFactor: [...c, 1], metallicFactor: 0, roughnessFactor: 0.85 } });
+    const json = {
+      asset: { version: "2.0", generator: "LNUX Companhia" }, extensionsUsed: ["VRMC_vrm"], scene: 0, scenes: [{ nodes: [0] }], nodes,
+      buffers: [{ byteLength: bin.byteLength }],
+      bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: P.byteLength, target: 34962 }, { buffer: 0, byteOffset: P.byteLength, byteLength: N.byteLength, target: 34962 }, { buffer: 0, byteOffset: P.byteLength + N.byteLength, byteLength: I.byteLength, target: 34963 }],
+      accessors: [{ bufferView: 0, componentType: 5126, count: 24, type: "VEC3", min: [-0.5, -0.5, -0.5], max: [0.5, 0.5, 0.5] }, { bufferView: 1, componentType: 5126, count: 24, type: "VEC3" }, { bufferView: 2, componentType: 5123, count: 36, type: "SCALAR" }],
+      materials: [mat("Pele", [0.93, 0.8, 0.7]), mat("Roupa_CLOTH", cor), mat("Calca_CLOTH", [0.2, 0.24, 0.36]), mat("Escuro", [0.13, 0.14, 0.2])],
+      meshes: [0, 1, 2, 3].map((m) => ({ name: "Caixa", primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, indices: 2, material: m }] })),
+      extensions: { VRMC_vrm: { specVersion: "1.0",
+        meta: { name: "Boneco", version: "1", authors: ["LNUX-APPs"], licenseUrl: "https://vrm.dev/licenses/1.0/", avatarPermission: "everyone", commercialUsage: "corporation", creditNotation: "unnecessary", allowRedistribution: true, modification: "allowModificationRedistribution" },
+        humanoid: { humanBones: Object.fromEntries(ossos.map(([n], i) => [n, { node: i }])) } } },
+    };
+    const texto = new TextEncoder().encode(JSON.stringify(json)), sobraJ = (4 - (texto.length % 4)) % 4, sobraB = (4 - (bin.length % 4)) % 4;
+    const total = 12 + 8 + texto.length + sobraJ + 8 + bin.length + sobraB, saida = new Uint8Array(total), v = new DataView(saida.buffer);
+    v.setUint32(0, 0x46546c67, true); v.setUint32(4, 2, true); v.setUint32(8, total, true);
+    v.setUint32(12, texto.length + sobraJ, true); v.setUint32(16, 0x4e4f534a, true);
+    saida.set(texto, 20); saida.fill(0x20, 20 + texto.length, 20 + texto.length + sobraJ);
+    const b0 = 20 + texto.length + sobraJ;
+    v.setUint32(b0, bin.length + sobraB, true); v.setUint32(b0 + 4, 0x004e4942, true);
+    saida.set(bin, b0 + 8);
+    return new Blob([saida], { type: "model/gltf-binary" });
+  };
+
 })();

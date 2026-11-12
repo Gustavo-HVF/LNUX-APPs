@@ -52,6 +52,56 @@
     return arquivos;
   };
 
+  /**
+   * O movimento próprio de andar, correr e pular, somado numa pose (espaço canônico do VRM). Serve para a personagem
+   * de quem joga (C.Mundo) e para as dos outros numa sala (js/sala.js).
+   * s: {fase, andar (0 a 1), correr (0 a 1), pulo (0 a 1), subindo, altura}; livre: quanto vale (0 a 1). Devolve o peso.
+   */
+  let _q = null, _e = null;
+  C.poseDeAndar = function (pose, quadril, s, livre = 1) {
+    const T = window.THREE;
+    _q = _q || new T.Quaternion();
+    _e = _e || new T.Euler();
+    const a = s.andar * livre, c = s.correr, p = s.pulo * livre;
+    if (a < 0.002 && p < 0.002) return 0;
+    const q = _q, e = _e, sn = Math.sin(s.fase), co = Math.cos(s.fase);
+    const antes = (n, x, y, z) => { if (pose[n]) pose[n].premultiply(q.setFromEuler(e.set(x, y, z))); }; // nos eixos do corpo
+    const depois = (n, x, y, z) => { if (pose[n]) pose[n].multiply(q.setFromEuler(e.set(x, y, z))); };   // nos eixos do osso
+    if (a >= 0.002) {
+      const passo = (0.42 + 0.38 * c) * a, joelho = (0.75 + 0.55 * c) * a, braco = (0.32 + 0.55 * c) * a;
+      // pernas: a esquerda vai para a frente quando o seno é positivo; o joelho dobra enquanto a perna vem
+      antes("leftUpperLeg", -passo * sn - 0.08 * c * a, 0, 0);
+      antes("rightUpperLeg", passo * sn - 0.08 * c * a, 0, 0);
+      const jE = 0.08 * a + joelho * Math.max(0, co), jD = 0.08 * a + joelho * Math.max(0, -co);
+      depois("leftLowerLeg", jE, 0, 0);
+      depois("rightLowerLeg", jD, 0, 0);
+      depois("leftFoot", -0.35 * jE + 0.25 * passo * sn, 0, 0);
+      depois("rightFoot", -0.35 * jD - 0.25 * passo * sn, 0, 0);
+      // braços ao contrário das pernas; correndo, os cotovelos dobram
+      antes("leftUpperArm", braco * sn, 0, 0);
+      antes("rightUpperArm", -braco * sn, 0, 0);
+      depois("leftLowerArm", 0, -(0.15 + 1.0 * c) * a, 0);
+      depois("rightLowerArm", 0, (0.15 + 1.0 * c) * a, 0);
+      // tronco: gira contra as pernas, inclina para a frente na corrida; o quadril sobe e desce a cada passo
+      depois("hips", 0.04 * c * a, 0.07 * sn * a, 0);
+      depois("spine", 0.1 * c * a, -0.09 * sn * a, 0);
+      depois("chest", 0.04 * c * a, -0.06 * sn * a, 0);
+      quadril.y += (Math.cos(s.fase * 2) * 0.014 * (1 + c) - 0.012 - 0.02 * c) * a * s.altura;
+    }
+    if (p >= 0.002) {
+      // no ar: joelhos encolhidos, braços abertos
+      const sobe = s.subindo ? 1 : 0.6;
+      antes("leftUpperLeg", -0.55 * p * sobe, 0, 0);
+      antes("rightUpperLeg", -0.25 * p * sobe, 0, 0);
+      depois("leftLowerLeg", 0.95 * p * sobe, 0, 0);
+      depois("rightLowerLeg", 0.6 * p * sobe, 0, 0);
+      antes("leftUpperArm", 0, 0, 0.45 * p);
+      antes("rightUpperArm", 0, 0, -0.45 * p);
+      depois("spine", -0.06 * p, 0, 0);
+    }
+    return Math.max(a, p) * 0.85;
+  };
+
   class Mundo {
     constructor(palco) {
       const T = window.THREE;
@@ -370,46 +420,8 @@
     }
     /** O andar/correr/pular próprio, por cima da pose de descanso. Devolve quanto ele vale (0 a 1). */
     posar(pose, quadril, dt, pesoMov) {
-      const livre = 1 - Math.min(1, pesoMov); // um movimento do pacote tocando manda
-      const a = this.pesoAndar * livre, c = this.pesoCorrer, p = this.pesoPulo * livre;
-      if (a < 0.002 && p < 0.002) return 0;
-      const q = this._q, e = this._e, s = Math.sin(this.fase), co = Math.cos(this.fase);
-      const antes = (n, x, y, z) => { if (pose[n]) pose[n].premultiply(q.setFromEuler(e.set(x, y, z))); }; // nos eixos do corpo
-      const depois = (n, x, y, z) => { if (pose[n]) pose[n].multiply(q.setFromEuler(e.set(x, y, z))); };   // nos eixos do osso
-      if (a >= 0.002) {
-        const passo = (0.42 + 0.38 * c) * a, joelho = (0.75 + 0.55 * c) * a, braco = (0.32 + 0.55 * c) * a;
-        // pernas: a esquerda vai para a frente quando s > 0; o joelho dobra enquanto a perna vem
-        antes("leftUpperLeg", -passo * s - 0.08 * c * a, 0, 0);
-        antes("rightUpperLeg", passo * s - 0.08 * c * a, 0, 0);
-        const jE = 0.08 * a + joelho * Math.max(0, co), jD = 0.08 * a + joelho * Math.max(0, -co);
-        depois("leftLowerLeg", jE, 0, 0);
-        depois("rightLowerLeg", jD, 0, 0);
-        depois("leftFoot", -0.35 * jE + 0.25 * passo * s, 0, 0);
-        depois("rightFoot", -0.35 * jD - 0.25 * passo * s, 0, 0);
-        // braços ao contrário das pernas; correndo, os cotovelos dobram
-        antes("leftUpperArm", braco * s, 0, 0);
-        antes("rightUpperArm", -braco * s, 0, 0);
-        depois("leftLowerArm", 0, -(0.15 + 1.0 * c) * a, 0);
-        depois("rightLowerArm", 0, (0.15 + 1.0 * c) * a, 0);
-        // tronco: gira contra as pernas, inclina para a frente na corrida; o quadril sobe e desce a cada passo
-        depois("hips", 0.04 * c * a, 0.07 * s * a, 0);
-        depois("spine", 0.1 * c * a, -0.09 * s * a, 0);
-        depois("chest", 0.04 * c * a, -0.06 * s * a, 0);
-        quadril.y += (Math.cos(this.fase * 2) * 0.014 * (1 + c) - 0.012 - 0.02 * c) * a * this.altura;
-      }
-      if (p >= 0.002) {
-        // no ar: joelhos encolhidos, braços abertos
-        const sobe = this.vel.y > 0 ? 1 : 0.6;
-        antes("leftUpperLeg", -0.55 * p * sobe, 0, 0);
-        antes("rightUpperLeg", -0.25 * p * sobe, 0, 0);
-        depois("leftLowerLeg", 0.95 * p * sobe, 0, 0);
-        depois("rightLowerLeg", 0.6 * p * sobe, 0, 0);
-        antes("leftUpperArm", 0, 0, 0.45 * p);
-        antes("rightUpperArm", 0, 0, -0.45 * p);
-        depois("spine", -0.06 * p, 0, 0);
-      }
-      void dt;
-      return Math.max(a, p) * 0.85;
+      return C.poseDeAndar(pose, quadril, { fase: this.fase, andar: this.pesoAndar, correr: this.pesoCorrer, pulo: this.pesoPulo, subindo: this.vel.y > 0, altura: this.altura },
+        1 - Math.min(1, pesoMov)); // um movimento do pacote tocando manda
     }
 
     // ── câmera em terceira pessoa ───────────────────────────────────
@@ -453,7 +465,7 @@
       const base = principal.includes("/") ? principal.replace(/[^/]+$/, "") : "";
       const gerente = new T.LoadingManager();
       gerente.setURLModifier((url) => {
-        if (/^data:/i.test(url) || urls.includes(url)) return url;
+        if (/^data:/i.test(url) || urls.includes(url) || /^blob:[^/]*\/\/[^/]+\/[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(url)) return url; // dados embutidos e objetos de verdade (as texturas de dentro de um .glb)
         let limpo = url;
         try { limpo = decodeURIComponent(url); } catch (e) { /* fica como veio */ }
         limpo = limpo.replace(/^blob:/i, "").replace(/^.*?:\/\/[^/]+\//, "").replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/[?#].*$/, "");
