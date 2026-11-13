@@ -74,12 +74,38 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
   dos outros, nem eles a sua: ela vai junto ao entrar.
+- **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
+  proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
+  correções dos ossos, as peças de roupa escondidas, as texturas trocadas e a roupa vestida.
 - **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só a Companhia* (veja "Site publicado só com a
   Companhia", abaixo): o link abre só a Companhia, sem a ponte. A sala fica no servidor do aparelho de quem criou e
   existe enquanto ele estiver ligado. Na rede de casa também dá (`--endereco 0.0.0.0`).
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
   personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
   some por 20 segundos sai da sala; uma sala vazia fecha depois de 15 minutos.
+
+### Contas e perfil
+
+Dá para jogar sem conta, mas com uma conta você aparece com o **nome, a foto e o perfil** para os outros. Na lista
+de salas (ou no menu *Conta*):
+
+- **Criar conta**: nome, idade, e-mail e senha (pelo menos 8 caracteres). Chega por e-mail um **código de 6
+  dígitos** (vale 15 minutos); com ele a conta é confirmada e você já entra. Dá para pedir outro código depois de 1
+  minuto. A idade mínima é 13 anos (o dono do servidor pode mudar).
+- **Entrar** com o e-mail e a senha; **Esqueci a senha** manda um código para criar uma senha nova. Com a conta, o
+  nome no jogo é o dela.
+- **Meu perfil**: foto (recortada em quadrado) e capa, nome, bio, pronomes, cidade, até 3 links e uma cor; também
+  trocar a senha, sair e apagar a conta. Em *Sala › Pessoas na sala*, quem tem conta aparece com a foto, e um clique
+  abre o perfil (sem o e-mail e a idade, que só a própria pessoa e o dono veem).
+- **Onde fica**: tudo no aparelho de quem tem o servidor, em `~/.lnux-apps/contas/` (`contas.json`, permissão 600, e
+  as fotos em `midia/`). A senha, os códigos e as sessões ficam só como hash (a senha com PBKDF2-SHA256). Este
+  navegador guarda só a sessão.
+- **Para o dono** (*Contas e e-mail*, na lista de salas, ou *Conta › Contas e e-mail do servidor*): o **e-mail que
+  manda os códigos** — uma conta de e-mail sua (Gmail, Outlook, Yahoo ou outro servidor SMTP). No Gmail, crie uma
+  "senha de app" (Conta Google › Segurança › Senhas de app) e use no lugar da senha normal; ela fica só no aparelho
+  (`~/.lnux-apps/email.json`, permissão 600) e nunca volta para a tela. Há um botão de e-mail de teste. Também: a
+  idade mínima, **só entra nas salas quem tem conta**, e a lista das contas (com a opção de apagar uma).
+- Sem o e-mail configurado, dá para jogar e entrar, mas não para criar contas.
 
 ### Loja: personagens, mundos e animações
 
@@ -494,6 +520,8 @@ js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esquele
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
 js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
+js/contas.js       contas: criar com o código por e-mail, entrar, esqueci a senha, perfil (foto, capa, bio...) e os
+                   ajustes do dono (o e-mail que manda os códigos, idade mínima, exigir conta)
 js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
@@ -525,6 +553,7 @@ python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
+python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se
