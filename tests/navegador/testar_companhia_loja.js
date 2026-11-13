@@ -101,12 +101,12 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await visita.pagina.waitForSelector("#sala-loja-personagem", { timeout: 30000 });
     ok(await visita.ev(() => !window.LNUX.ponte.disponivel && !!document.querySelector(".salas #sala-loja-personagem")), "quem entra pelo link (sem a ponte) acha a loja na lista de salas: \"Personagens da loja\"");
     await visita.pagina.click("#sala-loja-personagem");
-    await visita.pagina.waitForSelector(".cartao-loja");
+    await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
     const grade = await visita.ev(() => ({ abas: [...document.querySelectorAll(".loja-aba")].map((a) => a.textContent), ativa: document.querySelector(".loja-aba.ativa").dataset.tipo,
-      cartoes: [...document.querySelectorAll(".cartao-loja")].map((c) => [c.querySelector(".nome").textContent, !!c.querySelector(".capa img")]), dono: !document.querySelector(".loja-dono").hidden }));
+      cartoes: [...document.querySelectorAll(".loja:not(.salas) .cartao-loja")].map((c) => [c.querySelector(".nome").textContent, !!c.querySelector(".capa img")]), dono: !document.querySelector(".loja-dono").hidden }));
     ok(grade.ativa === "personagem" && JSON.stringify(grade.cartoes) === JSON.stringify([["Boneco de teste", true]]) && grade.abas.join("|").includes("Mundos1") && !grade.dono,
       `a loja abre nas personagens, como uma vitrine (cartões com miniatura; abas ${grade.abas.join(", ")}); a visita não vê a parte do dono`);
-    await visita.pagina.click(".cartao-loja");
+    await visita.pagina.click(".loja:not(.salas) .cartao-loja");
     await visita.pagina.waitForSelector(".loja-detalhe .vitrine[data-pronta]", { timeout: 60000 });
     await visita.pagina.waitForTimeout(400);
     ok((await desenhado(visita)) > 150 && (await visita.ev(() => !document.querySelector(".loja-acoes .perigo"))), "antes de usar, a personagem aparece em 3D (e a visita não pode apagar o que não é dela)");
@@ -117,10 +117,10 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await visita.pagina.click('.salas button[aria-label="Fechar a lista de salas"]');
     // o mundo e a animação
     await visita.ev(() => { window.Companhia.abrirLoja(); });
-    await visita.pagina.waitForSelector(".cartao-loja");
+    await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
     await visita.pagina.fill(".loja-busca", "praça");
-    ok(await visita.ev(() => [...document.querySelectorAll(".cartao-loja .nome")].map((n) => n.textContent).join() === "Praça de teste"), "a busca acha o mundo pelo nome");
-    await visita.pagina.click(".cartao-loja");
+    ok(await visita.ev(() => [...document.querySelectorAll(".loja:not(.salas) .cartao-loja .nome")].map((n) => n.textContent).join() === "Praça de teste"), "a busca acha o mundo pelo nome");
+    await visita.pagina.click(".loja:not(.salas) .cartao-loja");
     await visita.pagina.waitForSelector(".loja-detalhe .vitrine[data-pronta]", { timeout: 60000 });
     ok((await desenhado(visita)) > 150, "o mundo aparece em 3D, visto de cima");
     await visita.pagina.click("#loja-usar");
@@ -128,8 +128,8 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await visita.pagina.waitForFunction(async () => (await C.mapas.lista()).some((m) => m.nome === "Praça de teste"), null, { timeout: 30000 });
     ok(true, "\"Usar este mundo\" guarda o mundo em Movimento › Cenário");
     await visita.ev(() => { window.Companhia.abrirLoja("animacao"); });
-    await visita.pagina.waitForSelector(".cartao-loja");
-    await visita.pagina.click(".cartao-loja");
+    await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
+    await visita.pagina.click(".loja:not(.salas) .cartao-loja");
     await visita.pagina.waitForSelector(".loja-detalhe .vitrine[data-pronta]", { timeout: 60000 });
     await visita.pagina.waitForTimeout(400);
     ok((await desenhado(visita)) > 150, "a animação aparece num boneco, em 3D");
@@ -142,7 +142,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     const bvh = path.join(PASTA, "aceno-da-visita.bvh");
     fs.writeFileSync(bvh, bvhDeTeste());
     await visita.ev(() => { window.Companhia.abrirLoja(); });
-    await visita.pagina.waitForSelector(".cartao-loja");
+    await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
     await visita.pagina.click('.loja-topo button:has-text("Publicar")');
     await visita.pagina.click('.loja-tipos button[data-tipo="animacao"]');
     await visita.pagina.waitForFunction(() => [...document.querySelector(".loja-publicar select").options].some((o) => o.value === "@arquivo"));

@@ -1210,7 +1210,7 @@
           LNUX.aviso(`Funcionou (${r.modelo}): ${C.separarMarcas(r.texto).texto || r.texto}`, "ok");
         } catch (e) { LNUX.erro(e); }
       };
-      detalhes.replaceChildren(
+      detalhes.replaceChildren(...LNUX.filhos(
         info.dica ? el("p", { class: "fraco", style: { margin: 0 } }, info.dica) : null,
         info.local ? el("p", { class: "fraco", style: { margin: 0 } }, "Roda no próprio aparelho/computador: nada sai para a internet e não gasta créditos.") : null,
         el("div", { class: "grade" }, url.campo, id === "personalizado" ? el("label", { class: "lnux-campo" }, el("span", {}, "Jeito da API"), tipo) : el("span")),
@@ -1219,7 +1219,7 @@
           ia.temChave(id) ? el("button", { class: "lnux-botao", type: "button", onclick: async () => { await ia.guardarChave(id, "", ""); LNUX.aviso("Chave apagada.", "ok"); desenhar(); } }, "Apagar chave") : null,
           info.site ? el("a", { class: "lnux-botao plano", href: info.site, target: "_blank", rel: "noopener" }, "Pegar uma chave") : null) : null,
         el("div", { class: "linha" }, el("button", { class: "lnux-botao", type: "button", onclick: () => guardar() }, "Salvar"), el("button", { class: "lnux-botao", type: "button", onclick: testar }, "Testar"),
-          el("button", { class: "lnux-botao primario", type: "button", onclick: usar }, "Usar na conversa")));
+          el("button", { class: "lnux-botao primario", type: "button", onclick: usar }, "Usar na conversa"))));
     };
     sel.addEventListener("change", desenhar);
     desenhar();
@@ -1284,14 +1284,14 @@
       const modelo = p.modelos ? el("select", { class: "lnux-selecao" }, p.modelos.map((m) => el("option", { value: m, selected: m === (cfg.modelo || p.modelos[0]) }, m))) : null;
       if (modelo) modelo.addEventListener("change", () => { cfg.modelo = modelo.value; });
       const chave = p.chave ? campoTexto("Chave da API", "", { tipo: "password", placeholder: ia.temChave(cfg.provedor) ? "•••••• (guardada)" : p.chave === "opcional" ? "(opcional)" : "cole a chave" }) : null;
-      detalhes.replaceChildren(
+      detalhes.replaceChildren(...LNUX.filhos(
         cfg.provedor === "voicestudio" ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Instale e abra o VoiceStudio no aparelho (ele fica em http://127.0.0.1:3900). A Companhia usa a API dele; a voz é gerada no aparelho. O VoiceStudio é AGPL-3.0, de debpalash.") : null,
         cfg.provedor === "elevenlabs" ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Para economizar créditos: eleven_flash_v2_5 custa metade. O eleven_v3 entende emoções ([laughs], [sighs]...).") : null,
         cfg.provedor === "openai" ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Usa a mesma chave da OpenAI da IA. O gpt-4o-mini-tts muda o tom conforme a emoção.") : null,
         url ? url.campo : null, el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Voz"), vozSel), cfg.provedor !== "ponte" ? listar : null),
         modelo ? el("label", { class: "lnux-campo" }, el("span", {}, "Modelo"), modelo) : null,
         chave ? el("div", { class: "linha" }, chave.campo, el("button", { class: "lnux-botao", type: "button", onclick: async () => { try { await ia.guardarChave(cfg.provedor, chave.entrada.value.trim(), (url ? url.entrada.value : p.url) || p.url); chave.entrada.value = ""; LNUX.aviso("Chave salva.", "ok"); } catch (e) { LNUX.erro(e); } } }, "Salvar chave"),
-          p.site ? el("a", { class: "lnux-botao plano", href: p.site, target: "_blank", rel: "noopener" }, "Site") : null) : null);
+          p.site ? el("a", { class: "lnux-botao plano", href: p.site, target: "_blank", rel: "noopener" }, "Site") : null) : null));
       detalhes.lerUrl = () => (url ? url.entrada.value.trim() : "");
     };
     prov.addEventListener("change", () => { cfg.voz = ""; cfg.modelo = ""; desenhar(); });
@@ -1472,7 +1472,7 @@
     LNUX.aviso("Link copiado.", "ok");
   };
   function garantirSala() {
-    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala });
+    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala, aparencia: minhaAparencia });
     return sala;
   }
   function mensagemDaSala(m) {
@@ -1515,6 +1515,12 @@
     return p.id;
   }
   /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
+  /** Como a minha personagem está agora (a roupa, o ajuste do esqueleto, as peças escondidas e as texturas trocadas): vai para a sala. */
+  function minhaAparencia() {
+    if (!atual || atual.tipo !== "vrm" || !palco3d.vrm) return null;
+    const r = roupaAtual();
+    return { avatar: r ? r.blob : null, ajuste: palco3d.ajuste || null, ocultas: palco3d.pecasOcultas(), texturas: (r && r.texturas) || {} };
+  }
   /** O .vrm da minha personagem (a roupa que estou usando), que vai para as outras pessoas da sala. */
   function avatarParaOsOutros() {
     if (!atual || atual.tipo !== "vrm") return null;
@@ -1601,6 +1607,17 @@
     listaDeSalas = C.abrirSalas(ctxSalas, { codigo });
     listaDeSalas.finally(() => { listaDeSalas = null; });
     return listaDeSalas;
+  }
+  /** Quem está na sala: a foto e o nome (de quem tem conta, o perfil abre num clique). */
+  function pessoasDaSala() {
+    if (!sala || !sala.dentro) return;
+    const eu = C.contas.eu, linha = (foto, nome, extra, conta) => el(conta ? "button" : "div", { type: conta ? "button" : undefined, class: "pessoa-sala" + (conta ? " com-conta" : ""),
+      onclick: conta ? () => C.mostrarPerfil(conta) : undefined, title: conta ? "Ver o perfil" : "" }, foto, el("span", {}, nome, extra ? el("span", { class: "fraco pequeno" }, " " + extra) : null));
+    const corpo = el("div", { class: "ajustes pessoas-sala" },
+      linha(eu ? C.fotoDaConta(eu, 34) : C.fotoDaConta({ nome: sala.eu.nome }, 34), sala.eu.nome, "(você)", eu ? eu.id : null),
+      ...[...sala.remotos.values()].map((r) => linha(r.conta ? el("img", { class: "foto-conta", src: `/api/contas/midia/${r.conta}/foto`, alt: "", style: { width: "34px", height: "34px" }, onerror: (e) => { e.target.replaceWith(C.fotoDaConta({ nome: r.nome }, 34)); } }) : C.fotoDaConta({ nome: r.nome }, 34),
+        r.nome, r.conta ? "" : "(sem conta)", r.conta)));
+    LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
   }
   /** Quem criou muda as opções da sala: nome, descrição, pública ou privada, senha, quantas pessoas, bate-papo. */
   async function opcoesDaSala() {
@@ -1755,11 +1772,19 @@
     if (!jogando()) return menus.map((m) => (m.rotulo === "Ajuda" ? { ...m, itens: [...m.itens, "-", trocar] } : m));
     const naSala = () => !!(sala && sala.dentro), dono = () => naSala() && !!sala.chave;
     const semIA = new Set(["Perfil e personalidade...", "Emoções e expressões...", "Áreas de toque...", "Voz desta personagem...", "Mostrar áreas de toque", "Primeiros passos", "Núcleo do Live2D..."]);
+    const menuConta = { rotulo: "Conta", itens: [
+      { rotulo: "Entrar na conta...", acao: () => C.janelaConta("entrar"), ativo: () => !C.contas.eu },
+      { rotulo: "Criar conta...", acao: () => C.janelaConta("criar"), ativo: () => !C.contas.eu },
+      { rotulo: "Meu perfil...", acao: () => C.janelaPerfil().catch(LNUX.erro), ativo: () => !!C.contas.eu },
+      { rotulo: "Sair da conta", acao: () => C.contas.sair(), ativo: () => !!C.contas.eu },
+      "-",
+      { rotulo: "Contas e e-mail do servidor...", acao: () => C.janelaContasDono().catch(LNUX.erro), ativo: () => LNUX.ponte.disponivel },
+    ] };
     const menuSala = { rotulo: "Sala", itens: [
       { rotulo: "Salas: entrar ou criar...", acao: () => janelaSala() },
       { rotulo: "Loja: personagens, mundos e animações...", acao: () => abrirLoja(), ativo: () => lojaDisponivel },
       { rotulo: "Link da sala...", acao: () => mostrarLinks(), ativo: naSala },
-      { rotulo: "Pessoas na sala", ativo: naSala, acao: () => LNUX.dialogo({ titulo: `${sala.info.nome}: ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}`, corpo: el("div", { class: "ajustes" }, el("div", {}, sala.eu.nome + " (você)"), ...[...sala.remotos.values()].map((r) => el("div", {}, r.nome))), botoes: [{ rotulo: "Fechar", primario: true, valor: null }] }) },
+      { rotulo: "Pessoas na sala", ativo: naSala, acao: () => pessoasDaSala() },
       { rotulo: "Opções da sala (pública, senha, pessoas, bate-papo)...", acao: () => opcoesDaSala().catch(LNUX.erro), ativo: dono },
       { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
       "-",
@@ -1773,7 +1798,7 @@
       el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela."),
       el("p", { style: { margin: 0 } }, el("b", {}, "Interagir: "), "escreva na caixa de texto (aparece um balão em cima da sua personagem), use os gestos e as expressões embaixo do palco e, com Movimento › Captura de movimento, mexa os braços, as mãos e o rosto da personagem pela câmera: os outros veem."),
       el("p", { class: "fraco", style: { margin: 0 } }, "Neste modo não há chat bot nem funções de IA. O link só dá acesso à sala, nunca às pastas do aparelho de quem criou.")) }) };
-    return [menus[0], menuSala, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
+    return [menus[0], menuSala, menuConta, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
       .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
   }
 

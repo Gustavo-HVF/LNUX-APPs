@@ -255,6 +255,181 @@ class Sala:
     def tirar(self, pid: str):
         if self.pessoas.pop(pid, None) is not None:
             (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
+            (self.pasta / f"aparencia-{pid}.json").unlink(missing_ok=True)
+            for f in self.pasta.glob(f"textura-{pid}-*"):
+                f.unlink(missing_ok=True)
+
+
+# ── Companhia: contas (cadastro, código por e-mail, entrar, perfil) ─────
+# As contas ficam NESTE aparelho: ~/.lnux-apps/contas/contas.json (permissão 600) e as fotos em contas/midia/. A
+# senha é guardada só como hash (PBKDF2-SHA256, com sal); os códigos e as sessões também só como hash. O código de
+# verificação vai por e-mail, pela conta de e-mail do dono do servidor (SMTP, configurada por ele na Companhia:
+# ~/.lnux-apps/email.json, permissão 600). A idade mínima (13 anos por padrão) e "só entra quem tem conta" são do dono.
+CONTAS_TRAVA = threading.Lock()
+CONTA_ITERACOES = 150_000
+CONTA_SESSAO_DIAS = 60
+CODIGO_VALE = 15 * 60          # o código vale 15 minutos
+CODIGO_TENTATIVAS = 5
+CODIGO_ESPERA = 60             # segundos entre um envio e outro
+CODIGO_POR_HORA = 5
+CONTA_PENDENTE_DIAS = 2        # cadastro sem confirmar o código some depois de 2 dias
+CONTA_MIDIA = 5 * 1024 * 1024  # foto e capa do perfil
+EMAIL_RE = re.compile(r"[^@\s]{1,64}@[^@\s]{1,190}\.[A-Za-z]{2,24}")
+TENTATIVAS: dict = {}          # chave → [instantes] (entrar errado, cadastros): contra quem tenta adivinhar
+
+
+def hash_senha(senha: str, sal: bytes | None = None) -> dict:
+    sal = sal or secrets.token_bytes(16)
+    return {"sal": sal.hex(), "hash": hashlib.pbkdf2_hmac("sha256", senha.encode("utf-8"), sal, CONTA_ITERACOES).hex(), "it": CONTA_ITERACOES}
+
+
+def senha_confere(senha: str, guardada: dict) -> bool:
+    try:
+        feito = hashlib.pbkdf2_hmac("sha256", str(senha).encode("utf-8"), bytes.fromhex(guardada["sal"]), int(guardada.get("it", CONTA_ITERACOES))).hex()
+    except (KeyError, ValueError, TypeError):
+        return False
+    return hmac.compare_digest(feito, guardada.get("hash", ""))
+
+
+def resumo_hash(texto: str) -> str:
+    return hashlib.sha256(texto.encode("utf-8")).hexdigest()
+
+
+def esconder_email(email: str) -> str:
+    nome, _, dominio = email.partition("@")
+    return (nome[:2] + "***" if len(nome) > 2 else nome[:1] + "***") + "@" + dominio
+
+
+def contar_tentativa(chave: str, limite: int, janela: float) -> None:
+    """Recusa (429) quem passou do limite de tentativas na janela (em segundos)."""
+    agora = time.time()
+    lista = [t for t in TENTATIVAS.get(chave, []) if agora - t < janela]
+    if len(lista) >= limite:
+        TENTATIVAS[chave] = lista
+        raise ErroPonte(429, "Tentativas demais. Espere alguns minutos e tente de novo.")
+    lista.append(agora)
+    TENTATIVAS[chave] = lista
+
+
+class Contas:
+    """O cadastro das pessoas (contas.json): contas, códigos pendentes e sessões."""
+
+    def __init__(self, pasta: Path):
+        self.pasta = pasta
+        self.arquivo = pasta / "contas.json"
+        self.midia = pasta / "midia"
+        self.dados: dict | None = None
+
+    def ler(self) -> dict:
+        if self.dados is None:
+            try:
+                self.dados = json.loads(self.arquivo.read_text("utf-8"))
+            except (OSError, ValueError):
+                self.dados = {}
+            for k in ("contas", "codigos", "sessoes"):
+                self.dados.setdefault(k, {})
+        d, agora = self.dados, time.time()
+        # limpeza: cadastros nunca confirmados, códigos e sessões vencidos
+        for cid in [i for i, c in d["contas"].items() if not c.get("verificada") and agora - c.get("criada", 0) > CONTA_PENDENTE_DIAS * 86400]:
+            d["contas"].pop(cid, None)
+        for k in [k for k, c in d["codigos"].items() if agora > c.get("expira", 0) + 3600]:
+            d["codigos"].pop(k, None)
+        for k in [k for k, x in d["sessoes"].items() if agora - x.get("vista", 0) > CONTA_SESSAO_DIAS * 86400 or x.get("conta") not in d["contas"]]:
+            d["sessoes"].pop(k, None)
+        return d
+
+    def gravar(self) -> None:
+        self.pasta.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.pasta, 0o700)
+        except OSError:
+            pass
+        temporario = self.arquivo.with_suffix(".tmp")
+        temporario.write_text(json.dumps(self.dados, ensure_ascii=False, indent=1), "utf-8")
+        os.chmod(temporario, 0o600)
+        os.replace(temporario, self.arquivo)
+
+    def por_email(self, email: str) -> dict | None:
+        return next((c for c in self.ler()["contas"].values() if c["email"] == email), None)
+
+    def nova_sessao(self, conta: dict) -> str:
+        token = secrets.token_urlsafe(32)
+        self.ler()["sessoes"][resumo_hash(token)] = {"conta": conta["id"], "criada": int(time.time()), "vista": int(time.time())}
+        return token
+
+    def da_sessao(self, token: str) -> dict | None:
+        if not token:
+            return None
+        d = self.ler()
+        x = d["sessoes"].get(resumo_hash(token))
+        if not x:
+            return None
+        conta = d["contas"].get(x["conta"])
+        if conta and time.time() - x.get("vista", 0) > 3600:
+            x["vista"] = int(time.time())
+        return conta
+
+    @staticmethod
+    def perfil_publico(c: dict) -> dict:
+        p = c.get("perfil", {})
+        return {"id": c["id"], "nome": c["nome"], "bio": p.get("bio", ""), "pronomes": p.get("pronomes", ""), "local": p.get("local", ""),
+                "links": p.get("links", []), "cor": p.get("cor", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0)}
+
+    @classmethod
+    def perfil_proprio(cls, c: dict) -> dict:
+        return {**cls.perfil_publico(c), "email": c["email"], "idade": c.get("idade"), "verificada": bool(c.get("verificada"))}
+
+
+CONTAS: dict = {}  # pasta → Contas (uma por pasta de dados)
+
+
+def contas_de(dados: Path) -> Contas:
+    pasta = dados / "contas"
+    if str(pasta) not in CONTAS:
+        CONTAS[str(pasta)] = Contas(pasta)
+    return CONTAS[str(pasta)]
+
+
+def email_config() -> dict:
+    try:
+        return json.loads((DADOS / "email.json").read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def email_configurado(cfg: dict | None = None) -> bool:
+    cfg = cfg if cfg is not None else email_config()
+    return bool(cfg.get("servidor") and cfg.get("remetente"))
+
+
+def mandar_email(para: str, assunto: str, texto: str) -> None:
+    """Manda um e-mail pela conta de e-mail que o dono configurou (SMTP)."""
+    import smtplib
+    import ssl
+    from email.message import EmailMessage
+    from email.utils import formataddr
+    cfg = email_config()
+    if not email_configurado(cfg):
+        raise ErroPonte(503, "O dono deste servidor ainda não configurou o envio de e-mails (Companhia › Contas › E-mail).")
+    msg = EmailMessage()
+    msg["Subject"] = assunto
+    msg["From"] = formataddr((cfg.get("nome") or "Companhia", cfg["remetente"]))
+    msg["To"] = para
+    msg.set_content(texto)
+    seguranca, porta = cfg.get("seguranca", "starttls"), int(cfg.get("porta") or (465 if cfg.get("seguranca") == "ssl" else 587))
+    try:
+        if seguranca == "ssl":
+            conexao = smtplib.SMTP_SSL(cfg["servidor"], porta, context=ssl.create_default_context(), timeout=25)
+        else:
+            conexao = smtplib.SMTP(cfg["servidor"], porta, timeout=25)
+            if seguranca == "starttls":
+                conexao.starttls(context=ssl.create_default_context())
+        with conexao:
+            if cfg.get("usuario"):
+                conexao.login(cfg["usuario"], cfg.get("senha", ""))
+            conexao.send_message(msg)
+    except (OSError, smtplib.SMTPException) as e:
+        raise ErroPonte(502, f"Não consegui mandar o e-mail ({type(e).__name__}: {e}). Confira o e-mail do servidor (Companhia › Contas › E-mail).")
 
 
 def cabe_no_disco(pasta: Path, tamanho: int) -> None:
@@ -565,7 +740,18 @@ class Ponte:
         """O que qualquer um pode saber deste servidor (sem a chave): o que ele oferece aos visitantes."""
         return {"versao": VERSAO, "so_app": self.so_app["id"] if self.so_app else None, "ponte": self.ligada,
                 "salas": self.ligada, "salas_criar": self.ligada and self.salas_visitantes(),
+                "contas": self.ligada, "contas_email": self.ligada and email_configurado(), "exigir_conta": self.ligada and self.exigir_conta(),
+                "idade_minima": self.idade_minima(),
                 "loja": self.ligada, "loja_publicar": self.ligada and self.loja_publicar()}
+
+    def idade_minima(self) -> int:
+        try:
+            return max(0, min(99, int(self.config.get("contas_idade_minima", 13))))
+        except (TypeError, ValueError):
+            return 13
+
+    def exigir_conta(self) -> bool:
+        return bool(self.config.get("contas_exigir", False))
 
     def salas_visitantes(self) -> bool:
         """Quem chega pelo link (sem a chave) pode criar salas? Ligado por padrão; o dono desliga."""
@@ -1109,6 +1295,9 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.sala(self.command, rota[5:])
         if rota in ("salas", "salas/ajustes"):
             return self.salas(self.command, rota)
+        # As contas também: cadastro, código, entrar e perfil, sem a chave da ponte (os ajustes são do dono)
+        if rota == "contas" or rota.startswith("contas/"):
+            return self.contas(self.command, rota[7:])
         # A loja também: ver e baixar, qualquer um; publicar, se o dono deixar; apagar, o dono ou quem publicou
         if rota == "loja" or rota.startswith("loja/"):
             return self.loja(self.command, rota[5:])
@@ -1368,7 +1557,12 @@ class Manipulador(BaseHTTPRequestHandler):
             dono = self.autorizado(False)
             if not dono and not self.ponte.salas_visitantes():
                 raise ErroPonte(403, "O dono deste servidor não está deixando criar salas por aqui. Entre numa das salas abertas.")
+            conta = self.conta_da_sessao()
+            if not dono and not conta and self.ponte.exigir_conta():
+                raise ErroPonte(401, "Este servidor pede uma conta: entre ou crie a sua para criar uma sala.")
             d = self.ler_json()
+            if conta:
+                d["criador"] = conta["nome"]
             origem = self.origem_do_pedido()
             with SALAS_TRAVA:
                 if len(SALAS) >= SALA_MAXIMO:
@@ -1479,7 +1673,10 @@ class Manipulador(BaseHTTPRequestHandler):
             return self.responder_json(sala.resumo())
         if acao == "entrar" and m == "POST":
             d = self.ler_json()
-            nome = sala_texto(d.get("nome"), 24) or "Visitante"
+            conta = self.conta_da_sessao()
+            if not conta and self.ponte.exigir_conta() and not self.autorizado(False):
+                raise ErroPonte(401, "Este servidor pede uma conta: entre ou crie a sua para jogar.")
+            nome = (conta["nome"] if conta else "") or sala_texto(d.get("nome"), 24) or "Visitante"
             chave = self.headers.get("X-Sala-Chave", "")
             de_quem_criou = bool(chave and hmac.compare_digest(chave.encode(), sala.chave.encode()))
             if not de_quem_criou and not sala.senha_confere(d.get("senha")):
@@ -1490,7 +1687,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 if len(sala.pessoas) >= sala.max:
                     raise ErroPonte(429, f"A sala está cheia ({sala.max} pessoas).")
                 pid = secrets.token_hex(4)
-                sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0}
+                sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0, "aparencia": 0,
+                                     "conta": conta["id"] if conta else None}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
@@ -1498,6 +1696,47 @@ class Manipulador(BaseHTTPRequestHandler):
             self.receber_para(sala.pasta / f"avatar-{p['id']}.vrm")
             j["avatar"] += 1
             return self.responder_json({"avatar": j["avatar"]}, 201)
+        # a aparência de cada um (o ajuste do esqueleto, as peças escondidas e as texturas trocadas): os outros a veem igual
+        if acao == "aparencia" and m == "PUT":
+            j = pessoa(p)
+            dados = self.ler_corpo(256 * 1024)
+            try:
+                ap = json.loads(dados or b"{}")
+            except ValueError:
+                raise ErroPonte(400, "A aparência não é um JSON válido.")
+            if not isinstance(ap, dict):
+                raise ErroPonte(400, "Esperava um objeto JSON.")
+            (sala.pasta / f"aparencia-{p['id']}.json").write_text(json.dumps(ap, ensure_ascii=False), "utf-8")
+            j["aparencia"] += 1
+            return self.responder_json({"aparencia": j["aparencia"]}, 201)
+        if acao == "aparencia" and m in ("GET", "HEAD") and len(partes) == 3:
+            arquivo = sala.pasta / f"aparencia-{partes[2]}.json"
+            if partes[2] not in sala.pessoas or not arquivo.is_file():
+                raise ErroPonte(404, "Essa pessoa não mandou a aparência.")
+            return self.enviar_arquivo(arquivo, "application/json; charset=utf-8")
+        if acao == "textura" and m == "PUT":
+            pessoa(p)
+            n = str(p.get("n", ""))
+            if not re.fullmatch(r"\d{1,3}", n) or int(n) > 255:
+                raise ErroPonte(400, "Número de textura inválido.")
+            cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
+            destino = sala.pasta / f"textura-{p['id']}-{n}"
+            self.receber_para(destino)
+            with open(destino, "rb") as f:
+                ext = tipo_de_imagem(f.read(16))
+            if not ext:
+                destino.unlink(missing_ok=True)
+                raise ErroPonte(400, "A textura precisa ser PNG, JPEG ou WebP.")
+            return self.responder_json({"ok": True}, 201)
+        if acao == "textura" and m in ("GET", "HEAD") and len(partes) == 4:
+            if partes[2] not in sala.pessoas or not re.fullmatch(r"\d{1,3}", partes[3]):
+                raise ErroPonte(404, "Essa textura não existe.")
+            arquivo = sala.pasta / f"textura-{partes[2]}-{partes[3]}"
+            if not arquivo.is_file():
+                raise ErroPonte(404, "Essa textura não existe.")
+            with open(arquivo, "rb") as f:
+                ext = tipo_de_imagem(f.read(16)) or "png"
+            return self.enviar_arquivo(arquivo, {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext], cache="private, max-age=3600")
         if acao == "avatar" and m in ("GET", "HEAD") and len(partes) == 3:
             arquivo = sala.pasta / f"avatar-{partes[2]}.vrm"
             if partes[2] not in sala.pessoas or not arquivo.is_file():
@@ -1531,7 +1770,8 @@ class Manipulador(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 desde = 0
             return self.responder_json({
-                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "estado": x["estado"]} for i, x in sala.pessoas.items()],
+                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"]}
+                            for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
                 "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo})
 
@@ -1679,6 +1919,322 @@ class Manipulador(BaseHTTPRequestHandler):
             raise
         item = next(i for i in self.loja_itens() if i["id"] == ident)
         return self.responder_json({"item": {k: v for k, v in item.items() if not k.startswith("_")}, "segredo": segredo}, 201)
+
+    def conta_da_sessao(self) -> dict | None:
+        """A conta de quem pede (pelo cabeçalho X-Conta-Sessao), ou None."""
+        if not self.ponte.ligada:
+            return None
+        with CONTAS_TRAVA:
+            return contas_de(DADOS).da_sessao(self.headers.get("X-Conta-Sessao", ""))
+
+    def mandar_codigo(self, cadastro: Contas, conta: dict, motivo: str) -> None:
+        """Gera e manda por e-mail o código de 6 dígitos (cadastro: confirmar o e-mail; senha: trocar a senha)."""
+        d, agora, chave = cadastro.ler(), time.time(), motivo + ":" + conta["email"]
+        atual = d["codigos"].get(chave, {})
+        envios = [t for t in atual.get("envios", []) if agora - t < 3600]
+        if envios and agora - envios[-1] < CODIGO_ESPERA:
+            raise ErroPonte(429, f"Espere {int(CODIGO_ESPERA - (agora - envios[-1])) + 1} segundos para pedir outro código.")
+        if len(envios) >= CODIGO_POR_HORA:
+            raise ErroPonte(429, "Códigos demais para este e-mail na última hora. Tente mais tarde.")
+        codigo = f"{secrets.randbelow(10 ** 6):06d}"
+        d["codigos"][chave] = {"hash": resumo_hash(chave + ":" + codigo), "expira": agora + CODIGO_VALE, "tentativas": 0, "envios": envios + [agora]}
+        cadastro.gravar()
+        para_que = "confirmar o seu e-mail e terminar o cadastro" if motivo == "cadastro" else "criar uma senha nova"
+        try:
+            self._mandar_codigo_email(conta, codigo, para_que)
+        except ErroPonte:
+            d["codigos"].pop(chave, None)  # não chegou: dá para pedir de novo na hora
+            cadastro.gravar()
+            raise
+
+    @staticmethod
+    def _mandar_codigo_email(conta: dict, codigo: str, para_que: str) -> None:
+        mandar_email(conta["email"], f"Seu código da Companhia: {codigo}",
+                     f"Olá, {conta['nome']}!\n\nO seu código para {para_que} na Companhia é:\n\n    {codigo}\n\n"
+                     f"Ele vale por {CODIGO_VALE // 60} minutos. Se não foi você que pediu, ignore este e-mail.\n")
+
+    def conferir_codigo(self, cadastro: Contas, email: str, motivo: str, codigo: str) -> None:
+        d, chave = cadastro.ler(), motivo + ":" + email
+        c = d["codigos"].get(chave)
+        if not c or time.time() > c["expira"]:
+            raise ErroPonte(410, "Esse código venceu. Peça outro.")
+        if c["tentativas"] >= CODIGO_TENTATIVAS:
+            raise ErroPonte(429, "Tentativas demais com esse código. Peça outro.")
+        if not hmac.compare_digest(resumo_hash(chave + ":" + re.sub(r"\D", "", str(codigo or ""))), c["hash"]):
+            c["tentativas"] += 1
+            cadastro.gravar()
+            raise ErroPonte(403, f"Código errado. Faltam {CODIGO_TENTATIVAS - c['tentativas']} tentativas.")
+        d["codigos"].pop(chave, None)
+
+    def contas(self, m: str, resto: str):
+        """As contas da Companhia (veja Contas). Sem a chave: cadastro, verificar, reenviar, entrar, sair, eu, perfil,
+        midia, senha, recuperar, redefinir, apagar, perfil/<id>, midia/<id>/<foto|capa>, config. Com a chave (o dono):
+        ajustes, email-teste, lista, conta/<id>."""
+        partes = [x for x in resto.split("/") if x]
+        acao = partes[0] if partes else ""
+        dono = self.autorizado(False)
+        origem = self.origem_do_pedido()
+
+        def corpo() -> dict:
+            return self.ler_json()
+
+        def email_de(d) -> str:
+            email = str(d.get("email") or "").strip().lower()
+            if not EMAIL_RE.fullmatch(email) or len(email) > 254:
+                raise ErroPonte(400, "Esse e-mail não parece certo.")
+            return email
+
+        def senha_de(d, campo="senha") -> str:
+            senha = str(d.get(campo) or "")
+            if len(senha) < 8:
+                raise ErroPonte(400, "A senha precisa ter pelo menos 8 caracteres.")
+            if len(senha) > 200:
+                raise ErroPonte(400, "Senha comprida demais.")
+            return senha
+
+        with CONTAS_TRAVA:
+            cadastro = contas_de(DADOS)
+            d = cadastro.ler()
+            sessao = self.headers.get("X-Conta-Sessao", "")
+            eu = cadastro.da_sessao(sessao)
+
+            def exigir_eu() -> dict:
+                if not eu:
+                    raise ErroPonte(401, "Entre na sua conta primeiro (ou a sessão venceu).")
+                return eu
+
+            if acao == "config" and m == "GET":
+                return self.responder_json({"email": email_configurado(), "idade_minima": self.ponte.idade_minima(), "exigir_conta": self.ponte.exigir_conta()})
+            if acao == "cadastro" and m == "POST":
+                contar_tentativa("cadastro:" + origem, 10, 3600)
+                b = corpo()
+                nome = sala_texto(b.get("nome"), 30)
+                if len(nome) < 2:
+                    raise ErroPonte(400, "Diga o seu nome (pelo menos 2 letras).")
+                email, senha = email_de(b), senha_de(b)
+                try:
+                    idade = int(b.get("idade"))
+                except (TypeError, ValueError):
+                    raise ErroPonte(400, "Diga a sua idade.")
+                if idade < self.ponte.idade_minima():
+                    raise ErroPonte(403, f"Para criar uma conta aqui, é preciso ter pelo menos {self.ponte.idade_minima()} anos.")
+                if idade > 120:
+                    raise ErroPonte(400, "Essa idade não parece certa.")
+                if not email_configurado():
+                    raise ErroPonte(503, "O dono deste servidor ainda não configurou o envio de e-mails, então ainda não dá para criar contas.")
+                conta = cadastro.por_email(email)
+                if conta and conta.get("verificada"):
+                    raise ErroPonte(409, "Já existe uma conta com esse e-mail. Entre nela (ou use \"Esqueci a senha\").")
+                if not conta:
+                    conta = {"id": secrets.token_hex(6), "email": email, "criada": int(time.time()), "verificada": False, "perfil": {}}
+                    d["contas"][conta["id"]] = conta
+                conta.update({"nome": nome, "idade": idade, "senha": hash_senha(senha)})
+                cadastro.gravar()
+                self.mandar_codigo(cadastro, conta, "cadastro")
+                return self.responder_json({"pendente": True, "email": esconder_email(email)}, 201)
+            if acao == "verificar" and m == "POST":
+                b = corpo()
+                email = email_de(b)
+                conta = cadastro.por_email(email)
+                if not conta:
+                    raise ErroPonte(404, "Não achei um cadastro com esse e-mail.")
+                self.conferir_codigo(cadastro, email, "cadastro", b.get("codigo"))
+                conta["verificada"] = True
+                token = cadastro.nova_sessao(conta)
+                cadastro.gravar()
+                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+            if acao == "reenviar" and m == "POST":
+                email = email_de(corpo())
+                conta = cadastro.por_email(email)
+                if conta and not conta.get("verificada"):
+                    self.mandar_codigo(cadastro, conta, "cadastro")
+                return self.responder_json({"ok": True, "email": esconder_email(email)})
+            if acao == "entrar" and m == "POST":
+                b = corpo()
+                email = email_de(b)
+                contar_tentativa("entrar:" + email, 8, 900)
+                contar_tentativa("entrar-de:" + origem, 30, 900)
+                conta = cadastro.por_email(email)
+                if not conta or not senha_confere(str(b.get("senha") or ""), conta.get("senha", {})):
+                    time.sleep(0.4)
+                    raise ErroPonte(401, "E-mail ou senha errados.")
+                if not conta.get("verificada"):
+                    try:
+                        self.mandar_codigo(cadastro, conta, "cadastro")
+                    except ErroPonte as e:
+                        if e.status != 429:
+                            raise
+                    self.close_connection = True
+                    return self.responder_json({"erro": "Falta confirmar o e-mail: mandamos um código para ele.", "pendente": True, "email": esconder_email(email)}, 403)
+                TENTATIVAS.pop("entrar:" + email, None)
+                token = cadastro.nova_sessao(conta)
+                cadastro.gravar()
+                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+            if acao == "sair" and m == "POST":
+                if sessao:
+                    d["sessoes"].pop(resumo_hash(sessao), None)
+                    cadastro.gravar()
+                return self.responder_json({"ok": True})
+            if acao == "eu" and m == "GET":
+                return self.responder_json(Contas.perfil_proprio(exigir_eu()))
+            if acao == "perfil" and len(partes) == 1 and m == "POST":
+                c, b = exigir_eu(), corpo()
+                perfil = c.setdefault("perfil", {})
+                if "nome" in b:
+                    nome = sala_texto(b.get("nome"), 30)
+                    if len(nome) < 2:
+                        raise ErroPonte(400, "O nome precisa ter pelo menos 2 letras.")
+                    c["nome"] = nome
+                for campo, limite in (("bio", 300), ("pronomes", 30), ("local", 60)):
+                    if campo in b:
+                        perfil[campo] = re.sub(r"[\x00-\x09\x0b-\x1f\x7f]+", " ", str(b.get(campo) or "")).strip()[:limite]
+                if "cor" in b:
+                    cor = str(b.get("cor") or "")
+                    perfil["cor"] = cor if re.fullmatch(r"#[0-9a-fA-F]{6}", cor) else ""
+                if "links" in b:
+                    links = [str(x).strip()[:200] for x in (b.get("links") or []) if str(x).strip()][:3]
+                    if any(not re.match(r"https?://[^\s]+$", x) for x in links):
+                        raise ErroPonte(400, "Os links precisam começar com http:// ou https://.")
+                    perfil["links"] = links
+                cadastro.gravar()
+                return self.responder_json(Contas.perfil_proprio(c))
+            if acao == "perfil" and len(partes) == 2 and m == "GET":
+                c = d["contas"].get(partes[1])
+                if not c or not c.get("verificada"):
+                    raise ErroPonte(404, "Essa conta não existe.")
+                return self.responder_json(Contas.perfil_publico(c))
+            if acao == "midia" and len(partes) == 1 and m in ("PUT", "DELETE"):
+                c, tipo = exigir_eu(), self.parametros().get("tipo", "foto")
+                if tipo not in ("foto", "capa"):
+                    raise ErroPonte(400, "Tipo de imagem desconhecido (foto ou capa).")
+                for e in ("png", "jpg", "webp"):
+                    (cadastro.midia / f"{c['id']}-{tipo}.{e}").unlink(missing_ok=True)
+                perfil = c.setdefault("perfil", {})
+                if m == "DELETE":
+                    perfil[tipo] = 0
+                else:
+                    dados = self.ler_corpo(CONTA_MIDIA)
+                    ext = tipo_de_imagem(dados)
+                    if not ext:
+                        raise ErroPonte(400, "A imagem precisa ser PNG, JPEG ou WebP.")
+                    cadastro.midia.mkdir(parents=True, exist_ok=True)
+                    (cadastro.midia / f"{c['id']}-{tipo}.{ext}").write_bytes(dados)
+                    perfil[tipo] = int(time.time() * 1000) % 2_000_000_000
+                cadastro.gravar()
+                return self.responder_json(Contas.perfil_proprio(c))
+            if acao == "midia" and len(partes) == 3 and m in ("GET", "HEAD"):
+                c = d["contas"].get(partes[1])
+                if not c or partes[2] not in ("foto", "capa"):
+                    raise ErroPonte(404, "Essa imagem não existe.")
+                arquivo = next((cadastro.midia / f"{c['id']}-{partes[2]}.{e}" for e in ("png", "jpg", "webp") if (cadastro.midia / f"{c['id']}-{partes[2]}.{e}").is_file()), None)
+                if not arquivo:
+                    raise ErroPonte(404, "Essa imagem não existe.")
+                return self.enviar_arquivo(arquivo, {".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp"}[arquivo.suffix], cache="private, max-age=600")
+            if acao == "senha" and m == "POST":
+                c, b = exigir_eu(), corpo()
+                if not senha_confere(str(b.get("atual") or ""), c.get("senha", {})):
+                    time.sleep(0.4)
+                    raise ErroPonte(403, "A senha atual está errada.")
+                c["senha"] = hash_senha(senha_de(b, "nova"))
+                for k in [k for k, x in d["sessoes"].items() if x["conta"] == c["id"] and k != resumo_hash(sessao)]:
+                    d["sessoes"].pop(k, None)  # as outras sessões saem
+                cadastro.gravar()
+                return self.responder_json({"ok": True})
+            if acao == "recuperar" and m == "POST":
+                contar_tentativa("recuperar:" + origem, 10, 3600)
+                email = email_de(corpo())
+                conta = cadastro.por_email(email)
+                if conta and conta.get("verificada"):
+                    self.mandar_codigo(cadastro, conta, "senha")
+                # a mesma resposta com ou sem conta (não dá para descobrir quem tem conta)
+                return self.responder_json({"ok": True, "email": esconder_email(email)})
+            if acao == "redefinir" and m == "POST":
+                b = corpo()
+                email = email_de(b)
+                conta = cadastro.por_email(email)
+                if not conta or not conta.get("verificada"):
+                    raise ErroPonte(410, "Esse código venceu. Peça outro.")
+                self.conferir_codigo(cadastro, email, "senha", b.get("codigo"))
+                conta["senha"] = hash_senha(senha_de(b))
+                for k in [k for k, x in d["sessoes"].items() if x["conta"] == conta["id"]]:
+                    d["sessoes"].pop(k, None)
+                token = cadastro.nova_sessao(conta)
+                cadastro.gravar()
+                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+            if acao == "apagar" and m == "POST":
+                c = exigir_eu()
+                if not senha_confere(str(corpo().get("senha") or ""), c.get("senha", {})):
+                    time.sleep(0.4)
+                    raise ErroPonte(403, "A senha está errada.")
+                self.apagar_conta(cadastro, c["id"])
+                return self.responder_json({"ok": True})
+            # ── do dono do servidor
+            if acao in ("ajustes", "email-teste", "lista", "conta"):
+                if not dono:
+                    raise ErroPonte(403, "Só o dono do servidor (com a chave da ponte, neste aparelho) mexe nisso.")
+                if acao == "ajustes" and m == "GET":
+                    cfg = email_config()
+                    return self.responder_json({"email": {k: cfg.get(k, "") for k in ("servidor", "porta", "seguranca", "usuario", "remetente", "nome")} | {"tem_senha": bool(cfg.get("senha")), "configurado": email_configurado(cfg)},
+                                                "idade_minima": self.ponte.idade_minima(), "exigir_conta": self.ponte.exigir_conta(), "contas": sum(1 for c in d["contas"].values() if c.get("verificada")),
+                                                "pasta": str(cadastro.pasta)})
+                if acao == "ajustes" and m == "POST":
+                    b = corpo()
+                    if isinstance(b.get("email"), dict):
+                        e, cfg = b["email"], email_config()
+                        for k in ("servidor", "usuario", "remetente", "nome"):
+                            if k in e:
+                                cfg[k] = str(e.get(k) or "").strip()[:200]
+                        if "porta" in e:
+                            try:
+                                cfg["porta"] = max(1, min(65535, int(e.get("porta") or 0))) if e.get("porta") else ""
+                            except (TypeError, ValueError):
+                                raise ErroPonte(400, "Porta inválida.")
+                        if "seguranca" in e:
+                            if e["seguranca"] not in ("ssl", "starttls", "nenhuma"):
+                                raise ErroPonte(400, "Segurança: ssl, starttls ou nenhuma.")
+                            cfg["seguranca"] = e["seguranca"]
+                        if e.get("senha"):
+                            cfg["senha"] = str(e["senha"])[:500]
+                        if cfg.get("remetente") and not EMAIL_RE.fullmatch(cfg["remetente"]):
+                            raise ErroPonte(400, "O remetente precisa ser um e-mail.")
+                        arquivo = DADOS / "email.json"
+                        temporario = arquivo.with_suffix(".tmp")
+                        temporario.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), "utf-8")
+                        os.chmod(temporario, 0o600)
+                        os.replace(temporario, arquivo)
+                    if "idade_minima" in b:
+                        try:
+                            self.ponte.config["contas_idade_minima"] = max(0, min(99, int(b["idade_minima"])))
+                        except (TypeError, ValueError):
+                            raise ErroPonte(400, "Idade mínima inválida.")
+                    if "exigir_conta" in b:
+                        self.ponte.config["contas_exigir"] = bool(b["exigir_conta"])
+                    gravar_config(self.ponte.config)
+                    return self.responder_json({"ok": True, "email": email_configurado(), "idade_minima": self.ponte.idade_minima(), "exigir_conta": self.ponte.exigir_conta()})
+                if acao == "email-teste" and m == "POST":
+                    para = email_de({"email": corpo().get("para")})
+                    mandar_email(para, "Teste da Companhia", "Este é um e-mail de teste do servidor da Companhia: o envio dos códigos está funcionando.\n")
+                    return self.responder_json({"ok": True})
+                if acao == "lista" and m == "GET":
+                    lista = [{"id": c["id"], "nome": c["nome"], "email": c["email"], "idade": c.get("idade"), "criada": c.get("criada"), "verificada": bool(c.get("verificada"))}
+                             for c in d["contas"].values()]
+                    return self.responder_json({"contas": sorted(lista, key=lambda x: -(x["criada"] or 0))})
+                if acao == "conta" and len(partes) == 2 and m == "DELETE":
+                    if partes[1] not in d["contas"]:
+                        raise ErroPonte(404, "Essa conta não existe.")
+                    self.apagar_conta(cadastro, partes[1])
+                    return self.responder_json({"ok": True})
+        raise ErroPonte(404, f"As contas não conhecem /{resto} ({m}).")
+
+    @staticmethod
+    def apagar_conta(cadastro: Contas, cid: str) -> None:
+        d = cadastro.ler()
+        d["contas"].pop(cid, None)
+        for k in [k for k, x in d["sessoes"].items() if x["conta"] == cid]:
+            d["sessoes"].pop(k, None)
+        for f in cadastro.midia.glob(f"{cid}-*"):
+            f.unlink(missing_ok=True)
+        cadastro.gravar()
 
     def origem_do_pedido(self) -> str:
         """De onde vem o pedido: o endereço de verdade de quem está do outro lado (pela Cloudflare, o Cf-Connecting-Ip)."""

@@ -68,6 +68,82 @@
   const nomePeca = (n) => String(n || "").replace(/\s*\((Instance|Outline)\)/gi, "").replace(/^N\d+_\d+_\d+_/, "").trim();
   C.nomePeca = nomePeca;
   const ehCelular = () => (window.matchMedia && matchMedia("(pointer: coarse)").matches) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+
+  /**
+   * As peças de roupa de um VRM, agrupadas pelo nome do material: [{nome, materiais, visivel}]. Num avatar convertido
+   * (do Unity), os nomes não seguem os do VRoid: todo material é uma peça. Serve ao palco e às personagens dos outros.
+   */
+  C.pecasDoModelo = function (gltf) {
+    const porNome = new Map(), extras = (gltf.parser && gltf.parser.json && gltf.parser.json.extras) || {}, convertido = !!(extras.companhia && extras.companhia.convertido);
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material || [])) {
+        const n = nomePeca(m.name);
+        if (!n || (!convertido && (NAO_ROUPA.test(n) || !ROUPA.test(n)))) continue;
+        if (!porNome.has(n)) porNome.set(n, { nome: n, materiais: new Set(), visivel: true });
+        porNome.get(n).materiais.add(m);
+      }
+    });
+    return [...porNome.values()].map((x) => ({ ...x, materiais: [...x.materiais] }));
+  };
+  C.mostrarPecaEm = function (peca, visivel) {
+    peca.visivel = visivel;
+    for (const m of peca.materiais) { m.visible = visivel; m.needsUpdate = true; }
+  };
+  /** Troca a imagem (cor/estampa) de uma peça. As coordenadas de textura do modelo continuam as mesmas. */
+  C.trocarTexturaEm = async function (peca, blob) {
+    const T = window.THREE;
+    const bmp = await createImageBitmap(blob, { imageOrientation: "none", premultiplyAlpha: "none" });
+    const tex = new T.Texture(bmp);
+    tex.flipY = false; // como as texturas do glTF
+    tex.colorSpace = T.SRGBColorSpace;
+    tex.needsUpdate = true;
+    for (const m of peca.materiais) {
+      const antiga = m.map;
+      if (!peca.originais) peca.originais = new Map();
+      if (!peca.originais.has(m)) peca.originais.set(m, { map: m.map, shade: m.shadeMultiplyTexture });
+      if (antiga) { tex.wrapS = antiga.wrapS; tex.wrapT = antiga.wrapT; tex.offset.copy(antiga.offset); tex.repeat.copy(antiga.repeat); }
+      m.map = tex;
+      // no MToon (o material do VRoid) a sombra costuma usar a mesma imagem
+      if (m.shadeMultiplyTexture && m.shadeMultiplyTexture === (peca.originais.get(m).map)) m.shadeMultiplyTexture = tex;
+      m.needsUpdate = true;
+    }
+    return true;
+  };
+  C.voltarTexturaEm = function (peca) {
+    if (!peca.originais) return;
+    for (const [m, o] of peca.originais) { m.map = o.map; m.shadeMultiplyTexture = o.shade; m.needsUpdate = true; }
+    peca.originais = null;
+  };
+  /**
+   * O ajuste do esqueleto pronto para usar: {ajuste (limpo), descanso (pose dos braços), ajusteQ (correção por osso)}.
+   * O palco e as personagens dos outros fazem a mesma conta.
+   */
+  C.prepararAjuste = function (a) {
+    const T = window.THREE, padrao = C.ajustePadrao();
+    a = a || {};
+    const ajuste = { bracos: Number.isFinite(+a.bracos) && a.bracos !== null && a.bracos !== "" ? limitar(+a.bracos, 0, 90) : padrao.bracos,
+      ossos: { ...(a.ossos || {}) }, escala: Object.assign(padrao.escala, a.escala || {}) };
+    const ajusteQ = new Map();
+    for (const [n, r] of Object.entries(ajuste.ossos)) {
+      if (!Array.isArray(r) || !(r[0] || r[1] || r[2])) continue;
+      ajusteQ.set(n, new T.Quaternion().setFromEuler(new T.Euler((+r[0] || 0) * Math.PI / 180, (+r[1] || 0) * Math.PI / 180, (+r[2] || 0) * Math.PI / 180)));
+    }
+    const e = ajuste.escala;
+    for (const k of Object.keys(e)) e[k] = limitar(+e[k] || 1, 0.3, 3);
+    return { ajuste, descanso: C.poseDescanso(ajuste.bracos * Math.PI / 180), ajusteQ };
+  };
+  /**
+   * As proporções no modelo: o tamanho geral e o dos ossos (cabeça, braços, mãos, pernas). brutos: {osso: escala
+   * original do osso}. Devolve quanto o quadril sobe para os pés continuarem no chão (pernas mais compridas).
+   */
+  C.aplicarProporcoes = function (vrm, escala, brutos, alturaQuadril, coxaY) {
+    const por = (n, k) => { const o = vrm.humanoid && vrm.humanoid.getRawBoneNode(n); if (o && brutos[n]) o.scale.copy(brutos[n]).multiplyScalar(k); };
+    vrm.scene.scale.setScalar(escala.geral);
+    por("head", escala.cabeca);
+    for (const l of ["left", "right"]) { por(l + "UpperArm", escala.bracos); por(l + "Hand", escala.maos / escala.bracos); por(l + "UpperLeg", escala.pernas); }
+    return coxaY !== null && coxaY !== undefined ? (escala.pernas - 1) * Math.max(0, alturaQuadril + coxaY) : 0;
+  };
   /** Rotação zero (para os ossos sem pose de descanso). */
   const IDENT = { x: 0, y: 0, z: 0, w: 1, isQuaternion: true };
 
@@ -409,17 +485,7 @@
       this.acharMorfos(gltf);
       // peças de roupa (agrupadas pelo nome do material)
       // (num avatar convertido os nomes não seguem os do VRoid: todo material é uma peça, para esconder ou pôr a textura)
-      const porNome = new Map(), extras = (gltf.parser && gltf.parser.json && gltf.parser.json.extras) || {}, convertido = !!(extras.companhia && extras.companhia.convertido);
-      vrm.scene.traverse((o) => {
-        if (!o.isMesh) return;
-        for (const m of [].concat(o.material || [])) {
-          const n = nomePeca(m.name);
-          if (!n || (!convertido && (NAO_ROUPA.test(n) || !ROUPA.test(n)))) continue;
-          if (!porNome.has(n)) porNome.set(n, { nome: n, materiais: new Set(), visivel: true });
-          porNome.get(n).materiais.add(m);
-        }
-      });
-      this.pecas = [...porNome.values()].map((x) => ({ ...x, materiais: [...x.materiais] }));
+      this.pecas = C.pecasDoModelo(gltf);
       for (const peca of this.pecas) if ((roupa.ocultas || []).includes(peca.nome)) this.mostrarPeca(peca.nome, false);
       for (const [peca, blob] of Object.entries(roupa.texturas || {})) await this.trocarTextura(peca, blob).catch((e) => console.warn("textura", peca, e));
       // esqueleto: os ossos, as medidas na pose em T, o ajuste guardado e a pose de descanso (braços para baixo)
@@ -457,38 +523,18 @@
     mostrarPeca(nome, visivel) {
       const peca = this.pecas.find((x) => x.nome === nome);
       if (!peca) return false;
-      peca.visivel = visivel;
-      for (const m of peca.materiais) { m.visible = visivel; m.needsUpdate = true; }
+      C.mostrarPecaEm(peca, visivel);
       return true;
     }
     pecasOcultas() { return this.pecas.filter((x) => !x.visivel).map((x) => x.nome); }
     /** Troca a imagem (cor/estampa) de uma peça. As coordenadas de textura do modelo continuam as mesmas. */
     async trocarTextura(nome, blob) {
-      const T = window.THREE;
       const peca = this.pecas.find((x) => x.nome === nome);
-      if (!peca) return false;
-      const bmp = await createImageBitmap(blob, { imageOrientation: "none", premultiplyAlpha: "none" });
-      const tex = new T.Texture(bmp);
-      tex.flipY = false; // como as texturas do glTF
-      tex.colorSpace = T.SRGBColorSpace;
-      tex.needsUpdate = true;
-      for (const m of peca.materiais) {
-        const antiga = m.map;
-        if (!peca.originais) peca.originais = new Map();
-        if (!peca.originais.has(m)) peca.originais.set(m, { map: m.map, shade: m.shadeMultiplyTexture });
-        if (antiga) { tex.wrapS = antiga.wrapS; tex.wrapT = antiga.wrapT; tex.offset.copy(antiga.offset); tex.repeat.copy(antiga.repeat); }
-        m.map = tex;
-        // no MToon (o material do VRoid) a sombra costuma usar a mesma imagem
-        if (m.shadeMultiplyTexture && m.shadeMultiplyTexture === (peca.originais.get(m).map)) m.shadeMultiplyTexture = tex;
-        m.needsUpdate = true;
-      }
-      return true;
+      return peca ? C.trocarTexturaEm(peca, blob) : false;
     }
     voltarTextura(nome) {
       const peca = this.pecas.find((x) => x.nome === nome);
-      if (!peca || !peca.originais) return;
-      for (const [m, o] of peca.originais) { m.map = o.map; m.shadeMultiplyTexture = o.shade; m.needsUpdate = true; }
-      peca.originais = null;
+      if (peca) C.voltarTexturaEm(peca);
     }
 
     // ── corpo
@@ -560,28 +606,16 @@
      * do descanso, dos pacotes de movimento e da captura.
      */
     definirAjuste(a, { medir = true } = {}) {
-      const T = window.THREE, padrao = C.ajustePadrao();
-      a = a || {};
-      this.ajuste = { bracos: Number.isFinite(+a.bracos) && a.bracos !== null && a.bracos !== "" ? limitar(+a.bracos, 0, 90) : padrao.bracos,
-        ossos: { ...(a.ossos || {}) }, escala: Object.assign(padrao.escala, a.escala || {}) };
-      this.descanso = C.poseDescanso(this.ajuste.bracos * Math.PI / 180);
+      const pronto = C.prepararAjuste(a);
+      this.ajuste = pronto.ajuste;
+      this.descanso = pronto.descanso;
       this.anim.definirDescanso(this.descanso);
-      this.ajusteQ = new Map();
-      for (const [n, r] of Object.entries(this.ajuste.ossos)) {
-        if (!r || !(r[0] || r[1] || r[2])) continue;
-        this.ajusteQ.set(n, new T.Quaternion().setFromEuler(new T.Euler(r[0] * Math.PI / 180, r[1] * Math.PI / 180, r[2] * Math.PI / 180)));
-      }
-      const e = this.ajuste.escala;
-      for (const k of Object.keys(e)) e[k] = limitar(+e[k] || 1, 0.3, 3);
+      this.ajusteQ = pronto.ajusteQ;
       if (!this.vrm) return;
-      // proporções: mexem no tamanho dos ossos do próprio modelo
-      const por = (n, k) => { const o = this.ossoBruto(n); if (o && this.brutos[n]) o.scale.copy(this.brutos[n]).multiplyScalar(k); };
-      this.vrm.scene.scale.setScalar(e.geral);
-      por("head", e.cabeca);
-      for (const l of ["left", "right"]) { por(l + "UpperArm", e.bracos); por(l + "Hand", e.maos / e.bracos); por(l + "UpperLeg", e.pernas); }
-      // pernas mais compridas: o quadril sobe para os pés continuarem no chão
+      // proporções: mexem no tamanho dos ossos do próprio modelo; pernas mais compridas: o quadril sobe para os pés
+      // continuarem no chão
       const coxa = this.repouso.leftUpperLeg || this.repouso.rightUpperLeg;
-      this.erguer = coxa ? (e.pernas - 1) * Math.max(0, this.alturaQuadril + coxa.y) : 0;
+      this.erguer = C.aplicarProporcoes(this.vrm, this.ajuste.escala, this.brutos, this.alturaQuadril, coxa ? coxa.y : null);
       this.peDescanso = this.peMaisBaixo({});
       const molas = this.vrm.springBoneManager;
       if (molas) { try { molas.reset(); molas.setInitState(); } catch (err) { /* modelo sem molas */ } }

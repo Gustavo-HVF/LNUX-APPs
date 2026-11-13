@@ -9,6 +9,9 @@
  *
  * Criar não precisa da ponte: pelo link isolado do LNUX, quem chega cria a sala — se o dono do servidor deixar
  * (ele vê aqui a opção "Deixar quem entra pelo link criar salas").
+ *
+ * Em cima, a conta (js/contas.js): quem entrou aparece com a foto e o nome da conta, e os outros veem o perfil dela.
+ * Se o dono pedir conta para jogar, entrar e criar sala pedem para entrar na conta antes.
  */
 (function () {
   "use strict";
@@ -149,6 +152,8 @@
     const codigoCampo = el("input", { class: "lnux-entrada", value: codigo, placeholder: "Tem o link de uma sala privada? Cole aqui", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
     const botaoCriar = el("button", { class: "lnux-botao primario", type: "button", id: "sala-criar", onclick: () => criar().catch(LNUX.erro) }, "＋ Criar sala");
     const contagem = el("span", { class: "fraco pequeno" });
+    const barraConta = el("div", { class: "salas-conta" });
+    const pedeConta = el("p", { class: "salas-pede-conta", hidden: true }, "Este servidor pede uma conta para jogar: entre na sua ou crie uma.");
     const caixa = el("div", { class: "loja salas", role: "dialog", "aria-label": "Salas", "aria-modal": "true" },
       el("header", { class: "loja-topo" },
         el("div", { class: "loja-titulo" }, el("b", {}, "🎮 Salas"), el("span", { class: "fraco pequeno" }, "escolha uma sala para entrar, ou crie a sua")),
@@ -157,11 +162,12 @@
         botaoCriar,
         el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a lista de salas", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair(false) })),
       el("div", { class: "salas-eu" },
+        barraConta,
         el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome),
         el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), personagem),
         ctx.lojaDisponivel ? el("button", { class: "lnux-botao", type: "button", id: "sala-loja-personagem", title: "Ver as personagens da loja, em 3D, e escolher uma",
           onclick: async () => { const id = await ctx.escolherNaLoja(); if (id) await desenharPersonagens(id); } }, "🛍️ Personagens da loja") : null),
-      dono, convite,
+      pedeConta, dono, convite,
       el("div", { class: "salas-codigo linha" }, el("label", { class: "lnux-campo" }, codigoCampo),
         el("button", { class: "lnux-botao", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigoCampo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigoCampo.focus(); return; } entrarPeloCodigo(c).catch(LNUX.erro); } }, "Entrar pelo link")),
       grade, vazio);
@@ -169,7 +175,29 @@
     codigoCampo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); caixa.querySelector("#sala-entrar").click(); } });
     const teclas = (e) => { if (e.key === "Escape" && !document.querySelector(".lnux-fundo-modal") && !document.querySelector(".loja:not(.salas)")) { e.preventDefault(); sair(false); } };
     document.addEventListener("keydown", teclas);
+    const pararDeOuvir = C.contas ? C.contas.aoMudar(() => desenharConta()) : () => {};
+    /** A conta: com a foto e o nome (e o perfil), ou os botões de entrar e de criar. */
+    function desenharConta() {
+      const eu = C.contas && C.contas.eu, pub = (C.contas && C.contas.publico) || {};
+      pedeConta.hidden = !(pub.exigir_conta && !eu);
+      nome.readOnly = !!eu;
+      if (eu) { nome.value = eu.nome; nome.title = "O nome da sua conta (mude em Meu perfil)."; } else nome.title = "";
+      if (!pub.contas) { barraConta.replaceChildren(); return; }
+      barraConta.replaceChildren(...(eu
+        ? [C.fotoDaConta(eu, 38), el("span", { class: "nome-conta" }, eu.nome),
+          el("button", { type: "button", class: "lnux-botao", id: "conta-perfil", onclick: () => C.janelaPerfil().catch(LNUX.erro) }, "Meu perfil"),
+          el("button", { type: "button", class: "lnux-botao plano", onclick: () => C.contas.sair() }, "Sair da conta")]
+        : [el("button", { type: "button", class: "lnux-botao", id: "conta-abrir-entrar", onclick: () => C.janelaConta("entrar") }, "Entrar na conta"),
+          el("button", { type: "button", class: "lnux-botao", id: "conta-abrir-criar", onclick: () => C.janelaConta("criar") }, "Criar conta")]));
+    }
+    /** Antes de entrar ou criar: se o servidor pede conta e a pessoa não entrou, pede para entrar. */
+    async function garantirConta() {
+      const pub = (C.contas && C.contas.publico) || {};
+      if (!pub.exigir_conta || (C.contas && C.contas.eu)) return true;
+      return !!(await C.janelaConta("entrar"));
+    }
     function sair(entrou) {
+      pararDeOuvir();
       clearInterval(relogio);
       document.removeEventListener("keydown", teclas);
       caixa.remove();
@@ -189,9 +217,9 @@
       personagem.value = "";
       try { const id = await ctx.importarPersonagem(); if (id) await desenharPersonagens(id); } catch (e) { LNUX.erro(e); }
     });
-    /** Quem vai entrar: o nome (obrigatório) e a personagem. */
+    /** Quem vai entrar: o nome (obrigatório; com a conta, o dela) e a personagem. */
     function jogador() {
-      const n = nome.value.trim();
+      const n = (C.contas && C.contas.eu && C.contas.eu.nome) || nome.value.trim();
       if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
       return { nome: n, personagem: personagem.value };
     }
@@ -231,8 +259,9 @@
         try { const r = await C.Sala.ajustar({ visitantes_criam: caixaCriar.checked }); LNUX.aviso(r.visitantes_criam ? "Quem entra pelo link pode criar salas." : "Só você cria salas agora.", "ok"); }
         catch (e) { caixaCriar.checked = !caixaCriar.checked; LNUX.erro(e); }
       });
-      dono.replaceChildren(el("span", { class: "fraco pequeno" }, "O servidor é seu: as salas ficam neste aparelho enquanto ele estiver ligado."),
-        el("label", { class: "lnux-alternar" }, caixaCriar, "Deixar quem entra pelo link criar salas"));
+      dono.replaceChildren(...LNUX.filhos(el("span", { class: "fraco pequeno" }, "O servidor é seu: as salas ficam neste aparelho enquanto ele estiver ligado."),
+        el("label", { class: "lnux-alternar" }, caixaCriar, "Deixar quem entra pelo link criar salas"),
+        C.janelaContasDono ? el("button", { type: "button", class: "lnux-botao", id: "contas-dono", onclick: () => C.janelaContasDono().then(() => desenharConta()).catch(LNUX.erro) }, "Contas e e-mail...") : null));
     }
     /** A sala que veio no link aparece em destaque, em cima da lista (mesmo se for privada). */
     async function mostrarConvite(c) {
@@ -251,6 +280,7 @@
       return entrarNa(s);
     }
     async function entrarNa(s) {
+      if (!(await garantirConta())) return;
       const j = jogador();
       if (!j) return;
       let senha = "";
@@ -260,6 +290,7 @@
           sair(true);
           return;
         } catch (e) {
+          if (e.status === 401 && C.contas && !C.contas.eu) { if (await C.janelaConta("entrar")) continue; return; }
           if (!e.senha) throw e;
           const campo = el("input", { class: "lnux-entrada", type: "password", "aria-label": "Senha", autocomplete: "off" });
           const r = await LNUX.dialogo({ titulo: `Senha de "${s.nome}"`, corpo: el("div", { class: "ajustes" }, tentativa ? el("p", { style: { margin: 0, color: "var(--perigo)" } }, "Senha errada. Tente de novo.") : null,
@@ -271,6 +302,7 @@
       }
     }
     async function criar() {
+      if (!(await garantirConta())) return;
       const j = jogador();
       if (!j) return;
       const f = await C.formularioDeSala(ctx, { inicial: { nome: `Sala de ${j.nome}` }, pessoasMax: lista.pessoas_max || 16 });
@@ -279,6 +311,7 @@
       sair(true);
     }
     desenharPersonagens().catch(LNUX.erro);
+    if (C.contas) C.contas.atualizarPublico().then(() => C.contas.carregar()).then(desenharConta).catch(() => desenharConta());
     atualizar().catch(LNUX.erro);
     if (codigo) mostrarConvite(codigoDe(codigo));
     relogio = setInterval(() => atualizar().catch(() => {}), 4000);
