@@ -328,3 +328,39 @@
 .salas-codigo { display: flex; flex-wrap: nowrap; }
 .salas-codigo .lnux-campo { flex: 1 1 auto; min-width: 0; }
 .salas-codigo .lnux-botao { flex: none; }
+
+/* ── Contas e perfil ───────────────────────────────────────────────── */
+.foto-conta { display: inline-grid; place-items: center; flex: none; border-radius: 50%; overflow: hidden; color: #fff; font-weight: 700; object-fit: cover; box-shadow: 0 0 0 2px var(--painel); }
+.foto-conta img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.salas-conta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-basis: 100%; }
+.salas-conta:empty { display: none; }
+.salas-conta .nome-conta { font-weight: 600; margin-right: 4px; }
+.salas-pede-conta { margin: 10px 16px 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--aviso) 18%, transparent); }
+.salas-pede-conta[hidden] { display: none; }
+.janela-conta { min-width: min(420px, 82vw); }
+.janela-conta h3 { margin: 0; }
+.janela-conta .grade, .janela-perfil .grade, .janela-contas-dono .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.conta-acoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.conta-link { padding-inline: 4px; text-decoration: underline; }
+.conta-msg { margin: 0; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.conta-msg.erro { background: color-mix(in srgb, var(--perigo) 16%, transparent); color: var(--texto); }
+.codigo-conta { font-family: var(--mono, monospace); font-size: 1.6em; letter-spacing: .3em; text-align: center; max-width: 220px; }
+.perfil-cartao { display: grid; gap: 10px; min-width: min(420px, 82vw); }
+.perfil-capa { position: relative; height: 120px; border-radius: 12px; display: flex; align-items: flex-end; justify-content: flex-end; gap: 6px; padding: 8px; }
+.perfil-cabeca { display: flex; align-items: center; gap: 12px; margin-top: -42px; padding-left: 12px; }
+.perfil-cabeca h2 { margin: 30px 0 0; font-size: 1.3em; }
+.perfil-bio { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+.perfil-links { display: grid; gap: 4px; }
+.perfil-links a { color: var(--destaque); word-break: break-all; }
+.perfil-editar-topo { display: grid; gap: 0; }
+.perfil-editar-topo .perfil-cabeca .linha { margin-top: 36px; }
+.contas-lista table { width: 100%; border-collapse: collapse; }
+.contas-lista td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--borda); }
+.pessoas-sala { min-width: min(360px, 80vw); }
+.pessoa-sala { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 10px; border: 0; background: none; color: var(--texto); font: inherit; text-align: left; }
+.pessoa-sala.com-conta { cursor: pointer; }
+.pessoa-sala.com-conta:hover { background: var(--destaque-suave); }
+@media (max-width: 560px) { .janela-conta .grade, .janela-perfil .grade, .janela-contas-dono .grade { grid-template-columns: 1fr; } }
+.perfil-cabeca { position: relative; z-index: 1; }
+.perfil-cabeca .foto-conta { box-shadow: 0 0 0 4px var(--painel); }
+.janela-conta .grade, .janela-perfil .grade, .janela-contas-dono .grade { align-items: start; }

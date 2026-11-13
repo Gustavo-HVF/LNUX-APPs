@@ -399,8 +399,8 @@
       const lista = filtrados();
       grade.replaceChildren(...lista.map(cartao));
       vazio.hidden = !!lista.length || !detalhe.hidden;
-      vazio.replaceChildren(el("p", { style: { margin: 0 } }, busca ? "Nada com esse nome." : `Ainda não há ${aba ? TIPOS[aba].nome.toLowerCase() : "nada"} na loja.`),
-        dados.publicar || dados.dono ? el("p", { class: "fraco", style: { margin: 0 } }, "Seja a primeira pessoa a publicar: ＋ Publicar.") : null);
+      vazio.replaceChildren(...LNUX.filhos(el("p", { style: { margin: 0 } }, busca ? "Nada com esse nome." : `Ainda não há ${aba ? TIPOS[aba].nome.toLowerCase() : "nada"} na loja.`),
+        dados.publicar || dados.dono ? el("p", { class: "fraco", style: { margin: 0 } }, "Seja a primeira pessoa a publicar: ＋ Publicar.") : null));
     }
     function desenharDono() {
       dono.hidden = !dados.dono;

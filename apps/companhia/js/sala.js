@@ -34,6 +34,8 @@
     if (json !== undefined) cabecalhos["Content-Type"] = "application/json";
     if (chave) cabecalhos["X-Sala-Chave"] = chave;
     if (LNUX.ponte && LNUX.ponte._token) cabecalhos["X-Ponte-Token"] = LNUX.ponte._token;
+    const sessao = C.contas && C.contas.sessao();
+    if (sessao) cabecalhos["X-Conta-Sessao"] = sessao; // quem entrou na conta aparece com o nome e o perfil dela
     let r;
     try { r = await fetch(base + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo }); }
     catch (e) { throw new Error("O servidor da sala não respondeu. O link ainda vale? (quem criou a sala precisa estar com ela aberta)"); }

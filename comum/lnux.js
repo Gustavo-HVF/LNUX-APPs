@@ -48,6 +48,8 @@
     return e;
   }
   LNUX.el = el;
+  /** Filhos para append/replaceChildren sem os vazios (null, undefined, false), que virariam o texto "null". */
+  LNUX.filhos = (...xs) => xs.flat().filter((x) => x !== null && x !== undefined && x !== false);
 
   LNUX.escapar = (texto) => String(texto).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   LNUX.limitar = (v, min, max) => Math.min(max, Math.max(min, v));
@@ -371,7 +373,7 @@
     caixa.append(
       el("header", {}, el("h2", {}, titulo), el("button", { class: "lnux-botao icone plano", "aria-label": "Fechar", onclick: () => fechar(null), html: LNUX.icone("fechar") })),
       el("div", { class: "corpo" }, corpo instanceof Node ? corpo : el("p", { style: { margin: 0 } }, corpo ?? "")),
-      botoes.length ? rodape : null);
+      ...(botoes.length ? [rodape] : []));
     fundo.append(caixa);
     fundo.addEventListener("pointerdown", (e) => { if (e.target === fundo) fechar(null); });
     document.addEventListener("keydown", teclas, true);
