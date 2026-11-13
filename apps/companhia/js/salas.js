@@ -4,7 +4,7 @@
  * Ao entrar no modo de jogar, aparece a lista das salas públicas deste servidor: a miniatura do cenário, o nome, a
  * descrição, quem criou, quantas pessoas estão e cabem, e um cadeado nas que têm senha. Dá para entrar com um
  * clique, colar o link de uma sala privada, ou criar uma sala com as opções: nome, descrição, pública (aparece na
- * lista) ou privada (só com o link), senha, quantas pessoas cabem, bate-papo e o cenário (um dos seus ou um mundo
+ * lista) ou privada (só com o link), senha, quantas pessoas cabem, bate-papo, quem põe vídeos e o cenário (um dos seus ou um mundo
  * da loja, com a prévia em 3D antes de escolher). Quem criou muda as opções depois (Sala › Opções da sala).
  *
  * Criar não precisa da ponte: pelo link isolado do LNUX, quem chega cria a sala — se o dono do servidor deixar
@@ -74,7 +74,7 @@
 
   /**
    * O formulário de criar (com o cenário) ou de mudar as opções de uma sala (sem). Devolve a Promise do diálogo:
-   * {opcoes: {nome, descricao, publica, senha, max, bate_papo}, cenario, miniatura} ou null.
+   * {opcoes: {nome, descricao, publica, senha, max, bate_papo, videos}, cenario, miniatura} ou null.
    */
   C.formularioDeSala = async function (ctx, { inicial = {}, criar = true, pessoasMax = 16 } = {}) {
     const nome = el("input", { class: "lnux-entrada", maxlength: 40, value: inicial.nome || "", "aria-label": "Nome da sala", placeholder: "Ex.: Praça da Ana" });
@@ -93,6 +93,7 @@
     const maxTexto = el("span", { class: "valor mono" }, " " + max.value);
     max.addEventListener("input", () => { maxTexto.textContent = " " + max.value; });
     const papo = el("input", { type: "checkbox", checked: inicial.bate_papo !== false, "aria-label": "Bate-papo por texto" });
+    const videos = el("input", { type: "checkbox", checked: inicial.videos !== "dono", "aria-label": "Quem entra pode pôr vídeos na tela" });
     const cenario = criar ? await seletorDeCenario(ctx, inicial.cenario || "") : null;
     const corpo = el("div", { class: "ajustes form-sala" },
       el("div", { class: criar ? "grade" : "" },
@@ -103,7 +104,8 @@
           el("label", { class: "lnux-campo" }, el("span", {}, "Senha (opcional)"), senha),
           tirarSenha ? el("label", { class: "lnux-alternar" }, tirarSenha, "Tirar a senha") : null,
           el("label", { class: "lnux-campo faixa" }, el("span", {}, "Pessoas na sala (no máximo)", maxTexto), max),
-          el("label", { class: "lnux-alternar" }, papo, "Bate-papo por texto")),
+          el("label", { class: "lnux-alternar" }, papo, "Bate-papo por texto"),
+          el("label", { class: "lnux-alternar", title: "Desligado, só você (quem criou) põe um vídeo (YouTube, Vimeo...) numa tela da sala." }, videos, "Quem entra pode pôr vídeos na tela")),
         cenario ? cenario.elemento : null));
     let resultado = null;
     try {
@@ -111,7 +113,7 @@
         botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: criar ? "Criar e entrar" : "Salvar", primario: true,
           antes: () => { if (!nome.value.trim()) { LNUX.aviso("Dê um nome para a sala.", "alerta"); nome.focus(); return false; } return true; }, valor: () => "ok" }] });
       if (r === "ok") {
-        const opcoes = { nome: nome.value.trim(), descricao: descricao.value.trim(), publica, max: +max.value, bate_papo: papo.checked };
+        const opcoes = { nome: nome.value.trim(), descricao: descricao.value.trim(), publica, max: +max.value, bate_papo: papo.checked, videos: videos.checked ? "todos" : "dono" };
         if (criar || senha.value) opcoes.senha = senha.value;
         if (tirarSenha && tirarSenha.checked) opcoes.senha = "";
         resultado = { opcoes, cenario: cenario ? cenario.valor() : null, miniatura: cenario ? await cenario.foto() : null };

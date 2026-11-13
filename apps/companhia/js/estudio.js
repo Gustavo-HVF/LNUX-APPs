@@ -395,6 +395,8 @@
       const avisoSala = el("p", { class: "fraco pequeno aviso-sala-cenario", style: { margin: 0 }, hidden: true });
       const doDisco = el("div", { class: "linha" });
       // guarda o ajuste: no aparelho (os cenários guardados) e, numa sala de quem mexe, vai para todos
+      // a luz: sol, céu, hora do dia, as luzes do mapa e a luz calculada por raios (js/luzes.js)
+      const luz = C.painelDeLuz({ palco, mexe: () => { const n = ctx.naSala && ctx.naSala(); return !n || n.dono; }, salvarAjuste: () => salvarAjuste() });
       const salvarAjuste = LNUX.adiar(async () => {
         if (!m.info) return;
         const naSala = ctx.naSala && ctx.naSala();
@@ -402,6 +404,7 @@
         else if (m.info.id) await C.mapas.atualizar({ id: m.info.id, ajuste: m.info.ajuste });
       }, 400);
       const atualizar = async () => {
+        luz.atualizar();
         anda.textContent = m.andando ? "Voltar ao retrato" : "Andar pelo cenário";
         anda.classList.toggle("primario", !m.andando);
         const naSala = ctx.naSala && ctx.naSala(), mexe = !naSala || naSala.dono;
@@ -451,11 +454,7 @@
         el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapas),
         doDisco,
         ajustes,
-        el("details", { open: true }, el("summary", {}, "Luz e sombras"), el("div", { class: "ajustes", style: { marginTop: "8px" } },
-          marcar("Luz e sombras realistas (no cenário)", palco().luzCfg.realista, (v) => { palco().definirLuz({ realista: v }); }, "Um sol com sombra, céu azulado e tons naturais. Desligado, a luz de frente de sempre (mais leve)."),
-          marcar("Sombras", palco().luzCfg.sombras, (v) => { palco().definirLuz({ sombras: v }); }, "As sombras pesam: no celular, desligue se ficar lento."),
-          faixa("Direção do sol", 0, 355, 5, palco().luzCfg.sol, (v) => palco().definirLuz({ sol: v }), (v) => " " + v + "°"),
-          faixa("Altura do sol", 10, 85, 1, palco().luzCfg.altura, (v) => palco().definirLuz({ altura: v }), (v) => " " + v + "°"))),
+        luz,
         faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => " " + v.toFixed(1) + "×"),
         el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Abre e converte para .glb: " + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ", ZIP e .unitypackage. O .blend é convertido pelo Blender do aparelho (com a ponte) ou, sem ele, pelo leitor próprio."),
         botao("Só converter um mapa para .glb...", converterMapa),

@@ -167,6 +167,7 @@
       this.sombra.visible = false;
       this.sombra.renderOrder = 1;
       palco.cena.add(this.chao, this.sombra);
+      this.luzes = C.LuzesDoMapa ? new C.LuzesDoMapa(this) : null; // as luzes do mapa e a luz calculada por raios (js/luzes.js)
       this.ligarEntradas();
     }
     salvarCfg() { LNUX.preferencia.gravar("companhia.mundo", JSON.stringify(this.cfg)); }
@@ -624,17 +625,20 @@
       const maior = Math.max(bruto.x, bruto.y, bruto.z) || 1;
       if (!this.info.ajuste.escala) this.info.ajuste.escala = maior > 2000 ? 0.01 : maior < 1 ? +(8 / maior).toPrecision(2) : 1;
       this.palco.cena.add(objeto);
+      if (this.luzes) this.luzes.preparar(objeto); // as luzes do arquivo saem da cena (quem acende é js/luzes.js) e as outras são achadas
       this.luzDoAmbiente();
       this.aplicarAjuste();
       if (this.andando) { this.chao.visible = false; this.partida(); } else this.partida();
       this.palco.enquadrar();
       this.palco.emit("mapa", this.info);
+      if (this.luzes) this.luzes.aoAbrir();
       return { triangulos: Math.round(triangulos), tamanho: this.caixa.getSize(new T.Vector3()).toArray().map((v) => +v.toFixed(1)) };
     }
     /** Aplica o tamanho, o giro e a posição do cenário e refaz a colisão. */
     aplicarAjuste() {
       const T = window.THREE, V = window.CompanhiaVRM;
       if (!this.mapa) return;
+      if (this.luzes) this.luzes.antesDoAjuste(); // a luz calculada sai (o mapa vai mudar de lugar ou de tamanho)
       const a = this.info.ajuste, pos = Array.isArray(a.posicao) ? a.posicao : [];
       this.mapa.scale.setScalar(limitar(+a.escala || 1, 1e-4, 1e4));
       this.mapa.position.set(limitar(+pos[0] || 0, -1e4, 1e4), limitar(+pos[1] || 0, -1e4, 1e4), limitar(+pos[2] || 0, -1e4, 1e4));
@@ -650,6 +654,7 @@
       const geo = gerador.generate();
       geo.boundsTree = new V.MeshBVH(geo);
       this.colisor = new T.Mesh(geo);
+      if (this.luzes) this.luzes.depoisDoAjuste();
     }
     /**
      * Um ajuste novo do cenário que chegou de fora (o dono da sala mexeu): aplica sem abrir o arquivo de novo. Se o mapa
@@ -661,6 +666,7 @@
       const a = this.info.ajuste, antes = forma(a);
       this.info.ajuste = Object.assign({ escala: 0, giro: 0, deitado: false, posicao: [0, 0, 0], partida: null }, novo);
       if (!this.info.ajuste.escala) this.info.ajuste.escala = a.escala; // "automático": o que já tinha sido calculado
+      if (this.luzes) this.luzes.lerAjuste(); // as luzes postas ou apagadas pelo dono da sala
       if (forma(this.info.ajuste) === antes) return;
       this.aplicarAjuste();
       this.partida();
@@ -679,6 +685,7 @@
     }
     tirarMapa() {
       if (!this.mapa) return;
+      if (this.luzes) this.luzes.limpar();
       this.palco.cena.remove(this.mapa);
       this.mapa.traverse((o) => {
         if (!o.isMesh) return;
