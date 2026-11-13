@@ -184,7 +184,7 @@ function png(w, h, [r, g, b]) {
     await dono.pagina.waitForFunction(() => !document.querySelector(".lnux-fundo-modal"), null, { timeout: 10000 });
 
     // ── sair, entrar de novo e "esqueci a senha" ──
-    await ana.ev(() => window.Companhia.sala.sair());
+    await ana.ev(() => window.Companhia.sala.fechar()); // quem criou fecha a sala (para os outros testes começarem sem ela)
     await ana.ev(() => C.contas.sair());
     await ana.ev(() => { window.Companhia.janelaSala(); });
     await ana.pagina.waitForSelector(".salas #conta-abrir-entrar");
