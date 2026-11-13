@@ -7,7 +7,7 @@ num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** 
 
 Nas personagens VRoid há ainda o menu **Movimento**: **captura de movimento** pela câmera (rosto, olhos, tronco,
 braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bvh`), **cenários** para andar
-(W A S D, Espaço pula), com **luz e sombras realistas** (dá para desligar), um **conversor de mapas** para `.glb`
+(W A S D, Espaço pula), com **luz e sombras realistas** (dá para desligar; hora do dia, exposição e tom), as **luzes do mapa** acesas de verdade, a **luz calculada por raios** (ray tracing), um **conversor de mapas** para `.glb`
 (inclusive `.blend`, do Blender) e **ajuste do esqueleto**. Avatares do **Unity / VRChat** (`.unitypackage`,
 `.fbx`) são convertidos para `.vrm` ao importar.
 
@@ -345,10 +345,55 @@ tons mais naturais. No painel *Cenário* (e em *Exibir*):
 
 - **Luz e sombras realistas**: liga e desliga tudo (desligada, volta a luz simples de antes, mais leve).
 - **Sombras**: só as sombras (o sol continua). Sem elas, volta a sombra redonda embaixo da personagem.
+- **Hora do dia**: *☀️ Dia*, *🌇 Fim de tarde* (sol baixo e alaranjado) e *🌙 Noite* (só um luar fraco: as luzes do
+  mapa é que iluminam).
 - **Direção do sol** e **altura do sol** (de 10° a 85°: baixo, sombras compridas; alto, sombras curtas).
+- **Avançado**: a força e a cor do sol, do céu e do chão (a luz que vem de baixo), a **exposição** (mais claro ou
+  mais escuro), o **tom das cores** (neutro, cinema/ACES, AgX ou sem ajuste) e a **qualidade da sombra do sol**
+  (baixa, média ou alta).
 
 A escolha fica guardada. No **celular** começa desligada, porque as sombras pesam; ligue se o aparelho aguentar.
 No retrato de conversa (sem cenário) a luz é sempre a de frente.
+
+### Luzes do mapa
+
+Ao abrir um cenário, a Companhia **acha as luzes dele**, e de cada uma sai luz de verdade:
+
+- 💡 as **lâmpadas que vêm no arquivo** (pontuais e spots do glTF, do FBX e do Blender: a conversão para `.glb` agora
+  as mantém);
+- ✨ as **superfícies que brilham** (materiais emissivos: lâmpadas, neon, janelas acesas, telas). Uma peça grande (uma
+  faixa de neon, um teto de luz) vira várias luzes, uma a cada 2,5 m; um painel virado para um lado ilumina para
+  aquele lado. Um mapa em que quase tudo brilha já vem com a luz pintada: aí o brilho não vira luz;
+- 🏷️ as **peças com nome de luz** (lâmpada, luminária, lustre, abajur, vela, lanterna, tocha, fogueira, lareira...,
+  também em inglês), com a cor de chama nas de fogo;
+- 📍 as **suas**: *Pôr uma luz aqui* põe uma luz acima e na frente da personagem, na cor escolhida.
+
+Para não pesar, ficam acesas **as mais perto da personagem** (*Acesas ao mesmo tempo*: 2 a 16; 4 no celular), e elas
+trocam devagar enquanto ela anda. Também dá para mudar a **força** e o **alcance** de todas, apagar uma pela **lista
+das luzes** e deixar as mais perto fazerem **sombra** (uma ou duas; precisa de *Sombras* ligado, e pesa: cada uma
+desenha a cena mais seis vezes). Apagar, acender e pôr luzes fica guardado com o cenário; numa sala, só quem criou
+mexe, e todos veem igual.
+
+### Luz calculada por raios (ray tracing)
+
+Ray tracing em tempo real não roda num navegador (nem num celular), mas dá para calcular **uma vez** e deixar pintado,
+como os jogos fazem. Em *Luz calculada por raios*, **Calcular a luz**:
+
+1. Os triângulos grandes do mapa são divididos, para caber detalhe (até o limite da qualidade: rápida, boa, alta).
+2. Cada pedacinho lança **raios para cada luz do mapa** (todas, não só as mais perto), com **sombras suaves** (a luz
+   tem tamanho: 1, 2 ou 4 raios por luz), para o **sol** e para o **céu** — o céu só entra por onde dá para vê-lo,
+   então dentro de uma casa fica escuro e entra luz pelas janelas e portas.
+3. O **rebote**: a luz que bateu nas paredes e no chão volta e clareia o que está em volta (*Rebote da luz*).
+4. Uma passada tira o "chuvisco" (a média com os vizinhos virados para o mesmo lado).
+
+O resultado fica pintado nos vértices do mapa, que passa a custar **quase nada** para desenhar (até mais leve que a
+luz em tempo real). As personagens continuam com a luz em tempo real (o sol, o céu e as luzes do mapa mais perto) e a
+sombra redonda embaixo delas. Quem brilha continua brilhando.
+
+A luz calculada **fica guardada** com o cenário: com *Calcular sozinho ao abrir um cenário*, ela volta na hora (ou é
+calculada em segundo plano, se ainda não houver). Mudar o tamanho, o giro ou o lugar do mapa tira a luz calculada;
+mudar as luzes, o sol ou o céu a deixa **desatualizada** (o painel avisa). Numa casa de teste (uns 340 mil raios na
+qualidade *rápida*), leva poucos segundos num computador; no celular e nas qualidades mais altas, mais.
 
 ### Converter mapas para `.glb`
 
@@ -562,6 +607,7 @@ js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (de
 js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
 js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
+js/luzes.js        as luzes do mapa (do arquivo, as que brilham, pelo nome, as suas), as mais perto acesas e a luz calculada por raios
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
