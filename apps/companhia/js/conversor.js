@@ -189,7 +189,7 @@
       return n;
     };
     objeto.traverse((o) => {
-      if (o.isCamera || o.isLight || o.isLine || o.isPoints || o.isSkeletonHelper) { tirar.push(o); return; }
+      if (o.isCamera || (o.isLight && !o.isPointLight && !o.isSpotLight) || o.isLine || o.isPoints || o.isSkeletonHelper) { tirar.push(o); return; } // as lâmpadas ficam (js/luzes.js acende)
       if (!o.isMesh) return;
       const g = o.geometry;
       if (!g || !g.attributes.position) { tirar.push(o); return; }

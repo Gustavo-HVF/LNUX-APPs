@@ -150,7 +150,7 @@ try:  # texturas que ficaram ao lado do arquivo (em qualquer subpasta)
     bpy.ops.file.find_missing_files(directory=os.path.dirname(bpy.data.filepath))
 except Exception:
     pass
-opcoes = dict(filepath=saida, export_format="GLB", export_apply=True, export_cameras=False, export_lights=False, export_animations=False)
+opcoes = dict(filepath=saida, export_format="GLB", export_apply=True, export_cameras=False, export_lights=True, export_animations=False)
 while True:
     try:
         bpy.ops.export_scene.gltf(**opcoes)

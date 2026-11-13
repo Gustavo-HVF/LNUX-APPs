@@ -309,7 +309,8 @@
       this.luzCeu = new T.HemisphereLight(0xffffff, 0x8888aa, 0.9);
       this.cena.add(luz, luz.target, this.luzCeu);
       // luz e sombras realistas (no cenário): sol com sombra, céu e chão, tons mais naturais. Dá para desligar.
-      this.luzCfg = { realista: !ehCelular(), sombras: true, sol: 135, altura: 55 };
+      this.luzCfg = { realista: !ehCelular(), sombras: true, sol: 135, altura: 55, hora: "dia", forcaSol: 1, corSol: "#fff1dc", forcaCeu: 1, corCeu: "#cfe2ff", chaoCeu: "#8a7d6c",
+        exposicao: 1, tom: "neutro", qualidadeSombra: ehCelular() ? "baixa" : "media" };
       try { Object.assign(this.luzCfg, JSON.parse(LNUX.preferencia.ler("companhia.luz", "{}"))); } catch (e) { /* padrão */ }
       this.luzSol = false;
       this.chaoSombra = new T.Mesh(new T.PlaneGeometry(80, 80), new T.ShadowMaterial({ opacity: 0.32 }));
@@ -807,17 +808,21 @@
         try { this.animar(dt); vrm.update(dt); this.depois(); } catch (e) { console.error(e); }
       }
       if (this.mundo && this.mundo.andando) { try { this.mundo.camera(dt); } catch (e) { console.error(e); } }
+      if (this.mundo && this.mundo.luzes) { try { this.mundo.luzes.quadro(dt); } catch (e) { console.error(e); } } // as luzes do mapa acesas (js/luzes.js)
       if (this.ouvintes.quadro) this.emit("quadro", dt); // quem desenha junto com o palco (as telas de vídeo, js/video.js)
       this.atualizarLuz();
       this.renderer.render(this.cena, this.camera);
     }
 
     // ── luz e sombras
-    /** Muda a luz: {realista, sombras, sol (direção em graus), altura (do sol, em graus)}. Fica guardado. */
+    /**
+     * Muda a luz: {realista, sombras, sol (direção em graus), altura (do sol, em graus), hora, forcaSol, corSol, forcaCeu,
+     * corCeu, chaoCeu, exposicao, tom (neutro | aces | agx | nenhum), qualidadeSombra (baixa | media | alta)}. Fica guardado.
+     */
     definirLuz(mudancas) {
       Object.assign(this.luzCfg, mudancas);
       LNUX.preferencia.gravar("companhia.luz", JSON.stringify(this.luzCfg));
-      this.luzSol = null; // aplica de novo no próximo quadro
+      this.luzValores = null; // aplica de novo no próximo quadro (o que muda os materiais, só se precisar)
     }
     /**
      * No cenário (com um mapa aberto ou andando), a luz realista é um sol com sombra, com céu azulado e chão quente e
@@ -827,30 +832,44 @@
       const T = window.THREE, cfg = this.luzCfg, mundo = this.mundo, r = this.renderer, luz = this.luz;
       const sol = !!(cfg.realista && mundo && (mundo.andando || mundo.mapa));
       const sombras = sol && !!cfg.sombras;
-      if (sol !== this.luzSol || sombras !== this.luzSombras) {
+      const assado = !!(mundo && mundo.luzes && mundo.luzes.assado);
+      const TONS = { neutro: T.NeutralToneMapping || T.ACESFilmicToneMapping, aces: T.ACESFilmicToneMapping, agx: T.AgXToneMapping || T.ACESFilmicToneMapping, nenhum: T.NoToneMapping };
+      const tom = sol ? TONS[cfg.tom] || TONS.neutro : T.NoToneMapping;
+      const lado = { baixa: 1024, media: 2048, alta: 4096 }[cfg.qualidadeSombra] || 2048;
+      // o que muda os materiais (refazer os shaders): só quando liga ou desliga o sol, a sombra ou troca o tom
+      const chave = [sol, sombras, tom, lado, assado].join();
+      if (chave !== this.luzChave) {
+        this.luzChave = chave;
         this.luzSol = sol;
         this.luzSombras = sombras;
-        r.toneMapping = sol ? (T.NeutralToneMapping || T.ACESFilmicToneMapping) : T.NoToneMapping;
-        luz.color.set(sol ? 0xfff1dc : 0xffffff);
-        luz.intensity = sol ? 2.6 : Math.PI * 0.9;
-        this.luzCeu.color.set(sol ? 0xcfe2ff : 0xffffff);
-        this.luzCeu.groundColor.set(sol ? 0x8a7d6c : 0x8888aa);
-        this.luzCeu.intensity = sol ? 1.1 : 0.9;
-        this.cena.environmentIntensity = sol ? 0.4 : 0.7;
+        r.toneMapping = tom;
         r.shadowMap.enabled = sombras;
         r.shadowMap.type = T.PCFSoftShadowMap;
         luz.castShadow = sombras;
         if (sombras) {
-          const lado = 18, c = luz.shadow.camera;
-          luz.shadow.mapSize.set(ehCelular() ? 1024 : 2048, ehCelular() ? 1024 : 2048);
-          Object.assign(c, { left: -lado, right: lado, top: lado, bottom: -lado, near: 1, far: 90 });
+          const meio = 18, c = luz.shadow.camera;
+          if (luz.shadow.mapSize.x !== lado) { luz.shadow.mapSize.set(lado, lado); if (luz.shadow.map) { luz.shadow.map.dispose(); luz.shadow.map = null; } }
+          Object.assign(c, { left: -meio, right: meio, top: meio, bottom: -meio, near: 1, far: 90 });
           c.updateProjectionMatrix();
           luz.shadow.bias = -0.0005;
           luz.shadow.normalBias = 0.04;
         }
         this.chaoSombra.visible = sombras && !(mundo && mundo.mapa);
-        if (mundo) mundo.sombra.material.opacity = sombras ? 0 : 1; // com sombra de verdade, a redonda some
+        // com sombra de verdade, a redonda some (menos com a luz calculada: o mapa pintado não recebe a sombra em tempo real)
+        if (mundo) mundo.sombra.material.opacity = sombras && !assado ? 0 : 1;
         this.cena.traverse((o) => { if (o.isMesh) for (const m of [].concat(o.material || [])) m.needsUpdate = true; }); // os materiais se refazem com/sem sombra
+        this.luzValores = null;
+      }
+      // os valores (força, cor, exposição): baratos, aplicados quando mudam
+      if (!this.luzValores) {
+        this.luzValores = true;
+        luz.color.set(sol ? cfg.corSol || "#fff1dc" : 0xffffff);
+        luz.intensity = sol ? 2.6 * (cfg.forcaSol ?? 1) : Math.PI * 0.9;
+        this.luzCeu.color.set(sol ? cfg.corCeu || "#cfe2ff" : 0xffffff);
+        this.luzCeu.groundColor.set(sol ? cfg.chaoCeu || "#8a7d6c" : 0x8888aa);
+        this.luzCeu.intensity = sol ? 1.1 * (cfg.forcaCeu ?? 1) : 0.9;
+        this.cena.environmentIntensity = sol ? 0.4 * (cfg.forcaCeu ?? 1) : 0.7;
+        r.toneMappingExposure = sol ? cfg.exposicao ?? 1 : 1;
       }
       if (sol) {
         // o sol fica longe, na direção escolhida, e acompanha a personagem (a sombra é calculada em volta dela)

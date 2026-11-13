@@ -446,3 +446,14 @@
   .barra-video:not(.aberta) .extra { display: none; }
   .barra-video.aberta { flex-wrap: wrap; }
 }
+
+/* ── Luz: hora do dia, luzes do mapa e luz calculada por raios (js/luzes.js) ── */
+.painel-luz > details > .ajustes { margin-top: 8px; }
+.horas-luz .lnux-botao.ativa { background: var(--destaque); color: var(--destaque-texto); border-color: var(--destaque); }
+.painel-luz .cor-luz { flex: 0 0 auto; }
+.painel-luz .linha > .faixa { flex: 1 1 140px; min-width: 0; }
+.lista-luzes { display: grid; gap: 4px; max-height: 220px; overflow: auto; margin-top: 6px; }
+.lista-luzes .luz-item { justify-content: space-between; flex-wrap: nowrap; }
+.lista-luzes .luz-item .lnux-alternar { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amostra-cor { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--borda); }
+.painel-luz .estado-raios { color: var(--texto-2); }

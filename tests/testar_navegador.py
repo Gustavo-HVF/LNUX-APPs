@@ -32,7 +32,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video"]  # render e audio: partes do Vídeo testadas sozinhas
+APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video", "companhia_luzes"]  # render e audio: partes do Vídeo testadas sozinhas
 
 
 def porta_livre() -> int:

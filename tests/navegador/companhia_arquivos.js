@@ -47,6 +47,43 @@ function casaDeTeste() {
   return glb(json, bin);
 }
 /**
+ * Cenário fechado com luzes: a casa (sem janela) com uma lâmpada que brilha no teto (material emissivo, perto de
+ * x = −3, com uma mesa embaixo dela, de 1,2 m e tampo em y = 1), uma luz pontual que vem no próprio arquivo (KHR_lights_punctual, perto de x = 3) e uma vela (uma peça
+ * chamada "Vela_01", sem brilho, achada pelo nome).
+ */
+function casaComLuzes() {
+  const malhas = [caixas([[-6, 0, -6, 6, 0.2, 6], [-6, 0.2, -6, 6, 3.2, -5.8], [-6, 0.2, 5.8, 6, 3.2, 6], [-6, 0.2, -5.8, -5.8, 3.2, 5.8], [5.8, 0.2, -5.8, 6, 3.2, 5.8], [-6.2, 3.2, -6.2, 6.2, 3.4, 6.2],
+    [-3.6, 0.9, -0.6, -2.4, 1.0, 0.6], [-3.55, 0.2, -0.55, -3.45, 0.9, -0.45]]),
+    caixas([[-3.2, 2.95, -0.2, -2.8, 3.15, 0.2]]), caixas([[1, 0.2, -4, 1.1, 0.45, -3.9]])];
+  const bins = [], views = [], acessores = [];
+  let off = 0;
+  for (const m of malhas) {
+    const i = Buffer.from(m.indices.buffer), p = Buffer.from(m.posicoes.buffer), sobra = (4 - (i.length % 4)) % 4;
+    views.push({ buffer: 0, byteOffset: off, byteLength: i.length, target: 34963 });
+    acessores.push({ bufferView: views.length - 1, componentType: 5123, count: m.indices.length, type: "SCALAR" });
+    bins.push(i, Buffer.alloc(sobra));
+    off += i.length + sobra;
+    views.push({ buffer: 0, byteOffset: off, byteLength: p.length, target: 34962 });
+    acessores.push({ bufferView: views.length - 1, componentType: 5126, count: m.posicoes.length / 3, type: "VEC3", min: m.min, max: m.max });
+    bins.push(p);
+    off += p.length;
+  }
+  const bin = Buffer.concat(bins);
+  const json = {
+    asset: { version: "2.0", generator: "teste do LNUX-APPs" }, extensionsUsed: ["KHR_lights_punctual", "KHR_materials_emissive_strength"],
+    extensions: { KHR_lights_punctual: { lights: [{ type: "point", color: [0.6, 0.8, 1], intensity: 40, name: "Luz do arquivo" }] } },
+    buffers: [{ byteLength: bin.length }], bufferViews: views, accessors: acessores,
+    materials: [
+      { name: "Parede", pbrMetallicRoughness: { baseColorFactor: [0.8, 0.8, 0.8, 1], metallicFactor: 0, roughnessFactor: 0.9 } },
+      { name: "Lampada", pbrMetallicRoughness: { baseColorFactor: [1, 1, 1, 1], metallicFactor: 0 }, emissiveFactor: [1, 0.85, 0.5], extensions: { KHR_materials_emissive_strength: { emissiveStrength: 3 } } },
+      { name: "Cera", pbrMetallicRoughness: { baseColorFactor: [0.9, 0.85, 0.7, 1], metallicFactor: 0 } }],
+    meshes: [0, 1, 2].map((k) => ({ name: ["Casa", "Lampada do teto", "Vela"][k], primitives: [{ attributes: { POSITION: 2 * k + 1 }, indices: 2 * k, material: k }] })),
+    nodes: [{ name: "Casa", mesh: 0 }, { name: "Lampada do teto", mesh: 1 }, { name: "Vela_01", mesh: 2 }, { name: "Luz", translation: [3, 2.6, 0], extensions: { KHR_lights_punctual: { light: 0 } } }],
+    scene: 0, scenes: [{ nodes: [0, 1, 2, 3] }],
+  };
+  return glb(json, bin);
+}
+/**
  * Boneco VRM 0.x: só ossos (com uma caixinha em cada um, para aparecer na tela). Como nos VRM 0.x de verdade, olha
  * para −Z e o lado esquerdo fica em −X.
  */
@@ -329,4 +366,4 @@ function zip(arquivos) {
   return Buffer.concat([...partes, cd, fim]);
 }
 
-module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, casaDeTeste, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
+module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
