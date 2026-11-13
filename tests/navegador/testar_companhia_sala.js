@@ -2,8 +2,8 @@
 // Rode com: python3 tests/testar_navegador.py companhia_sala
 //
 // Não baixa nada. Dois navegadores separados, como duas pessoas: a "Ana" abre pelo LNUX (com a chave da ponte) e
-// cria a sala com um cenário; a "Bia" chega só pelo endereço (sem a chave). Cobre: a pergunta ao abrir (conversar
-// com o chat bot ou jogar com outras pessoas), o modo de jogar sem nenhuma opção de IA, a lista de salas, criar a
+// cria a sala com um cenário; a "Bia" chega só pelo endereço (sem a chave). Cobre: a tela de início (entrar na
+// conta, jogar sem conta ou conversar com o chat bot), o modo de jogar sem nenhuma opção de IA, a lista de salas, criar a
 // sala com as opções (pública, senha, quantas pessoas, bate-papo, cenário com prévia), a Bia achando a sala na
 // lista e entrando com a senha, o cenário e o avatar chegando para a outra pessoa, as posições de quem anda, o
 // bate-papo com balão, o aceno, as opções mudadas depois (sala privada some da lista), entrar pelo link, sair e
@@ -33,24 +33,34 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
   };
   const ana = await pessoa("Ana"), bia = await pessoa("Bia");
   try {
-    // ── a pergunta ao abrir ──
+    // ── a tela de início ──
     await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}`);
-    await ana.pagina.waitForSelector(".cartao-modo");
-    const cartoes = await ana.pagina.locator(".cartao-modo b").allTextContents();
-    ok(cartoes.join("|") === "Conversar com a personagem|Jogar com outras pessoas" && (await ana.ev(() => window.Companhia.modo)) === null,
-      `ao abrir, a Companhia pergunta antes de entrar: ${cartoes.join(" / ")}`);
-    await ana.pagina.click('.cartao-modo[data-modo="conversa"]');
+    await ana.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
+    const inicio = await ana.ev(() => {
+      const t = document.querySelector(".tela-inicio"), q = (s) => t.querySelector(s);
+      return { modo: window.Companhia.modo, titulo: q(".inicio-chamada h1").textContent, email: !!q('input[type="email"]'), senha: !!q('input[type="password"]'), entrar: !!q("#conta-entrar"),
+        esqueci: /Esqueci a senha/.test(t.textContent), criar: /Criar uma conta/.test(t.textContent), conversar: !!q('#inicio-conversar[data-modo="conversa"]'), menus: !!document.querySelector(".lnux-menubar > button"),
+        cobre: getComputedStyle(t).position === "fixed" && t.getBoundingClientRect().width >= innerWidth - 1 };
+    });
+    ok(inicio.modo === null && /Companhia/.test(inicio.titulo) && inicio.email && inicio.senha && inicio.entrar && inicio.esqueci && inicio.criar && inicio.conversar && inicio.cobre && !inicio.menus,
+      "ao abrir, a tela de início ocupa a página: o cartão de entrar (e-mail, senha, esqueci a senha, criar conta), jogar sem conta e conversar com a personagem");
+    await ana.pagina.click(".tela-inicio .conta-link:text-is(\"Criar uma conta\")");
+    await ana.pagina.waitForSelector(".tela-inicio h3:text-is(\"Criar conta\"), .tela-inicio h3:text-is(\"Criar uma conta\")");
+    ok(!(await ana.ev(() => !!document.querySelector(".lnux-dialogo"))), "\"Criar uma conta\" abre no próprio cartão (sem janela por cima)");
+    await ana.pagina.click('.tela-inicio .conta-link:text-is("Voltar"), .tela-inicio .conta-link:text-is("Entrar")');
+    await ana.pagina.click('#inicio-conversar');
     await ana.pagina.waitForFunction(() => window.Companhia.live2d !== undefined, null, { timeout: 20000 });
     let m = await ana.menus();
     ok(["Conversa", "IA", "Voz"].every((x) => m.includes(x)) && !m.includes("Sala") && (await ana.ev(() => window.Companhia.modo === "conversa" && document.documentElement.dataset.modo === "conversa" && document.querySelector("#chip-sala").hidden)),
       "escolhendo conversar: o chat bot de sempre (menus Conversa, IA e Voz; sem o menu Sala)");
     await ana.pagina.click('.lnux-menubar > button:text-is("Ajuda")');
     await ana.pagina.click('.lnux-menu button:has(.rotulo:text-is("Trocar de modo (jogar com outras pessoas)..."))');
-    await ana.pagina.waitForSelector(".cartao-modo");
-    ok(true, "Ajuda › Trocar de modo pergunta de novo");
+    await ana.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
+    ok(true, "Ajuda › Trocar de modo volta à tela de início");
 
     // ── jogar: sem as funções de IA; abre a lista de salas ──
-    await ana.pagina.click('.cartao-modo[data-modo="jogar"]');
+    await ana.pagina.click("#inicio-sem-conta");
+    await ana.pagina.waitForFunction(() => !document.querySelector(".tela-inicio"));
     await ana.pagina.waitForSelector(".salas #sala-criar");
     m = await ana.menus();
     const semIA = await ana.ev(() => {

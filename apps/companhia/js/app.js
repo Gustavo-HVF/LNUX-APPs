@@ -20,6 +20,7 @@
   let MODO = fragmento.get("sala") ? "jogar" : (["conversa", "jogar"].includes(fragmento.get("modo")) ? fragmento.get("modo") : null);
   const jogando = () => MODO === "jogar";
   let sala = null; // a sala em que estou (js/sala.js), no modo de jogar
+  let ultimoEstadoSala = "fora";
 
   const palcoArea = $("#palco-area");
   // Dois palcos: Live2D (pixi) e 3D (VRoid/VRM, three.js). "palco" aponta para o da personagem aberta; os
@@ -48,6 +49,8 @@
         palco3d = new C.Palco3D($("#palco"));
         for (const [ev, f] of ouvintesPalco) palco3d.on(ev, f);
         palco3d.captura = captura;
+        // voar (atravessar as paredes): sozinho, sempre; numa sala, só quem criou
+        palco3d.mundo.podeVoar = () => !(sala && sala.dentro) || !!sala.chave;
       }
       captura.palco = palco3d;
       palco2d.descarregar();
@@ -69,12 +72,16 @@
   const listaMsgs = $("#mensagens");
   const campo = $("#texto");
   // Os painéis do menu Movimento (js/estudio.js)
-  const estudio = C.Estudio({ area: palcoArea, captura, get palco() { return palcoAtivo; }, atual: () => atual, salvar: () => salvarPersonagem(), aoMudar: () => atualizarChipMovimento() });
+  const estudio = C.Estudio({ area: palcoArea, captura, get palco() { return palcoAtivo; }, atual: () => atual, salvar: () => salvarPersonagem(), aoMudar: () => atualizarChipMovimento(),
+    // numa sala, o cenário é o dela: só quem criou mexe nele, e o ajuste vai para todos
+    naSala: () => (sala && sala.dentro ? { dono: !!sala.chave, mapa: !!(sala.info && sala.info.mapa) } : null),
+    ajusteDaSala: (ajuste) => { if (sala) sala.mandarAjuste(ajuste).catch(LNUX.erro); } });
   function atualizarChipMovimento() {
     const b = $("#chip-movimento"), vrm = !!(atual && atual.tipo === "vrm");
     b.hidden = !vrm;
     const andando = vrm && palco3d && palco3d.mundo && palco3d.mundo.andando;
-    b.textContent = "🎬 Movimento" + (captura.ligada ? " · câmera" : "") + (andando ? " · andando" : "");
+    const voando = andando && palco3d.mundo.voando;
+    b.textContent = "🎬 Movimento" + (captura.ligada ? " · câmera" : "") + (voando ? " · voando" : andando ? " · andando" : "");
     b.classList.toggle("ligado", captura.ligada || !!andando);
     palcoArea.classList.toggle("andando", !!andando);
   }
@@ -1484,6 +1491,10 @@
   }
   function atualizarSala() {
     const dentro = !!(sala && sala.dentro);
+    if (palco3d) palco3d.mundo.conferirVoo(); // entrou numa sala dos outros: para de voar
+    // o painel do cenário muda quando entra, sai ou vira dono (e, para quem visita, mostra o ajuste que o dono mandou)
+    const estadoSala = dentro ? (sala.chave ? "dono" : "visita") : "fora";
+    if (estadoSala !== ultimoEstadoSala || estadoSala === "visita") { ultimoEstadoSala = estadoSala; estudio.atualizar(); }
     const chip = $("#chip-sala");
     chip.hidden = !jogando();
     chip.textContent = dentro ? `🎮 ${sala.info.nome} · ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}` : "🎮 Entrar numa sala";
@@ -1682,17 +1693,10 @@
     history.replaceState(null, "", location.pathname + location.search);
     location.reload();
   }
-  /** Antes de entrar: conversar com o chat bot ou jogar com outras pessoas? */
+  /** Antes de entrar: a tela de início (entrar na conta e jogar, jogar sem conta, ou conversar com a personagem). */
   async function escolherModo() {
     if (MODO) return MODO;
-    let d = null;
-    const cartao = (modo, emoji, titulo, texto) => el("button", { class: "cartao-modo", type: "button", "data-modo": modo, onclick: () => d.fechar(modo) }, el("span", { class: "emoji" }, emoji), el("b", {}, titulo), el("span", { class: "fraco" }, texto));
-    d = LNUX.dialogo({ titulo: "Companhia", largo: true, botoes: [], corpo: el("div", { class: "escolha-modo" },
-      el("p", { style: { margin: 0 } }, "O que você quer fazer?"),
-      el("div", { class: "cartoes" },
-        cartao("conversa", "💬", "Conversar com a personagem", "O chat bot: ela responde (com uma IA ou sem), fala, reage aos toques e lembra de você."),
-        cartao("jogar", "🎮", "Jogar com outras pessoas", "Entrar num cenário com outras pessoas, pelo link de uma sala. Sem chat bot nem IA: quem fala são as pessoas."))) });
-    return (await d) || "conversa";
+    return (await C.telaInicio()) || "conversa";
   }
 
   // ── Menus ────────────────────────────────────────────────────────────
@@ -1787,6 +1791,8 @@
       { rotulo: "Pessoas na sala", ativo: naSala, acao: () => pessoasDaSala() },
       { rotulo: "Opções da sala (pública, senha, pessoas, bate-papo)...", acao: () => opcoesDaSala().catch(LNUX.erro), ativo: dono },
       { rotulo: "Trocar o cenário da sala...", acao: () => trocarMapaDaSala().catch(LNUX.erro), ativo: dono },
+      { rotulo: "Ajustar o cenário da sala (tamanho, posição, começo)...", acao: () => estudio.painelCenario(), ativo: () => dono() && !!(sala.info && sala.info.mapa) },
+      { rotulo: "Voar, atravessando as paredes (V)", marcado: () => !!(palco3d && palco3d.mundo.voando), acao: () => estudio.alternarVoo(), ativo: dono },
       "-",
       { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
       { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
@@ -1795,7 +1801,7 @@
     const ajudaJogo = { rotulo: "Como jogar", acao: () => LNUX.dialogo({ titulo: "Jogar com outras pessoas", largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }], corpo: el("div", { class: "ajustes" },
       el("p", { style: { margin: 0 } }, el("b", {}, "Entrar: "), "abra o link que a pessoa mandou (ou Sala › Criar ou entrar e cole o link), escolha um nome e uma personagem. Sem uma personagem .vrm, você entra com um boneco simples."),
       el("p", { style: { margin: 0 } }, el("b", {}, "Criar uma sala: "), "abra a Companhia pelo LNUX (a ponte), escolha o cenário (os de Movimento › Cenário; qualquer mapa é convertido para .glb) e mande o link. Para pessoas de fora, o LNUX precisa estar com os Apps Web compartilhados pela internet (o túnel)."),
-      el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela. Quem criou a sala pode voar atravessando as paredes (V; Espaço sobe, C desce) para achar um lugar e marcar onde todos começam (Sala › Ajustar o cenário da sala › Começar aqui)."),
       el("p", { style: { margin: 0 } }, el("b", {}, "Interagir: "), "escreva na caixa de texto (aparece um balão em cima da sua personagem), use os gestos e as expressões embaixo do palco e, com Movimento › Captura de movimento, mexa os braços, as mãos e o rosto da personagem pela câmera: os outros veem."),
       el("p", { class: "fraco", style: { margin: 0 } }, "Neste modo não há chat bot nem funções de IA. O link só dá acesso à sala, nunca às pastas do aparelho de quem criou.")) }) };
     return [menus[0], menuSala, menuConta, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
@@ -1831,6 +1837,8 @@
   window.addEventListener("pagehide", () => { if (sala && sala.dentro) sala.sair(); });
   $("#chip-movimento").addEventListener("click", () => { const r = $("#chip-movimento").getBoundingClientRect(); LNUX.abrirMenu(estudio.itensDoMenu(), r.left, r.bottom + 4, $("#chip-movimento")); });
   palco.on("mundo", () => atualizarChipMovimento());
+  palco.on("voo", () => { atualizarChipMovimento(); estudio.atualizar(); });
+  palco.on("voo-negado", () => LNUX.aviso("Na sala, só quem criou pode voar (atravessar as paredes).", "alerta"));
   palco.on("movimento-terminou", () => estudio.atualizar());
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !document.querySelector(".lnux-fundo-modal") && (voz.falando() || pedido)) { voz.parar(); if (pedido) pedido.abort(); } });
   // destrava o som no primeiro toque em qualquer lugar

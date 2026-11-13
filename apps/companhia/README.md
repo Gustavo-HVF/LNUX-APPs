@@ -35,16 +35,20 @@ a memória pode ter uma cópia numa pasta do aparelho.
 
 ## Conversar ou jogar com outras pessoas
 
-Antes de entrar, a Companhia pergunta:
+Ao abrir, aparece a **tela de início**: a página inteira, escura, com um cartão no meio para **entrar na conta**
+(e-mail e senha, *Esqueci a senha*, *Criar uma conta* e o código que chega por e-mail, tudo no próprio cartão).
+Quem já entrou neste navegador vê a foto e **Continuar**. Embaixo do cartão, quantas salas estão abertas agora.
 
-- **💬 Conversar com a personagem**: o chat bot, como descrito no resto deste guia (IA ou motor local, voz,
-  toques, memória).
-- **🎮 Jogar com outras pessoas**: entrar num cenário com outras pessoas, pelo link de uma sala. Neste modo **não
-  há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas da personagem
-  e os toques com reação; quem fala são as pessoas, num bate-papo por texto.
+- **Entrar** (ou **Jogar sem conta**, quando o servidor deixa): o modo de jogar, com outras pessoas, numa sala. Neste
+  modo **não há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas da
+  personagem e os toques com reação; quem fala são as pessoas, num bate-papo por texto. Se o dono do servidor
+  exige conta, "Jogar sem conta" some.
+- **Conversar com a personagem** (no alto e no rodapé): o chat bot, como descrito no resto deste guia (IA ou motor
+  local, voz, toques, memória).
 
-A escolha fica no endereço (`#modo=conversa` ou `#modo=jogar`); *Ajuda › Trocar de modo* pergunta de novo. Quem
-abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
+Sem contas no servidor (ou com a página aberta sem ele), o cartão oferece só jogar e conversar. A escolha fica no
+endereço (`#modo=conversa` ou `#modo=jogar`, e aí a tela de início não aparece); *Ajuda › Trocar de modo* volta a ela.
+Quem abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
 
 ### Salas
 
@@ -67,7 +71,8 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
     3D antes de escolher. A miniatura da sala na lista é tirada dessa prévia.
 - **Depois de criar**, aparece o link da sala para mandar. Quem criou continua dona dela neste navegador:
   *Sala › Opções da sala* muda tudo (inclusive tirar a senha ou fechar o bate-papo, que trava a caixa de texto de
-  todos), *Trocar o cenário da sala* (também pelos mundos da loja) e *Fechar a sala para todos*.
+  todos), *Trocar o cenário da sala* (também pelos mundos da loja), *Ajustar o cenário da sala* (tamanho, posição e
+  onde se nasce, para todos), *Voar* (só quem criou atravessa as paredes) e *Fechar a sala para todos*.
 - **Na sala**: cada pessoa anda com a própria personagem (W A S D, Shift, Espaço). Os outros veem você andar,
   correr, pular, **acenar** e mudar de **expressão** (os botões 👋 😀 😂 😮 😢 😠 😐) e, com a captura de movimento
   ligada, mexer os braços, as mãos e o rosto. O **bate-papo** aparece na conversa e num balão em cima da cabeça.
@@ -276,16 +281,28 @@ personagem; em **Andar pelo cenário** ela anda por ele:
 | **W A S D** ou as setas | andar (em relação à câmera) |
 | **Shift** | correr |
 | **Espaço** | pular |
+| **V** | voar, atravessando as paredes (numa sala, só quem criou): **Espaço** sobe, **C** desce, **Shift** mais rápido |
 | arrastar | girar a câmera (ela não atravessa as paredes) |
 | rodinha | aproximar e afastar |
-| celular | direcional, botão de correr e botão de pulo na tela |
+| celular | direcional, botão de correr e botão de pulo na tela; voando, 🕊 e os botões de subir e descer |
 
 - A personagem é uma cápsula que desliza no chão, nas paredes, nas rampas e nos degraus baixos. As malhas do mapa
   são juntadas numa árvore ([three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh)), então mapas grandes
   não pesam a cada quadro. Caiu para fora do mapa, volta ao começo.
+- **Onde ela nasce**: no ponto de partida guardado ou, sem ele, no chão do meio do mapa. Num **mapa fechado** (uma
+  casa, um salão com teto), o primeiro chão que se vê de cima é o telhado; por isso vale o chão que tem um teto por
+  perto e onde ela cabe em pé: ela nasce **dentro**, não em cima. Se ainda não for o lugar certo, **voe** até lá
+  (V, ou o botão *Voar* do painel) e use **Começar aqui**.
 - **Tamanho** (os `.fbx` costumam vir em centímetros: use ÷ 10 / × 10), **girar**, **O mapa veio deitado** (para
-  arquivos com o Z para cima, como `.stl` e `.ply`), **Começar aqui** (o ponto de partida) e a **velocidade** de
-  andar ficam guardados por cenário. Sem cenário, há um chão simples.
+  arquivos com o Z para cima, como `.stl` e `.ply`), **Posição do mapa** (X, Y e Z: o mapa inteiro anda e a
+  personagem fica onde está, bom para encaixar o mapa em volta dela), **Começar aqui** (o ponto de partida) e a
+  **velocidade** de andar ficam guardados por cenário. Sem cenário, há um chão simples.
+- **Voar** (V): sem gravidade e atravessando as paredes, para entrar num mapa fechado, achar um lugar e marcar o
+  começo. Parou de voar onde não há chão, cai e volta ao começo. Sozinho, sempre pode; **numa sala, só quem criou**
+  (para quem visita, o V avisa e o botão some).
+- **Na sala**, o cenário é o de quem criou: só essa pessoa muda o tamanho, o giro, a posição e o começo (*Sala ›
+  Ajustar o cenário da sala*), e o ajuste chega a todos na hora, **sem baixar o mapa de novo** (quem estava andando
+  volta ao começo, para não ficar dentro de uma parede). Para quem visita, esses controles ficam travados.
 - Andar tem um movimento próprio (andar, correr, pular); os movimentos de um pacote podem ficar no lugar.
   A captura pela câmera funciona junto: você anda com as teclas e os braços e o rosto seguem a câmera.
 - Rosto / Busto / Corpo voltam ao retrato.
@@ -514,12 +531,13 @@ js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (de
                    ajuste do esqueleto), expressões, toques, peças e texturas
 js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
 js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
-js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), câmera em terceira pessoa e controles de toque
+js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
 js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
+js/inicio.js       a tela de início: o cartão de entrar na conta (ou jogar sem conta) e o caminho para o chat bot
 js/contas.js       contas: criar com o código por e-mail, entrar, esqueci a senha, perfil (foto, capa, bio...) e os
                    ajustes do dono (o e-mail que manda os códigos, idade mínima, exigir conta)
 js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar

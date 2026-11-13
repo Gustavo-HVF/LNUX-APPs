@@ -217,10 +217,17 @@
 .controles-mundo .direcional { width: 104px; height: 104px; border-radius: 50%; background: color-mix(in srgb, var(--painel) 55%, transparent); border: 1px solid var(--borda); display: grid; place-items: center; touch-action: none; backdrop-filter: blur(4px); }
 .controles-mundo .pino { width: 44px; height: 44px; border-radius: 50%; background: color-mix(in srgb, var(--destaque) 75%, transparent); box-shadow: 0 2px 8px rgba(0, 0, 0, .3); pointer-events: none; }
 .controles-mundo .botoes { display: flex; gap: 10px; align-items: flex-end; }
-.controles-mundo .botao-pulo, .controles-mundo .botao-correr { border-radius: 50%; border: 1px solid var(--borda); background: color-mix(in srgb, var(--painel) 60%, transparent); color: var(--texto); font-size: 22px; cursor: pointer; touch-action: none; backdrop-filter: blur(4px); }
+.controles-mundo .botao-pulo, .controles-mundo .botao-correr, .controles-mundo .botao-voar, .controles-mundo .botao-subir, .controles-mundo .botao-descer { border-radius: 50%; border: 1px solid var(--borda); background: color-mix(in srgb, var(--painel) 60%, transparent); color: var(--texto); font-size: 22px; cursor: pointer; touch-action: none; backdrop-filter: blur(4px); }
 .controles-mundo .botao-pulo { width: 64px; height: 64px; }
 .controles-mundo .botao-correr { width: 46px; height: 46px; font-size: 18px; }
 .controles-mundo .botao-correr[aria-pressed=true] { background: var(--destaque); color: #fff; border-color: var(--destaque); }
+/* voar: o botão (só para quem pode), e Subir/Descer no lugar do pulo enquanto voa */
+.controles-mundo .botao-voar { width: 46px; height: 46px; font-size: 20px; }
+.controles-mundo .botao-voar[hidden] { display: none; }
+.controles-mundo.voando .botao-voar { background: var(--destaque); color: #fff; border-color: var(--destaque); }
+.controles-mundo .botao-subir, .controles-mundo .botao-descer { width: 56px; height: 56px; display: none; }
+.controles-mundo.voando .botao-subir, .controles-mundo.voando .botao-descer { display: block; }
+.controles-mundo.voando .botao-pulo { display: none; }
 @media (pointer: fine) { .controles-mundo { opacity: .45; } .controles-mundo:hover { opacity: 1; } }
 .palco-area:has(.painel-estudio) .controles-mundo .botoes { margin-right: min(340px, 47%); }
 
@@ -231,14 +238,66 @@
   .captura-previa { bottom: auto; top: 46px; width: 96px; }
 }
 
-/* ── Antes de entrar: conversar com o chat bot ou jogar com outras pessoas ── */
-.escolha-modo { display: grid; gap: 14px; }
-.escolha-modo .cartoes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.cartao-modo { display: grid; gap: 6px; justify-items: start; text-align: left; padding: 18px 16px; border-radius: 14px; border: 1px solid var(--borda); background: var(--painel-2, var(--painel)); color: var(--texto); cursor: pointer; font: inherit; }
-.cartao-modo:hover, .cartao-modo:focus-visible { border-color: var(--destaque); box-shadow: 0 0 0 2px color-mix(in srgb, var(--destaque) 35%, transparent); outline: none; }
-.cartao-modo .emoji { font-size: 34px; line-height: 1; }
-.cartao-modo b { font-size: 1.08em; }
-@media (max-width: 560px) { .escolha-modo .cartoes { grid-template-columns: 1fr; } }
+/* ── A tela de início: a página inteira, escura, com o cartão de entrar no meio ── */
+.tela-inicio {
+  /* sempre escura (o tema claro não vale aqui): as cores dos campos e botões do cartão */
+  color-scheme: dark;
+  --fundo: #120f1f; --painel: #1b1730; --painel-2: #241f3d; --painel-3: #2e2850; --borda: #3a3360; --borda-forte: #5a4f8f;
+  --texto: #f2eefc; --texto-2: #bdb4dc; --texto-3: #8f86b3; --destaque: #e2558f; --destaque-2: #c63f78; --destaque-texto: #fff;
+  --destaque-suave: rgba(226, 85, 143, .18);
+  position: fixed; inset: 0; z-index: 1500; overflow-y: auto; overflow-x: hidden;
+  display: grid; grid-template-rows: auto 1fr auto; min-height: 100%;
+  background: #0d0b18; color: var(--texto); font-family: inherit;
+  animation: inicio-entra .35s ease-out;
+}
+.tela-inicio.saindo { opacity: 0; transform: scale(1.015); transition: opacity .3s ease, transform .3s ease; pointer-events: none; }
+@keyframes inicio-entra { from { opacity: 0; } to { opacity: 1; } }
+.inicio-fundo { position: fixed; inset: 0; overflow: hidden; pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 0%, #2a1d52 0%, #160f2c 45%, #0d0b18 75%); }
+.inicio-brilho { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; }
+.inicio-brilho.um { width: 46vmax; height: 46vmax; left: -12vmax; top: -10vmax; background: #ff7a59; opacity: .28; animation: inicio-flutua 18s ease-in-out infinite alternate; }
+.inicio-brilho.dois { width: 52vmax; height: 52vmax; right: -16vmax; top: 10vh; background: #7a5cff; opacity: .32; animation: inicio-flutua 22s ease-in-out infinite alternate-reverse; }
+@keyframes inicio-flutua { to { transform: translate(6vmax, 4vmax) scale(1.08); } }
+/* o chão do cenário: uma grade em perspectiva que anda devagar */
+.inicio-chao { position: absolute; left: -50%; right: -50%; bottom: -10%; height: 62%; transform-origin: 50% 0; transform: perspective(420px) rotateX(62deg);
+  background-image: linear-gradient(rgba(255, 138, 92, .38) 1px, transparent 1px), linear-gradient(90deg, rgba(160, 130, 255, .32) 1px, transparent 1px);
+  background-size: 64px 64px; animation: inicio-anda 6s linear infinite;
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 30%, #000 100%); }
+@keyframes inicio-anda { to { background-position: 0 64px, 0 0; } }
+@media (prefers-reduced-motion: reduce) { .tela-inicio, .inicio-brilho, .inicio-chao { animation: none; } }
+.inicio-topo, .inicio-centro, .inicio-rodape { position: relative; }
+.inicio-topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px clamp(16px, 4vw, 40px); }
+.inicio-marca { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; letter-spacing: .01em; }
+.inicio-link { background: none; border: 0; padding: 4px 2px; color: var(--texto-2); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.inicio-link:hover, .inicio-link:focus-visible { color: var(--texto); }
+.inicio-centro { display: grid; justify-items: center; align-content: center; gap: 18px; padding: 8px 16px 28px; }
+.inicio-chamada { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.inicio-chamada h1 { margin: 0; font-size: clamp(1.7rem, 5vw, 2.4rem); line-height: 1.1; letter-spacing: -.01em; }
+.inicio-chamada p { margin: 0; color: var(--texto-2); font-size: 1.02rem; }
+.inicio-cartao { width: min(440px, 100%); box-sizing: border-box; display: grid; gap: 12px; padding: 26px clamp(18px, 4vw, 30px);
+  border-radius: 18px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(22, 18, 40, .78); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .5), inset 0 1px 0 rgba(255, 255, 255, .06); }
+.inicio-cartao .janela-conta { min-width: 0; gap: 12px; }
+.inicio-cartao h3 { margin: 0; font-size: 1.35rem; }
+.inicio-cartao .lnux-entrada { min-height: 40px; border-radius: 10px; background: rgba(255, 255, 255, .05); }
+.inicio-cartao .conta-acoes .lnux-botao.primario, .inicio-largo { min-height: 42px; border-radius: 10px; font-weight: 600; }
+.inicio-cartao .conta-acoes .lnux-botao.primario { flex: 1 1 100%; }
+.inicio-cartao .lnux-botao.primario { background: linear-gradient(90deg, #ff7a59, #e2558f 55%, #8b5cff); border-color: transparent; color: #fff; }
+.inicio-cartao .lnux-botao.primario:hover:not(:disabled) { filter: brightness(1.08); }
+.inicio-largo { width: 100%; justify-content: center; }
+.inicio-ou { display: flex; align-items: center; gap: 10px; color: var(--texto-3); font-size: .85rem; }
+.inicio-ou::before, .inicio-ou::after { content: ""; flex: 1; height: 1px; background: var(--borda); }
+.inicio-nota { margin: 0; text-align: center; }
+.inicio-eu { display: grid; justify-items: center; gap: 8px; text-align: center; }
+.inicio-salas { margin: 0; display: flex; align-items: center; gap: 8px; color: var(--texto-2); font-size: .92rem; }
+.inicio-salas .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--texto-3); }
+.inicio-salas .ponto.vivo { background: #4fd18b; box-shadow: 0 0 0 4px rgba(79, 209, 139, .18); }
+.inicio-rodape { display: flex; justify-content: center; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; padding: 14px 16px 20px; color: var(--texto-3); font-size: .82rem; text-align: center; }
+@media (max-width: 560px) {
+  .inicio-topo #inicio-conversar { display: none; } /* no celular fica só no rodapé */
+  .inicio-cartao { padding: 20px 16px; }
+}
+@media (max-height: 640px) and (min-width: 561px) { .inicio-chamada p { display: none; } }
 
 /* ── Modo de jogar (salas): sem as coisas do chat bot ──────────────── */
 :root[data-modo="jogar"] #selo-ia, :root[data-modo="jogar"] #gasto, :root[data-modo="jogar"] #botao-mic, :root[data-modo="jogar"] .conversa-rodape,

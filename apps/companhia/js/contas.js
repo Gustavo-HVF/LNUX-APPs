@@ -109,13 +109,14 @@
   // ── Entrar, criar conta, código, esqueci a senha ─────────────────────
 
   /**
-   * A janela da conta: começa em "entrar" ou "criar". Resolve com a conta (quando entra) ou null (fechou).
+   * O formulário da conta (entrar, criar, código, esqueci a senha, senha nova), que troca de tela sozinho. Vai na janela
+   * da conta e no cartão da tela de início. aoEntrar(conta) quando a pessoa entra. Devolve {corpo, desenhar, parar}.
    */
-  C.janelaConta = function (modo = "entrar") {
-    let d = null, resultado = null, email = "", espera = null;
+  C.formularioConta = function (modo = "entrar", { aoEntrar = () => {} } = {}) {
+    let email = "", espera = null;
     const corpo = el("div", { class: "ajustes janela-conta" });
     const pub = C.contas.publico || {};
-    const fechar = (conta) => { resultado = conta; clearInterval(espera); d.fechar(conta || null); };
+    const fechar = (conta) => { clearInterval(espera); aoEntrar(conta || null); };
     function desenhar(novo, msg) {
       modo = novo;
       clearInterval(espera);
@@ -202,8 +203,14 @@
       },
     };
     desenhar(modo);
-    d = LNUX.dialogo({ titulo: "Conta", corpo, botoes: [] });
-    return d.then(() => { clearInterval(espera); return resultado; });
+    return { corpo, desenhar, parar: () => clearInterval(espera), get modo() { return modo; } };
+  };
+  /** A janela da conta: começa em "entrar" ou "criar". Resolve com a conta (quando entra) ou null (fechou). */
+  C.janelaConta = function (modo = "entrar") {
+    let d = null, resultado = null;
+    const f = C.formularioConta(modo, { aoEntrar: (conta) => { resultado = conta; d.fechar(conta); } });
+    d = LNUX.dialogo({ titulo: "Conta", corpo: f.corpo, botoes: [] });
+    return d.then(() => { f.parar(); return resultado; });
   };
 
   // ── Perfil ───────────────────────────────────────────────────────────

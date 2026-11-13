@@ -5,6 +5,9 @@
  *     está. No retrato ele aparece atrás dela; em "Andar pelo cenário" ela anda por ele.
  *   - Andar: W A S D (ou as setas), Shift para correr, Espaço para pular; arrastar gira a câmera e a rodinha
  *     aproxima. No celular aparecem um direcional e um botão de pulo. Sem cenário, há um chão simples.
+ *   - Voar (V): sem gravidade e atravessando as paredes; Espaço sobe, C desce. Serve para entrar num mapa fechado e
+ *     marcar o ponto de partida. Numa sala, só quem criou pode (quem usa o mundo decide, por podeVoar).
+ *   - Ponto de partida: o guardado ou, sem ele, o chão do meio do mapa; num mapa fechado, o de dentro (não o telhado).
  *   - Colisão: a personagem é uma cápsula que desliza no chão, nas paredes e nas rampas do cenário. As malhas do
  *     mapa são juntadas numa árvore (three-mesh-bvh, MIT), então mapas grandes não pesam a cada quadro.
  *   - O andar/correr/pular tem um movimento próprio (calculado aqui); um movimento de um pacote pode ficar no
@@ -130,6 +133,8 @@
       this.teclas = new Set();
       this.direcional = { x: 0, y: 0 };
       this.querPular = false;
+      this.voando = false;      // voar: sem gravidade, atravessando as paredes (na sala, só quem criou)
+      this.podeVoar = () => true; // quem usa o mundo decide (a tela troca quando entra numa sala)
       this.cfg = { velocidade: 1 };
       try { Object.assign(this.cfg, JSON.parse(LNUX.preferencia.ler("companhia.mundo", "{}"))); } catch (e) { /* padrão */ }
       this.estado = "parado";   // parado | andando | correndo | pulando
@@ -187,6 +192,7 @@
     sair() {
       if (!this.andando) return;
       this.andando = false;
+      this.alternarVoo(false);
       this.teclas.clear();
       this.direcional.x = this.direcional.y = 0;
       this.chao.visible = false;
@@ -207,12 +213,8 @@
       const T = window.THREE, raiz = this.palco.raiz, a = this.info && this.info.ajuste;
       this.vel.set(0, 0, 0);
       if (this.mapa && a && a.partida) { raiz.position.set(a.partida[0], a.partida[1], a.partida[2]); this.rumo = a.partida[3] || 0; }
-      else if (this.mapa) {
-        const c = this.caixa.getCenter(new T.Vector3());
-        raiz.position.set(c.x, this.caixa.max.y + 0.5, c.z);
-        this.rumo = 0;
-        this.assentar();
-      } else { raiz.position.set(0, 0, 0); this.rumo = 0; }
+      else if (this.mapa) { this.rumo = 0; this.acharPartida(); }
+      else { raiz.position.set(0, 0, 0); this.rumo = 0; }
       raiz.rotation.y = this.rumo;
       raiz.updateMatrixWorld(true);
       const molas = this.palco.vrm && this.palco.vrm.springBoneManager;
@@ -234,10 +236,46 @@
       const T = window.THREE, raiz = this.palco.raiz, tam = this.caixa.getSize(new T.Vector3()), c = this.caixa.getCenter(new T.Vector3());
       const ang = i * 2.399, r = Math.sqrt(i / 24) * 0.45;
       const x = c.x + Math.cos(ang) * r * tam.x, z = c.z + Math.sin(ang) * r * tam.z;
-      const toque = this.colisor.geometry.boundsTree.raycastFirst(new T.Ray(new T.Vector3(x, this.caixa.max.y + 1, z), new T.Vector3(0, -1, 0)), T.DoubleSide);
-      if (!toque) return false;
-      raiz.position.set(x, toque.point.y, z);
+      const y = this.chaoDaColuna(x, z);
+      if (y === null) return false;
+      raiz.position.set(x, y, z);
       return true;
+    }
+    /** Sem ponto de partida guardado: o chão do meio do mapa (ou um em volta, se o meio for vazio). */
+    acharPartida() {
+      const T = window.THREE, raiz = this.palco.raiz, c = this.caixa.getCenter(new T.Vector3());
+      raiz.position.set(c.x, this.caixa.max.y + 0.5, c.z);
+      if (!this.colisor) return;
+      const y = this.chaoDaColuna(c.x, c.z);
+      if (y !== null) raiz.position.y = y;
+      else for (let i = 1; i <= 24 && !this.acharChao(i); i++); // eslint-disable-line curly
+    }
+    /**
+     * Onde pisar na coluna (x, z), olhando de cima para baixo. Num mapa fechado, o primeiro chão que aparece de cima é o
+     * telhado; por isso vale o chão que tem um teto por perto (está do lado de dentro) e cabe a personagem em pé embaixo dele.
+     * Sem nenhum chão coberto (um mapa aberto), o mais alto. Devolve a altura, ou null se não houver chão nessa coluna.
+     */
+    chaoDaColuna(x, z) {
+      const T = window.THREE;
+      const toques = this.colisor.geometry.boundsTree.raycast(new T.Ray(new T.Vector3(x, this.caixa.max.y + 1, z), new T.Vector3(0, -1, 0)), T.DoubleSide)
+        .sort((a, b) => a.distance - b.distance);
+      if (!toques.length) return null;
+      const cabe = this.altura * 1.05, tetoPerto = this.altura * 12;
+      const pisos = (virado) => {
+        const r = [];
+        let acima = Infinity; // a superfície logo acima (o teto deste chão)
+        for (const t of toques) {
+          const y = t.point.y, n = t.face && t.face.normal;
+          if (virado(n) && acima - y >= cabe) r.push({ y, coberto: acima - y <= tetoPerto });
+          acima = y;
+        }
+        return r;
+      };
+      // um chão vira a frente para cima; se o arquivo tiver as faces do avesso, vale qualquer superfície deitada
+      let l = pisos((n) => !n || n.y > 0.35);
+      if (!l.length) l = pisos((n) => !n || Math.abs(n.y) > 0.35);
+      const dentro = l.find((p) => p.coberto);
+      return dentro ? dentro.y : l.length ? l[0].y : toques[0].point.y;
     }
     /** Guarda o lugar de agora como ponto de partida do cenário. */
     marcarPartida() {
@@ -247,18 +285,40 @@
       return this.info.ajuste.partida;
     }
     pular() { this.querPular = true; }
+    /** Voar: sem gravidade e atravessando as paredes (para entrar num mapa fechado e marcar o começo). Devolve se está voando. */
+    alternarVoo(sim = !this.voando) {
+      if (sim && !this.podeVoar()) return false;
+      if (sim && !this.andando && !this.entrar()) return false;
+      if (sim === this.voando) return this.voando;
+      this.voando = sim;
+      this.vel.set(0, 0, 0);
+      this.noChao = false;
+      this.teclas.delete("pular");
+      this.teclas.delete("descer");
+      if (this.controles) this.controles.classList.toggle("voando", sim);
+      this.palco.emit("voo", sim);
+      return sim;
+    }
+    /** A permissão de voar mudou (entrou ou saiu de uma sala): desliga o voo de quem não pode e mostra ou esconde o botão. */
+    conferirVoo() {
+      if (this.voando && !this.podeVoar()) this.alternarVoo(false);
+      const b = this.controles && this.controles.querySelector(".botao-voar");
+      if (b) b.hidden = !this.podeVoar();
+    }
 
     // ── teclado, ponteiro e controles de toque ──────────────────────
     ligarEntradas() {
       const alvoEditavel = (e) => { const t = e.target; return t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)); };
       const TECLAS = { KeyW: "frente", ArrowUp: "frente", KeyS: "tras", ArrowDown: "tras", KeyA: "esquerda", ArrowLeft: "esquerda", KeyD: "direita", ArrowRight: "direita",
-        ShiftLeft: "correr", ShiftRight: "correr", Space: "pular" };
+        ShiftLeft: "correr", ShiftRight: "correr", Space: "pular", KeyC: "descer" };
       window.addEventListener("keydown", (e) => {
         if (!this.andando || alvoEditavel(e) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".lnux-fundo-modal")) return;
+        if (e.code === "KeyV") { e.preventDefault(); if (!e.repeat && !this.alternarVoo() && !this.podeVoar()) this.palco.emit("voo-negado"); return; }
         const acao = TECLAS[e.code];
         if (!acao) return;
         e.preventDefault();
-        if (acao === "pular") { if (!e.repeat) this.querPular = true; } else this.teclas.add(acao);
+        if (acao === "pular" && !e.repeat) this.querPular = true;
+        this.teclas.add(acao); // segurar o Espaço (ou o C) sobe (ou desce) quando está voando
       });
       window.addEventListener("keyup", (e) => { const acao = TECLAS[e.code]; if (acao) this.teclas.delete(acao); });
       window.addEventListener("blur", () => this.teclas.clear());
@@ -292,7 +352,16 @@
       const base = el("div", { class: "direcional", title: "Andar (ou W A S D)" }, pino);
       const pulo = el("button", { class: "botao-pulo", type: "button", title: "Pular (ou Espaço)", "aria-label": "Pular" }, "⤒");
       const correr = el("button", { class: "botao-correr", type: "button", title: "Correr (ou Shift)", "aria-label": "Correr", "aria-pressed": "false" }, "»");
-      this.controles = el("div", { class: "controles-mundo" }, base, el("div", { class: "botoes" }, correr, pulo));
+      const voar = el("button", { class: "botao-voar", type: "button", title: "Voar, atravessando as paredes (ou V)", "aria-label": "Voar", hidden: !this.podeVoar() }, "🕊");
+      const segurar = (botao, acao) => {
+        botao.addEventListener("pointerdown", (e) => { this.teclas.add(acao); try { botao.setPointerCapture(e.pointerId); } catch (err) { /* sem captura */ } e.stopPropagation(); e.preventDefault(); });
+        for (const ev of ["pointerup", "pointercancel", "lostpointercapture"]) botao.addEventListener(ev, () => this.teclas.delete(acao));
+        return botao;
+      };
+      const subir = segurar(el("button", { class: "botao-subir", type: "button", title: "Subir (ou segure Espaço)", "aria-label": "Subir" }, "▲"), "pular");
+      const descer = segurar(el("button", { class: "botao-descer", type: "button", title: "Descer (ou segure C)", "aria-label": "Descer" }, "▼"), "descer");
+      this.controles = el("div", { class: "controles-mundo" + (this.voando ? " voando" : "") }, base, el("div", { class: "botoes" }, voar, correr, pulo, descer, subir));
+      voar.addEventListener("click", (e) => { e.stopPropagation(); this.alternarVoo(); });
       this.palco.conteiner.parentElement.append(this.controles);
       let toque = null;
       const mover = (e) => {
@@ -326,9 +395,11 @@
       const s = Math.sin(this.cam.giro), c = Math.cos(this.cam.giro);
       const mx = -s * frente + c * lado, mz = -c * frente - s * lado;
       const rapidez = (correndo ? 4.4 : 1.7) * esc * this.cfg.velocidade;
-      const acel = 1 - Math.exp(-dt * (this.noChao ? 12 : 2.5));
-      this.vel.x += (mx * rapidez - this.vel.x) * acel;
-      this.vel.z += (mz * rapidez - this.vel.z) * acel;
+      if (!this.voando) {
+        const acel = 1 - Math.exp(-dt * (this.noChao ? 12 : 2.5));
+        this.vel.x += (mx * rapidez - this.vel.x) * acel;
+        this.vel.z += (mz * rapidez - this.vel.z) * acel;
+      }
       if (forca > 0.1) {
         // vira para onde anda
         const alvo = Math.atan2(mx, mz);
@@ -339,6 +410,7 @@
         const info = this.palco.anim.info;
         if (info && info.tipo === "movimento" && this.palco.anim.tocando) this.palco.pararMovimento(0.25);
       }
+      if (this.voando) { this.voar(dt, mx, mz, esc); return; }
       if (this.querPular && (this.noChao || (this.tempoNoAr || 0) < 0.14)) { this.vel.y = Math.sqrt(2 * 22 * esc * 0.95 * esc); this.noChao = false; this.tempoNoAr = 0.2; }
       this.querPular = false;
       // gravidade e colisão, em passos pequenos (para não atravessar paredes finas)
@@ -365,6 +437,29 @@
       if (novo !== this.estado) { this.estado = novo; this.palco.emit("mundo-estado", novo); }
       this.trocarClip(vh, rapidez);
       // sombra no chão
+      this.sombra.position.set(raiz.position.x, this.alturaDoChao(raiz.position) + 0.012, raiz.position.z);
+      this.sombra.scale.setScalar(this.altura * 0.55 * Math.max(0.4, 1 - (raiz.position.y - this.sombra.position.y) * 0.5));
+    }
+    /** Um quadro voando: anda para onde a câmera olha, Espaço sobe, C desce, Shift vai mais rápido; nada de gravidade nem paredes. */
+    voar(dt, mx, mz, esc) {
+      const raiz = this.palco.raiz, t = this.teclas;
+      const sobe = (t.has("pular") ? 1 : 0) - (t.has("descer") ? 1 : 0);
+      const rapidez = (t.has("correr") || this.correrFixo ? 10 : 4) * esc * this.cfg.velocidade, k = 1 - Math.exp(-dt * 8);
+      this.vel.x += (mx * rapidez - this.vel.x) * k;
+      this.vel.z += (mz * rapidez - this.vel.z) * k;
+      this.vel.y += (sobe * rapidez * 0.8 - this.vel.y) * k;
+      raiz.position.addScaledVector(this.vel, dt);
+      raiz.rotation.y = this.rumo;
+      this.noChao = false;
+      this.tempoNoAr = 0;
+      this.querPular = false;
+      // parada no ar (o movimento de "parado" do pacote, se houver)
+      const kk = Math.exp(-dt * 10);
+      this.pesoAndar *= kk;
+      this.pesoCorrer *= kk;
+      this.pesoPulo *= kk;
+      if (this.estado !== "parado") { this.estado = "parado"; this.palco.emit("mundo-estado", "parado"); }
+      this.trocarClip(0, 1);
       this.sombra.position.set(raiz.position.x, this.alturaDoChao(raiz.position) + 0.012, raiz.position.z);
       this.sombra.scale.setScalar(this.altura * 0.55 * Math.max(0.4, 1 - (raiz.position.y - this.sombra.position.y) * 0.5));
     }
@@ -523,7 +618,7 @@
       if (!triangulos) throw new Error("Esse arquivo não tem nenhuma malha para servir de cenário.");
       this.tirarMapa();
       this.mapa = objeto;
-      this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, deitado: false, partida: null }, info.ajuste || {}) };
+      this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, deitado: false, posicao: [0, 0, 0], partida: null }, info.ajuste || {}) };
       // tamanho: os FBX costumam vir em centímetros; um mapa "gigante" ou "minúsculo" é ajustado para caber uma pessoa
       const bruto = new T.Box3().setFromObject(objeto).getSize(new T.Vector3());
       const maior = Math.max(bruto.x, bruto.y, bruto.z) || 1;
@@ -536,12 +631,13 @@
       this.palco.emit("mapa", this.info);
       return { triangulos: Math.round(triangulos), tamanho: this.caixa.getSize(new T.Vector3()).toArray().map((v) => +v.toFixed(1)) };
     }
-    /** Aplica o tamanho e o giro do cenário e refaz a colisão. */
+    /** Aplica o tamanho, o giro e a posição do cenário e refaz a colisão. */
     aplicarAjuste() {
       const T = window.THREE, V = window.CompanhiaVRM;
       if (!this.mapa) return;
-      const a = this.info.ajuste;
+      const a = this.info.ajuste, pos = Array.isArray(a.posicao) ? a.posicao : [];
       this.mapa.scale.setScalar(limitar(+a.escala || 1, 1e-4, 1e4));
+      this.mapa.position.set(limitar(+pos[0] || 0, -1e4, 1e4), limitar(+pos[1] || 0, -1e4, 1e4), limitar(+pos[2] || 0, -1e4, 1e4));
       this.mapa.rotation.set(a.deitado ? -Math.PI / 2 : 0, (+a.giro || 0) * Math.PI / 180, 0, "YXZ"); // deitado: o arquivo veio com o Z para cima
       this.mapa.updateMatrixWorld(true);
       this.caixa.setFromObject(this.mapa);
@@ -554,6 +650,21 @@
       const geo = gerador.generate();
       geo.boundsTree = new V.MeshBVH(geo);
       this.colisor = new T.Mesh(geo);
+    }
+    /**
+     * Um ajuste novo do cenário que chegou de fora (o dono da sala mexeu): aplica sem abrir o arquivo de novo. Se o mapa
+     * mudou de tamanho, de giro ou de lugar, a personagem volta ao ponto de partida (para não ficar dentro de uma parede).
+     */
+    trocarAjuste(novo) {
+      if (!this.mapa || !novo) return;
+      const forma = (a) => JSON.stringify([+a.escala || 0, +a.giro || 0, !!a.deitado, (Array.isArray(a.posicao) ? a.posicao : [0, 0, 0]).map((v) => +v || 0)]);
+      const a = this.info.ajuste, antes = forma(a);
+      this.info.ajuste = Object.assign({ escala: 0, giro: 0, deitado: false, posicao: [0, 0, 0], partida: null }, novo);
+      if (!this.info.ajuste.escala) this.info.ajuste.escala = a.escala; // "automático": o que já tinha sido calculado
+      if (forma(this.info.ajuste) === antes) return;
+      this.aplicarAjuste();
+      this.partida();
+      if (!this.andando) this.palco.enquadrar();
     }
     /** Reflexos e luz ambiente para os materiais do cenário (uma sala clara neutra). */
     luzDoAmbiente() {
