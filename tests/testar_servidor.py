@@ -574,6 +574,36 @@ def _():
     assert S.pedir("GET", f"/api/sala/{c}/avatar/{ana['id']}", **visita)[2] == b"vrm-da-ana"
     assert S.pedir("GET", f"/api/sala/{c}/avatar/{bia['id']}", **visita)[0] == 404 and S.pedir("GET", f"/api/sala/{c}/avatar/..%2Fmapa.glb", **visita)[0] == 404
     assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia), **visita)[1]["pessoas"][0]["avatar"] == 1
+    # vídeo na tela: o link, o lugar da tela e o relógio (todos veem o mesmo pedaço)
+    video = lambda j, **mais: S.json("POST", f"/api/sala/{c}/video", json_corpo=eu(j, **mais), **visita)
+    yt = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    assert video(ana, acao="abrir", url="javascript:alert(1)")[0] == 400 and video(ana, acao="abrir", url="https://x.com/<script>")[0] == 400
+    assert video(ana, acao="pausar")[0] == 404  # ainda sem vídeo
+    status, v, _ = video(ana, acao="abrir", url=yt, modo="seguir", tamanho=99, em=12)
+    assert status == 200 and v["url"] == yt and v["modo"] == "seguir" and v["tamanho"] == 12 and v["pausado"] is None and 11.5 < v["agora"] - v["inicio"] < 13, v
+    n = v["n"]
+    pessoas = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia), **visita)[1]["pessoas"]
+    assert next(x for x in pessoas if x["id"] == ana["id"])["video"] == n and next(x for x in pessoas if x["id"] == bia["id"])["video"] == 0
+    assert S.json("GET", f"/api/sala/{c}/video/{ana['id']}", **visita)[1]["url"] == yt and S.json("GET", f"/api/sala/{c}/video/{bia['id']}", **visita)[0] == 404
+    v = video(ana, acao="pausar")[1]
+    assert 11.5 < v["pausado"] < 14 and v["n"] > n
+    assert 41.5 < video(ana, acao="pular", mais=30)[1]["pausado"] < 44
+    assert video(ana, acao="pular", mais=-999)[1]["pausado"] == 0 and video(ana, acao="pular", em=5)[1]["pausado"] == 5
+    v = video(ana, acao="continuar")[1]
+    assert v["pausado"] is None and 4.5 < v["agora"] - v["inicio"] < 6
+    v = video(ana, acao="lugar", modo="parada", pos=[1, 2.5, -3], rumo=1.5, tamanho=0.1)[1]
+    assert v["modo"] == "parada" and v["pos"] == [1, 2.5, -3] and v["rumo"] == 1.5 and v["tamanho"] == 0.5 and v["url"] == yt
+    assert video(ana, acao="lugar", pos=[1, "x", 3])[0] == 400 and video(ana, acao="pular", mais="nan")[0] == 400 and video(ana, acao="outra")[0] == 400
+    assert S.json("POST", f"/api/sala/{c}/video", json_corpo={"id": ana["id"], "segredo": bia["segredo"], "acao": "fechar"}, **visita)[0] == 403
+    assert video(bia, acao="abrir", url="https://vimeo.com/76979871")[0] == 200
+    # quem criou deixa só ele pôr vídeos: os dos outros somem
+    assert S.json("POST", f"/api/sala/{c}/config", json_corpo={"videos": "dono"}, cabecalhos={"X-Sala-Chave": chave}, **visita)[1]["videos"] == "dono"
+    assert S.json("GET", f"/api/sala/{c}/video/{bia['id']}", **visita)[0] == 404 and video(bia, acao="abrir", url=yt)[0] == 403
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia), **visita)[1]["videos"] == "dono"
+    _, dona, _ = S.json("POST", f"/api/sala/{c}/entrar", json_corpo={"nome": "Dona"}, cabecalhos={"X-Sala-Chave": chave}, **visita)
+    assert video(dona, acao="abrir", url=yt)[0] == 200 and video(dona, acao="fechar")[1]["video"] is None
+    S.json("POST", f"/api/sala/{c}/sair", json_corpo=eu(dona), **visita)
+    S.json("POST", f"/api/sala/{c}/config", json_corpo={"videos": "todos"}, cabecalhos={"X-Sala-Chave": chave}, **visita)
     # o código da sala não abre o resto da ponte
     assert S.json("GET", "/api/pastas?caminho=~", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 401
     assert S.json("POST", "/api/sala/" + c + "/estado", json_corpo=eu(ana), cabecalhos={"Origin": "http://mal.example"}, **visita)[0] == 403

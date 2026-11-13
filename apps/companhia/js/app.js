@@ -51,18 +51,20 @@
         palco3d.captura = captura;
         // voar (atravessar as paredes): sozinho, sempre; numa sala, só quem criou
         palco3d.mundo.podeVoar = () => !(sala && sala.dentro) || !!sala.chave;
+        videos.ligar(palco3d); // as telas de vídeo no cenário (js/video.js)
       }
       captura.palco = palco3d;
       palco2d.descarregar();
       palco2d.pausar();
       palco2d.app.view.style.display = "none";
       palco3d.mostrar(true);
+      videos.mostrar(true);
       palcoAtivo = palco3d;
     } else {
       estudio.fechar();
       captura.desligar(); // as personagens Live2D não têm esqueleto para a captura comandar
       captura.palco = null;
-      if (palco3d) { if (palco3d.mundo) palco3d.mundo.sair(); palco3d.descarregar(); palco3d.mostrar(false); }
+      if (palco3d) { if (palco3d.mundo) palco3d.mundo.sair(); palco3d.descarregar(); palco3d.mostrar(false); videos.mostrar(false); }
       palco2d.app.view.style.display = "";
       palco2d.continuar();
       palcoAtivo = palco2d;
@@ -76,6 +78,8 @@
     // numa sala, o cenário é o dela: só quem criou mexe nele, e o ajuste vai para todos
     naSala: () => (sala && sala.dentro ? { dono: !!sala.chave, mapa: !!(sala.info && sala.info.mapa) } : null),
     ajusteDaSala: (ajuste) => { if (sala) sala.mandarAjuste(ajuste).catch(LNUX.erro); } });
+  // vídeo numa tela do cenário (YouTube, Vimeo, Twitch, arquivo): segue a personagem ou fica parada; na sala, todos veem
+  const videos = new C.Videos({ sala: () => sala, area: palcoArea });
   function atualizarChipMovimento() {
     const b = $("#chip-movimento"), vrm = !!(atual && atual.tipo === "vrm");
     b.hidden = !vrm;
@@ -1493,8 +1497,9 @@
     const dentro = !!(sala && sala.dentro);
     if (palco3d) palco3d.mundo.conferirVoo(); // entrou numa sala dos outros: para de voar
     // o painel do cenário muda quando entra, sai ou vira dono (e, para quem visita, mostra o ajuste que o dono mandou)
-    const estadoSala = dentro ? (sala.chave ? "dono" : "visita") : "fora";
-    if (estadoSala !== ultimoEstadoSala || estadoSala === "visita") { ultimoEstadoSala = estadoSala; estudio.atualizar(); }
+    const estadoSala = dentro ? (sala.chave ? "dono" : "visita") : "fora", mudou = estadoSala !== ultimoEstadoSala;
+    if (mudou || estadoSala === "visita") { ultimoEstadoSala = estadoSala; estudio.atualizar(); }
+    if (mudou) videos.aoMudarSala().catch((e) => console.warn("vídeo", e)); // o meu vídeo vai para a sala (ou fica só comigo)
     const chip = $("#chip-sala");
     chip.hidden = !jogando();
     chip.textContent = dentro ? `🎮 ${sala.info.nome} · ${sala.pessoas} ${sala.pessoas === 1 ? "pessoa" : "pessoas"}` : "🎮 Entrar numa sala";
@@ -1634,7 +1639,7 @@
   async function opcoesDaSala() {
     if (!sala || !sala.dentro || !sala.chave) return;
     const i = sala.info || {};
-    const f = await C.formularioDeSala(ctxSalas, { criar: false, inicial: { nome: i.nome, descricao: i.descricao, publica: i.publica, senha: i.senha, max: i.max, bate_papo: i.bate_papo } });
+    const f = await C.formularioDeSala(ctxSalas, { criar: false, inicial: { nome: i.nome, descricao: i.descricao, publica: i.publica, senha: i.senha, max: i.max, bate_papo: i.bate_papo, videos: i.videos } });
     if (!f) return;
     await sala.configurar(f.opcoes);
     LNUX.aviso("Opções da sala salvas.", "ok");
@@ -1677,6 +1682,7 @@
     const rosto = (emoji, emocao, dica) => el("button", { type: "button", title: dica, "aria-label": dica, onclick: () => { palco.definirEmocao(emocao); clearTimeout(voltarNeutraT); if (emocao !== "neutra") voltarNeutraT = setTimeout(() => palco.definirEmocao("neutra"), 8000); } }, emoji);
     $("#gestos").replaceChildren(
       el("button", { type: "button", title: "Acenar", "aria-label": "Acenar", onclick: () => { palco.gesto("acenar"); if (sala) sala.gestoMeu("acenar"); } }, "👋"),
+      el("button", { type: "button", id: "botao-video", title: "Vídeo na tela (YouTube, Vimeo, Twitch)", "aria-label": "Vídeo na tela", onclick: () => videos.janela() }, "📺"),
       rosto("😀", "feliz", "Feliz"), rosto("😂", "rindo", "Rindo"), rosto("😮", "surpresa", "Surpresa"), rosto("😢", "triste", "Triste"), rosto("😠", "brava", "Brava"), rosto("😐", "neutra", "Neutra"));
   }
   /** O começo do modo de jogar: sem o núcleo do Live2D nem a memória; abre a janela da sala (com o código do link, se veio). */
@@ -1794,6 +1800,12 @@
       { rotulo: "Ajustar o cenário da sala (tamanho, posição, começo)...", acao: () => estudio.painelCenario(), ativo: () => dono() && !!(sala.info && sala.info.mapa) },
       { rotulo: "Voar, atravessando as paredes (V)", marcado: () => !!(palco3d && palco3d.mundo.voando), acao: () => estudio.alternarVoo(), ativo: dono },
       "-",
+      { rotulo: "Vídeo na tela (YouTube, Vimeo, Twitch)...", acao: () => videos.janela(), ativo: () => !!(palco3d && palco3d.vrm) && videos.podePor() },
+      { rotulo: "A minha tela segue a personagem", marcado: () => !!(videos.meu && videos.meu.modo !== "parada"), acao: () => videos.trocarModo(videos.meu.modo === "parada" ? "seguir" : "parada").catch(LNUX.erro), ativo: () => !!videos.meu },
+      { rotulo: "Fechar o meu vídeo", acao: () => videos.fechar().catch(LNUX.erro), ativo: () => !!videos.meu },
+      { rotulo: "Ver as telas dos outros", marcado: () => videos.verOutros, acao: () => videos.definirVerOutros(!videos.verOutros) },
+      { rotulo: "Som das telas dos outros", marcado: () => videos.somOutros, acao: () => videos.definirSomOutros(!videos.somOutros) },
+      "-",
       { rotulo: "Sair da sala", acao: () => sairDaSala(false).catch(LNUX.erro), ativo: naSala },
       { rotulo: "Fechar a sala para todos", acao: () => sairDaSala(true).catch(LNUX.erro), ativo: dono },
       "-", trocar,
@@ -1803,6 +1815,7 @@
       el("p", { style: { margin: 0 } }, el("b", {}, "Criar uma sala: "), "abra a Companhia pelo LNUX (a ponte), escolha o cenário (os de Movimento › Cenário; qualquer mapa é convertido para .glb) e mande o link. Para pessoas de fora, o LNUX precisa estar com os Apps Web compartilhados pela internet (o túnel)."),
       el("p", { style: { margin: 0 } }, el("b", {}, "Andar: "), "W A S D ou as setas, Shift corre, Espaço pula, arrastar gira a câmera. No celular, o direcional da tela. Quem criou a sala pode voar atravessando as paredes (V; Espaço sobe, C desce) para achar um lugar e marcar onde todos começam (Sala › Ajustar o cenário da sala › Começar aqui)."),
       el("p", { style: { margin: 0 } }, el("b", {}, "Interagir: "), "escreva na caixa de texto (aparece um balão em cima da sua personagem), use os gestos e as expressões embaixo do palco e, com Movimento › Captura de movimento, mexa os braços, as mãos e o rosto da personagem pela câmera: os outros veem."),
+      el("p", { style: { margin: 0 } }, el("b", {}, "Vídeo: "), "o botão 📺 (ou Sala › Vídeo na tela) põe um vídeo do YouTube, Vimeo, Twitch ou um arquivo (.mp4, .webm) numa tela no cenário, que segue a sua personagem ou fica parada. Na sala, todos veem a sua tela e o mesmo pedaço do vídeo; pausar e pular vale para todos."),
       el("p", { class: "fraco", style: { margin: 0 } }, "Neste modo não há chat bot nem funções de IA. O link só dá acesso à sala, nunca às pastas do aparelho de quem criou.")) }) };
     return [menus[0], menuSala, menuConta, ...menus.slice(1)].filter((m) => !["Conversa", "IA", "Voz"].includes(m.rotulo))
       .map((m) => ({ ...m, itens: [...(m.rotulo === "Ajuda" ? [ajudaJogo] : []), ...m.itens.filter((i) => typeof i === "string" || !semIA.has(i.rotulo))] }));
@@ -1876,7 +1889,7 @@
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala, abrirLoja, usarDaLoja,
+    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala, abrirLoja, usarDaLoja, videos,
     get lojaDisponivel() { return lojaDisponivel; },
     get sala() { return sala; }, get modo() { return MODO; },
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },

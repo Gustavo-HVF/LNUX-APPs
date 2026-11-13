@@ -175,6 +175,8 @@
       this.aparencia = null;     // {ajuste, ocultas, texturas: {peça: Blob}}: como ela deixou a personagem
       this.aparenciaVersao = 0;
       this.texturas = new Map(); // n → Blob (as texturas dela que já baixei)
+      this.video = null;         // o vídeo que ela pôs na tela: {url, modo, pos, rumo, tamanho, inicio, pausado, n, desvio} (js/video.js mostra)
+      this.videoVersao = 0;
       this.pose = {};
       for (const n of C.OSSOS_VRM) this.pose[n] = new T.Quaternion();
       this.poseRecebida = null;  // captura de movimento dela: {osso: Quaternion}
@@ -197,6 +199,7 @@
       if (Array.isArray(e.p)) this.alvo.set(e.p[0], e.p[1], e.p[2]);
       if (this.primeiro) { this.grupo.position.copy(this.alvo); this.rumo = e.r || 0; this.primeiro = false; }
       this.rumoAlvo = e.r || 0;
+      this.giroCam = typeof e.c === "number" ? e.c : null;
       this.estado = e.e || "parado";
       this.emocao = e.emo || "neutra";
       if (Array.isArray(e.g) && e.g[0] !== this.gestoVisto) { // um gesto novo (o que já tinha acontecido antes de eu chegar não repete)
@@ -211,7 +214,17 @@
       this.rostoRecebido = e.rosto || null;
       if (j.avatar !== this.avatarVersao) { this.avatarVersao = j.avatar; this.buscarAvatar(); }
       if ((j.aparencia || 0) !== this.aparenciaVersao) { this.aparenciaVersao = j.aparencia || 0; this.buscarAparencia(); }
+      if ((j.video || 0) !== this.videoVersao) { this.videoVersao = j.video || 0; this.buscarVideo(); }
       this.conta = j.conta || null;
+    }
+    /** O vídeo dela mudou (abriu, pausou, pulou, mudou a tela de lugar, fechou). desvio: o relógio do servidor menos o meu. */
+    async buscarVideo() {
+      const versao = this.videoVersao;
+      if (!versao) { this.video = null; return; }
+      try {
+        const v = await pedir("GET", `${this.sala.codigo}/video/${this.id}?v=${versao}`);
+        if (versao === this.videoVersao) this.video = { ...v, desvio: v.agora - Date.now() / 1000 };
+      } catch (e) { if (versao === this.videoVersao) this.video = null; }
     }
     async buscarAparencia() {
       const versao = this.aparenciaVersao;
@@ -446,7 +459,7 @@
     /** O que mandamos de nós: lugar, rumo, andar/correr/pular, emoção, gesto e, com a captura ligada, a pose e o rosto. */
     meuEstado() {
       const p = this.palco, m = p.mundo, r = p.raiz.position;
-      const e = { p: [arred(r.x), arred(r.y), arred(r.z)], r: arred(m.rumo), e: m.estado, emo: p.emocao, g: this.gesto };
+      const e = { p: [arred(r.x), arred(r.y), arred(r.z)], r: arred(m.rumo), e: m.estado, emo: p.emocao, g: this.gesto, c: arred(m.cam.giro) }; // c: para onde a câmera olha (a tela de vídeo que segue fica na frente dela)
       const cap = this.captura;
       if (cap && cap.ativa && cap.atual.size) {
         e.pose = {};
@@ -495,7 +508,7 @@
         this.falhas = 0;
         const vivos = new Set();
         for (const j of r.pessoas) {
-          if (j.id === this.eu.id) continue;
+          if (j.id === this.eu.id) { this.meuVideo = j.video || 0; continue; }
           vivos.add(j.id);
           let rem = this.remotos.get(j.id);
           if (!rem) { rem = new Remoto(this, j.id, j.nome); this.remotos.set(j.id, rem); this.aoMensagem({ sistema: true, texto: `${j.nome} entrou.` }); this.aoMudar(); }
@@ -510,8 +523,8 @@
         }
         if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => console.warn(e)); }
         // quem criou mudou o nome ou o bate-papo: todos veem
-        if (this.info && ((r.nome && r.nome !== this.info.nome) || (r.bate_papo !== undefined && r.bate_papo !== this.info.bate_papo))) {
-          this.info = { ...this.info, nome: r.nome || this.info.nome, bate_papo: r.bate_papo };
+        if (this.info && ((r.nome && r.nome !== this.info.nome) || (r.bate_papo !== undefined && r.bate_papo !== this.info.bate_papo) || (r.videos && r.videos !== this.info.videos))) {
+          this.info = { ...this.info, nome: r.nome || this.info.nome, bate_papo: r.bate_papo, videos: r.videos || this.info.videos };
           this.aoMudar();
         }
       } catch (e) {
@@ -554,6 +567,11 @@
       texto = String(texto || "").trim().slice(0, 300);
       if (!texto || !this.dentro) return;
       await pedir("POST", `${this.codigo}/falar`, { json: { id: this.eu.id, segredo: this.eu.segredo, texto } });
+    }
+    /** O meu vídeo na tela: acao = abrir | lugar | pausar | continuar | pular | fechar. Devolve o estado (com "agora", o relógio do servidor). */
+    async mandarVideo(acao, dados = {}) {
+      if (!this.dentro) throw new Error("Você não está numa sala.");
+      return pedir("POST", `${this.codigo}/video`, { json: { id: this.eu.id, segredo: this.eu.segredo, acao, ...dados } });
     }
     /** Um gesto meu que os outros veem (o aceno). */
     gestoMeu(nome) { this.gesto = [this.gesto[0] + 1, nome]; }

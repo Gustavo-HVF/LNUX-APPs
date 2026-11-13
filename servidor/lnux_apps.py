@@ -43,6 +43,7 @@ import argparse
 import hashlib
 import hmac
 import json
+import math
 import mimetypes
 import os
 import platform
@@ -213,12 +214,14 @@ class Sala:
         self.n = 0
         self.mapa: dict | None = None            # {nome, tamanho, versao, ajuste}
         self.versao_mapa = 0
+        self.videos = "todos"                    # quem pode pôr um vídeo na tela: "todos" ou "dono" (só quem criou)
+        self.n_video = 0                         # a versão dos vídeos (cada mudança ganha um número novo)
         self.trava = threading.Lock()
 
     def resumo(self) -> dict:
         return {"codigo": self.codigo, "nome": self.nome, "descricao": self.descricao, "pessoas": len(self.pessoas), "max": self.max,
                 "publica": self.publica, "senha": bool(self.senha), "bate_papo": self.bate_papo, "criador": self.criador,
-                "criada": self.criada, "miniatura": self.miniatura, "mapa": self.mapa}
+                "criada": self.criada, "miniatura": self.miniatura, "mapa": self.mapa, "videos": self.videos}
 
     def configurar(self, d: dict):
         """As opções de quem cria (ou de quem criou, depois): o que vier no pedido muda; o resto fica."""
@@ -240,6 +243,12 @@ class Sala:
             self.bate_papo = bool(d["bate_papo"])
         if "criador" in d and not self.criador:
             self.criador = sala_texto(d.get("criador"), 24)
+        if "videos" in d:
+            self.videos = "dono" if d.get("videos") == "dono" else "todos"
+            if self.videos == "dono":  # os vídeos de quem não criou somem
+                for j in self.pessoas.values():
+                    if not j.get("dono"):
+                        j["video"] = None
 
     def senha_confere(self, senha) -> bool:
         if not self.senha:
@@ -466,6 +475,31 @@ def tipo_de_imagem(dados: bytes) -> str | None:
     if dados[:4] == b"RIFF" and dados[8:12] == b"WEBP":
         return "webp"
     return None
+
+
+def segundos_do_video(valor, negativo: bool = False) -> float:
+    """Um tempo do vídeo em segundos (de 0 a 24 horas; com negativo, pode voltar)."""
+    try:
+        t = float(valor or 0)
+    except (TypeError, ValueError):
+        raise ErroPonte(400, "Tempo do vídeo inválido.")
+    if not math.isfinite(t):
+        raise ErroPonte(400, "Tempo do vídeo inválido.")
+    return max(-86400.0 if negativo else 0.0, min(86400.0, t))
+
+
+def lugar_do_video(d: dict) -> dict:
+    """Onde fica a tela: seguindo a personagem de quem pôs (modo "seguir") ou parada num lugar (pos, rumo); e a largura."""
+    try:
+        pos = [float(x) for x in (d.get("pos") or [0, 0, 0])]
+        rumo = float(d.get("rumo") or 0)
+        tamanho = float(d.get("tamanho") or 2)
+    except (TypeError, ValueError):
+        raise ErroPonte(400, "Lugar da tela inválido.")
+    if len(pos) != 3 or not all(math.isfinite(x) and abs(x) < 1e5 for x in pos + [rumo, tamanho]):
+        raise ErroPonte(400, "Lugar da tela inválido.")
+    return {"modo": "parada" if d.get("modo") == "parada" else "seguir", "pos": [round(x, 3) for x in pos], "rumo": round(rumo, 4),
+            "tamanho": round(max(0.5, min(12.0, tamanho)), 2)}
 
 
 def sala_texto(valor, limite: int) -> str:
@@ -1695,7 +1729,7 @@ class Manipulador(BaseHTTPRequestHandler):
                     raise ErroPonte(429, f"A sala está cheia ({sala.max} pessoas).")
                 pid = secrets.token_hex(4)
                 sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0, "aparencia": 0,
-                                     "conta": conta["id"] if conta else None}
+                                     "conta": conta["id"] if conta else None, "dono": de_quem_criou, "video": None}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
@@ -1721,6 +1755,53 @@ class Manipulador(BaseHTTPRequestHandler):
             if partes[2] not in sala.pessoas or not arquivo.is_file():
                 raise ErroPonte(404, "Essa pessoa não mandou a aparência.")
             return self.enviar_arquivo(arquivo, "application/json; charset=utf-8")
+        # o vídeo de cada um (um link do YouTube, Vimeo, Twitch ou de um arquivo de vídeo), numa tela que todos veem.
+        # O servidor guarda o link, o lugar da tela e o relógio (quando o vídeo começou ou onde parou), para todos
+        # verem o mesmo pedaço. Quem mostra o vídeo é o navegador de cada um, direto do site do vídeo.
+        if acao == "video" and m == "POST":
+            d = self.ler_json()
+            j = pessoa(d)
+            if sala.videos == "dono" and not j.get("dono"):
+                raise ErroPonte(403, "Nesta sala, só quem criou põe vídeos na tela.")
+            op = str(d.get("acao") or "")
+            with sala.trava:
+                v = dict(j["video"]) if j.get("video") else None
+                tempo = (lambda x: x["pausado"] if x["pausado"] is not None else max(0.0, agora - x["inicio"]))
+                if op == "fechar":
+                    j["video"] = None
+                    return self.responder_json({"video": None, "agora": agora})
+                if op == "abrir":
+                    url = str(d.get("url") or "").strip()
+                    if not re.fullmatch(r"https?://[^\s<>\"'`]{4,600}", url, re.I):
+                        raise ErroPonte(400, "Esse link não serve: cole o endereço do vídeo (começa com https://).")
+                    v = {"url": url, "inicio": agora - segundos_do_video(d.get("em")), "pausado": None}
+                elif not v:
+                    raise ErroPonte(404, "Você não tem um vídeo na tela.")
+                if op in ("abrir", "lugar"):
+                    v.update(lugar_do_video(d))
+                elif op == "pausar":
+                    if v["pausado"] is None:
+                        v["pausado"] = tempo(v)
+                elif op == "continuar":
+                    if v["pausado"] is not None:
+                        v["inicio"], v["pausado"] = agora - v["pausado"], None
+                elif op == "pular":  # "em": para o segundo tal; "mais": anda (ou volta) tantos segundos
+                    t = segundos_do_video(d["em"]) if "em" in d else max(0.0, tempo(v) + max(-86400.0, min(86400.0, segundos_do_video(d.get("mais"), negativo=True))))
+                    if v["pausado"] is not None:
+                        v["pausado"] = t
+                    else:
+                        v["inicio"] = agora - t
+                elif op != "abrir":
+                    raise ErroPonte(400, "Ação de vídeo desconhecida.")
+                sala.n_video += 1
+                v["n"] = sala.n_video
+                j["video"] = v
+            return self.responder_json({**v, "agora": agora})
+        if acao == "video" and m in ("GET", "HEAD") and len(partes) == 3:
+            j = sala.pessoas.get(partes[2])
+            if not j or not j.get("video"):
+                raise ErroPonte(404, "Essa pessoa não tem um vídeo na tela.")
+            return self.responder_json({**j["video"], "agora": time.time()})
         if acao == "textura" and m == "PUT":
             pessoa(p)
             n = str(p.get("n", ""))
@@ -1777,10 +1858,11 @@ class Manipulador(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 desde = 0
             return self.responder_json({
-                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"]}
+                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"],
+                             "video": (x.get("video") or {}).get("n", 0)}
                             for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
-                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo})
+                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo, "videos": sala.videos})
 
     # ── loja da Companhia
 

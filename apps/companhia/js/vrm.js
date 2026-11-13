@@ -807,6 +807,7 @@
         try { this.animar(dt); vrm.update(dt); this.depois(); } catch (e) { console.error(e); }
       }
       if (this.mundo && this.mundo.andando) { try { this.mundo.camera(dt); } catch (e) { console.error(e); } }
+      if (this.ouvintes.quadro) this.emit("quadro", dt); // quem desenha junto com o palco (as telas de vídeo, js/video.js)
       this.atualizarLuz();
       this.renderer.render(this.cena, this.camera);
     }
