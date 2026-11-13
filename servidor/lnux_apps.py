@@ -1615,10 +1615,17 @@ class Manipulador(BaseHTTPRequestHandler):
             dono()
             cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
             self.receber_para(sala.pasta / "mapa.glb")
+            try:  # o ajuste do mapa (tamanho, giro, posição, começo) vem junto, no endereço: chega a todos ao mesmo tempo que o arquivo
+                ajuste = json.loads(p.get("ajuste") or "{}")
+            except ValueError:
+                ajuste = {}
+            if not isinstance(ajuste, dict) or len(json.dumps(ajuste)) >= 2000:
+                ajuste = {}
             with sala.trava:
                 sala.versao_mapa += 1
+                # "arquivo": a versão do .glb (um ajuste novo muda só "versao": quem está na sala não baixa o cenário de novo)
                 sala.mapa = {"nome": sala_texto(p.get("nome"), 80) or "Cenário", "tamanho": (sala.pasta / "mapa.glb").stat().st_size,
-                             "versao": sala.versao_mapa, "ajuste": (sala.mapa or {}).get("ajuste", {})}
+                             "versao": sala.versao_mapa, "arquivo": sala.versao_mapa, "ajuste": ajuste}
             return self.responder_json(sala.resumo(), 201)
         if acao == "mapa" and m == "POST":  # um mundo da loja vira o cenário (sem precisar enviar o arquivo)
             dono()
@@ -1631,7 +1638,7 @@ class Manipulador(BaseHTTPRequestHandler):
             shutil.copyfile(item["_arq"], sala.pasta / "mapa.glb")
             with sala.trava:
                 sala.versao_mapa += 1
-                sala.mapa = {"nome": item["nome"], "tamanho": item["tamanho"], "versao": sala.versao_mapa, "ajuste": (sala.mapa or {}).get("ajuste", {}), "loja": item["id"]}
+                sala.mapa = {"nome": item["nome"], "tamanho": item["tamanho"], "versao": sala.versao_mapa, "arquivo": sala.versao_mapa, "ajuste": {}, "loja": item["id"]}
                 if item["_mini"]:
                     for e in ("png", "jpg", "webp"):
                         (sala.pasta / f"miniatura.{e}").unlink(missing_ok=True)

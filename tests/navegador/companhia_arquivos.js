@@ -40,6 +40,12 @@ function mapaDeTeste() {
     { scene: 0, scenes: [{ nodes: [0] }], nodes: [{ name: "Mapa", mesh: 0 }] });
   return glb(json, bin);
 }
+/** Cenário fechado: uma casa de 12 × 12 m com piso (topo em y = 0,2), quatro paredes sem porta e telhado (topo em y = 3,4). */
+function casaDeTeste() {
+  const { json, bin } = gltfDeMalha(caixas([[-6, 0, -6, 6, 0.2, 6], [-6, 0.2, -6, 6, 3.2, -5.8], [-6, 0.2, 5.8, 6, 3.2, 6], [-6, 0.2, -5.8, -5.8, 3.2, 5.8], [5.8, 0.2, -5.8, 6, 3.2, 5.8],
+    [-6.2, 3.2, -6.2, 6.2, 3.4, 6.2]]), { scene: 0, scenes: [{ nodes: [0] }], nodes: [{ name: "Casa", mesh: 0 }] });
+  return glb(json, bin);
+}
 /**
  * Boneco VRM 0.x: só ossos (com uma caixinha em cada um, para aparecer na tela). Como nos VRM 0.x de verdade, olha
  * para −Z e o lado esquerdo fica em −X.
@@ -323,4 +329,4 @@ function zip(arquivos) {
   return Buffer.concat([...partes, cd, fim]);
 }
 
-module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
+module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, casaDeTeste, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };

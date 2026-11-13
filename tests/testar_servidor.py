@@ -22,6 +22,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import wave
 from pathlib import Path
 
@@ -538,7 +539,15 @@ def _():
     assert S.pedir("PUT", f"/api/sala/{c}/mapa?nome=praca", corpo=b"glTF-mapa", **visita)[0] == 403
     assert S.pedir("GET", f"/api/sala/{c}/mapa", **visita)[0] == 404
     assert S.pedir("PUT", f"/api/sala/{c}/mapa?nome=praca", corpo=b"glTF-mapa", cabecalhos={"X-Sala-Chave": chave}, **visita)[0] == 201
-    assert S.json("POST", f"/api/sala/{c}/config", json_corpo={"ajuste": {"escala": 2}}, cabecalhos={"X-Sala-Chave": chave}, **visita)[1]["mapa"]["ajuste"] == {"escala": 2}
+    # o ajuste (tamanho, giro, posição, começo) pode vir junto com o arquivo, no endereço; um ajuste depois muda só a versão, não o arquivo
+    ajuste = urllib.parse.quote(json.dumps({"escala": 1.5, "posicao": [0, -2, 0]}))
+    status, r, _ = S.json("PUT", f"/api/sala/{c}/mapa?nome=praca&ajuste={ajuste}", corpo=b"glTF-mapa", cabecalhos={"X-Sala-Chave": chave}, **visita)
+    assert status == 201 and r["mapa"]["ajuste"] == {"escala": 1.5, "posicao": [0, -2, 0]} and r["mapa"]["arquivo"] == r["mapa"]["versao"], r
+    arquivo = r["mapa"]["arquivo"]
+    r = S.json("POST", f"/api/sala/{c}/config", json_corpo={"ajuste": {"escala": 2}}, cabecalhos={"X-Sala-Chave": chave}, **visita)[1]
+    assert r["mapa"]["ajuste"] == {"escala": 2} and r["mapa"]["arquivo"] == arquivo and r["mapa"]["versao"] == arquivo + 1, r
+    assert S.json("PUT", f"/api/sala/{c}/mapa?nome=praca&ajuste=nao-e-json", corpo=b"glTF-mapa", cabecalhos={"X-Sala-Chave": chave}, **visita)[1]["mapa"]["ajuste"] == {}
+    S.json("POST", f"/api/sala/{c}/config", json_corpo={"ajuste": {"escala": 2}}, cabecalhos={"X-Sala-Chave": chave}, **visita)
     status, cab, dados = S.pedir("GET", f"/api/sala/{c}/mapa", **visita)
     assert status == 200 and dados == b"glTF-mapa" and cab["Content-Type"] == "model/gltf-binary"
     # duas pessoas entram
@@ -547,7 +556,7 @@ def _():
     assert ana["id"] != bia["id"] and len(bia["segredo"]) >= 12
     eu = lambda j, **mais: {"id": j["id"], "segredo": j["segredo"], **mais}
     status, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(ana, estado={"p": [1, 0, 2], "r": 0.5, "e": "andando"}), **visita)
-    assert status == 200 and [x["nome"] for x in r["pessoas"]] == ["Ana", "Bia" + "x" * 21] and r["mapa"] == 2 and all("segredo" not in x for x in r["pessoas"])
+    assert status == 200 and [x["nome"] for x in r["pessoas"]] == ["Ana", "Bia" + "x" * 21] and r["mapa"] == 5 and all("segredo" not in x for x in r["pessoas"])
     status, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, estado={"p": [0, 0, 0]}), **visita)
     assert next(x for x in r["pessoas"] if x["id"] == ana["id"])["estado"] == {"p": [1, 0, 2], "r": 0.5, "e": "andando"}
     # ninguém se passa por outra pessoa
@@ -627,7 +636,7 @@ def _():
     assert S.pedir("PUT", f"/api/loja/{mundo['item']['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": mundo["segredo"]}, **visita)[0] == 201
     assert S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, **visita)[0] == 403
     status, r, _ = S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)
-    assert status == 201 and r["mapa"]["nome"] == "Pista" and r["miniatura"] == 1, r
+    assert status == 201 and r["mapa"]["nome"] == "Pista" and r["miniatura"] == 1 and r["mapa"]["ajuste"] == {} and r["mapa"]["arquivo"] == r["mapa"]["versao"], r
     assert S.pedir("GET", f"/api/sala/{a['codigo']}/mapa", **visita)[2] == b"glTF" + b"p" * 64
     assert S.pedir("GET", f"/api/sala/{a['codigo']}/miniatura", **visita)[2] == PNG
     assert S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": "000000000000"}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)[0] == 404

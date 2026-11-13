@@ -376,8 +376,8 @@
     }
     async mandarMapa(codigo, mapa) {
       if (mapa.loja) { await pedir("POST", `${codigo}/mapa`, { json: { loja: mapa.loja }, chave: this.chave }); return; }
-      await pedir("PUT", `${codigo}/mapa?nome=${encodeURIComponent(mapa.nome || "mapa")}`, { corpo: mapa.glb, chave: this.chave });
-      await pedir("POST", `${codigo}/config`, { json: { ajuste: mapa.ajuste || {} }, chave: this.chave });
+      this.ajusteEnviado = JSON.stringify(mapa.ajuste || {});
+      await pedir("PUT", `${codigo}/mapa?nome=${encodeURIComponent(mapa.nome || "mapa")}&ajuste=${encodeURIComponent(this.ajusteEnviado)}`, { corpo: mapa.glb, chave: this.chave });
     }
     /** Quem criou muda as opções da sala (as mesmas de criar, menos o cenário). */
     async configurar(opcoes) {
@@ -410,7 +410,7 @@
       try {
         if (info.mapa) {
           aoProgresso(`Baixando o cenário da sala (${LNUX.bytes(info.mapa.tamanho)})...`);
-          const glb = await pedir("GET", `${codigo}/mapa?v=${info.mapa.versao}`, { como: "blob" });
+          const glb = await pedir("GET", `${codigo}/mapa?v=${info.mapa.arquivo || info.mapa.versao}`, { como: "blob" });
           aoProgresso("Abrindo o cenário...");
           await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
         } else if (mundo.mapa) mundo.tirarMapa();
@@ -423,6 +423,7 @@
       this.eu = { ...eu, nome };
       this.visto = eu.mensagens || 0;
       this.mapaVersao = info.mapa ? info.mapa.versao : 0;
+      this.mapaArquivo = info.mapa ? info.mapa.arquivo || info.mapa.versao : 0;
       if (avatar) pedir("PUT", `${codigo}/avatar?id=${eu.id}&segredo=${eu.segredo}`, { corpo: avatar }).catch((e) => console.warn("sala: o avatar não subiu", e));
       this.avatarEnviado = avatar || null;
       this.aparenciaEnviada = "";
@@ -517,14 +518,37 @@
         if (e.status === 404 || e.status === 403 || ++this.falhas > 40) { const motivo = e.status === 404 ? "A sala foi fechada." : e.status === 403 ? "Você foi tirado da sala (ficou tempo demais sem resposta)." : "A ligação com a sala caiu."; await this.sair(true); this.aoMensagem({ sistema: true, texto: motivo }); LNUX.aviso(motivo, "alerta", 8000); }
       } finally { this.ocupado = false; }
     }
-    /** Quem criou a sala trocou o cenário: todos passam para o novo. */
+    /** Quem criou a sala trocou o cenário (todos passam para o novo) ou só o ajuste dele (tamanho, giro, posição, começo). */
     async trocarMapa() {
+      if (this.trocandoMapa) { this.trocarDeNovo = true; return; } // uma troca de cada vez; a última vale
+      this.trocandoMapa = true;
+      try {
+        do { this.trocarDeNovo = false; await this.trocarMapaAgora(); } while (this.trocarDeNovo && this.dentro);
+      } finally { this.trocandoMapa = false; }
+    }
+    async trocarMapaAgora() {
       const info = await Sala.consultar(this.codigo), mundo = this.palco.mundo;
+      if (!this.dentro) return;
       this.info = info;
-      if (!info.mapa) { mundo.tirarMapa(); return; }
-      const glb = await pedir("GET", `${this.codigo}/mapa?v=${info.mapa.versao}`, { como: "blob" });
+      if (!info.mapa) { this.mapaArquivo = 0; mundo.tirarMapa(); return; }
+      const arquivo = info.mapa.arquivo || info.mapa.versao;
+      if (arquivo === this.mapaArquivo && mundo.mapa) {
+        // o mesmo arquivo: só o ajuste mudou (quem criou e mandou esse mesmo ajuste já está com ele, talvez até mais novo)
+        const ajuste = info.mapa.ajuste || {};
+        if (!this.chave || JSON.stringify(ajuste) !== this.ajusteEnviado) mundo.trocarAjuste({ ...ajuste });
+        this.aoMudar();
+        return;
+      }
+      const glb = await pedir("GET", `${this.codigo}/mapa?v=${arquivo}`, { como: "blob" });
       await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
+      this.mapaArquivo = arquivo;
       this.aoMensagem({ sistema: true, texto: `O cenário da sala agora é "${info.mapa.nome}".` });
+    }
+    /** Quem criou mexeu no ajuste do cenário (Movimento › Cenário): vai para todos, sem mandar o arquivo de novo. */
+    async mandarAjuste(ajuste) {
+      if (!this.dentro || !this.chave || !this.info || !this.info.mapa) return;
+      this.ajusteEnviado = JSON.stringify(ajuste);
+      await pedir("POST", `${this.codigo}/config`, { json: { ajuste: JSON.parse(this.ajusteEnviado) }, chave: this.chave });
     }
     async falar(texto) {
       texto = String(texto || "").trim().slice(0, 300);
@@ -539,6 +563,7 @@
       const codigo = this.codigo, eu = this.eu;
       this.codigo = null;
       this.eu = null;
+      this.ajusteEnviado = undefined;
       for (const r of this.remotos.values()) r.descartar();
       this.remotos.clear();
       if (codigo && eu && !caiu) pedir("POST", `${codigo}/sair`, { json: { id: eu.id, segredo: eu.segredo } }).catch(() => {});

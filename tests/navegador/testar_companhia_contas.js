@@ -6,7 +6,8 @@
 // pelo endereço). Cobre: o dono configurando o e-mail (e o e-mail de teste chegando); a Ana criando a conta pela lista
 // de salas, com o código que chegou por e-mail; o nome da conta no lugar do nome digitado; editar o perfil (foto
 // recortada, bio, pronomes, link, cor) e o que fica guardado no servidor; a Ana criando uma sala e o dono vendo, em
-// "Pessoas na sala", a foto e o perfil dela; sair, entrar de novo, "esqueci a senha"; e o dono exigindo conta.
+// "Pessoas na sala", a foto e o perfil dela; sair, entrar de novo, "esqueci a senha"; a tela de início ("Continuar"
+// com a conta deste navegador, entrar pelo cartão); e o dono exigindo conta.
 const { chromium } = require("playwright");
 const fs = require("fs");
 const net = require("net");
@@ -210,10 +211,34 @@ function png(w, h, [r, g, b]) {
     await ana.pagina.waitForSelector(".salas #conta-perfil", { timeout: 30000 });
     ok(true, "sair e entrar de novo com o e-mail e a senha");
 
+    // ── a tela de início: quem já entrou neste navegador continua; os outros entram pelo cartão ──
+    await ana.pagina.goto("about:blank"); // só trocar o # do endereço não recarrega a página
+    await ana.pagina.goto(`${BASE}/apps/companhia/`);
+    await ana.pagina.waitForSelector(".tela-inicio #inicio-continuar", { timeout: 30000 });
+    ok(await ana.ev(() => /Que bom te ver, Ana Clara/.test(document.querySelector(".inicio-cartao").textContent) && !!document.querySelector(".inicio-eu .foto-conta img")),
+      "a tela de início reconhece a conta deste navegador: \"Continuar\" como Ana Clara, com a foto");
+    await ana.pagina.click("#inicio-outra-conta");
+    await ana.pagina.waitForSelector('.tela-inicio input[aria-label="E-mail"]');
+    await ana.pagina.fill('.tela-inicio input[aria-label="E-mail"]', "ana@exemplo.com");
+    await ana.pagina.fill('.tela-inicio input[aria-label="Senha"]', "errada999");
+    await ana.pagina.click(".tela-inicio #conta-entrar");
+    await ana.pagina.waitForSelector('.tela-inicio .conta-msg.erro:has-text("E-mail ou senha errados")');
+    await ana.pagina.fill('.tela-inicio input[aria-label="Senha"]', "senhanova456");
+    await ana.pagina.press('.tela-inicio input[aria-label="Senha"]', "Enter");
+    await ana.pagina.waitForSelector(".salas #conta-perfil", { timeout: 30000 });
+    await ana.pagina.waitForFunction(() => !document.querySelector(".tela-inicio"), null, { timeout: 5000 }).catch(() => {}); // some com um esmaecer
+    ok(await ana.ev(() => window.Companhia.modo === "jogar" && !document.querySelector(".tela-inicio") && C.contas.eu && C.contas.eu.nome === "Ana Clara"),
+      "entrar pela tela de início: a senha errada avisa no próprio cartão; a certa (Enter) entra e vai direto para a lista de salas, já com a conta");
+
     // ── o dono exige conta: quem não entrou precisa entrar antes ──
     await dono.ev(() => C.contas.salvarAjustes({ exigir_conta: true }));
     await ana.ev(() => C.contas.sair());
     await ana.pagina.reload();
+    await ana.pagina.waitForSelector(".tela-inicio .inicio-nota", { timeout: 30000 });
+    ok(await ana.ev(() => !document.querySelector("#inicio-sem-conta") && /pede uma conta/.test(document.querySelector(".inicio-nota").textContent)),
+      "com \"só entra quem tem conta\", a tela de início não oferece jogar sem conta");
+    await ana.pagina.goto("about:blank");
+    await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
     await ana.pagina.waitForSelector(".salas .salas-pede-conta:not([hidden])", { timeout: 30000 });
     await ana.pagina.click("#sala-criar");
     await ana.pagina.waitForSelector("#conta-entrar", { timeout: 10000 });

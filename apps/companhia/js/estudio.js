@@ -282,6 +282,19 @@
       if (aberto && aberto.atualizar) aberto.atualizar();
       return m.andando;
     }
+    /** Voar (atravessar as paredes): sozinho, sempre; numa sala, só quem criou. */
+    function alternarVoo(ligar) {
+      if (!exigirVRM()) return false;
+      const m = palco().mundo;
+      if (ligar === undefined) ligar = !m.voando;
+      if (ligar && !m.podeVoar()) { LNUX.aviso("Na sala, só quem criou pode voar (atravessar as paredes).", "alerta"); return false; }
+      const estava = m.andando;
+      m.alternarVoo(ligar);
+      if (m.voando && !pref("voo-dica", "")) { gravarPref("voo-dica", "1"); LNUX.aviso("Voando: anda para onde a câmera olha, Espaço sobe, C desce, Shift vai mais rápido, V para de voar. Achou o lugar? Cenário › \"Começar aqui\".", "info", 9000); }
+      if (estava !== m.andando) ctx.aoMudar();
+      if (aberto && aberto.atualizar) aberto.atualizar();
+      return m.voando;
+    }
     async function abrirMapaGuardado(id, { avisar = true } = {}) {
       const p = palco();
       if (!p || !p.mundo) return false;
@@ -378,14 +391,38 @@
       const anda = botao("", () => alternarAndar());
       const mapas = el("select", { class: "lnux-selecao", "aria-label": "Cenário" });
       const ajustes = el("div", { class: "ajustes" });
-      const salvarAjuste = LNUX.adiar(async () => { if (m.info && m.info.id) await C.mapas.atualizar({ id: m.info.id, ajuste: m.info.ajuste }); }, 400);
+      const voo = botao("", () => alternarVoo());
+      const avisoSala = el("p", { class: "fraco pequeno aviso-sala-cenario", style: { margin: 0 }, hidden: true });
+      const doDisco = el("div", { class: "linha" });
+      // guarda o ajuste: no aparelho (os cenários guardados) e, numa sala de quem mexe, vai para todos
+      const salvarAjuste = LNUX.adiar(async () => {
+        if (!m.info) return;
+        const naSala = ctx.naSala && ctx.naSala();
+        if (naSala && naSala.dono && naSala.mapa && ctx.ajusteDaSala) ctx.ajusteDaSala(m.info.ajuste);
+        else if (m.info.id) await C.mapas.atualizar({ id: m.info.id, ajuste: m.info.ajuste });
+      }, 400);
       const atualizar = async () => {
         anda.textContent = m.andando ? "Voltar ao retrato" : "Andar pelo cenário";
         anda.classList.toggle("primario", !m.andando);
+        const naSala = ctx.naSala && ctx.naSala(), mexe = !naSala || naSala.dono;
+        voo.textContent = m.voando ? "Parar de voar" : "Voar (atravessar as paredes)";
+        voo.setAttribute("aria-pressed", String(!!m.voando));
+        voo.disabled = !m.podeVoar();
+        voo.title = m.podeVoar() ? "V liga e desliga · Espaço sobe · C desce · Shift vai mais rápido" : "Na sala, só quem criou pode voar.";
+        avisoSala.hidden = !naSala;
+        avisoSala.textContent = !naSala ? "" : naSala.dono
+          ? "Você está na sua sala: o tamanho, o giro, a posição e o começo do cenário vão para todos. Para trocar o cenário, use Sala › Trocar o cenário da sala."
+          : "Na sala, o cenário é o de quem criou: só essa pessoa muda o tamanho, a posição e o começo, e só ela pode voar.";
+        mapas.disabled = !!naSala; // na sala, abrir outro cenário aqui só mudaria para mim
+        for (const b of doDisco.querySelectorAll("button")) b.disabled = !!naSala;
         const l = await C.mapas.lista(), id = m.info ? m.info.id : "";
-        mapas.replaceChildren(el("option", { value: "" }, "Sem cenário (chão simples)"), ...l.map((x) => el("option", { value: x.id, selected: x.id === id }, `${x.nome} (${LNUX.bytes(x.tamanho)})`)));
+        mapas.replaceChildren(el("option", { value: "" }, naSala && m.info ? m.info.nome + " (o da sala)" : "Sem cenário (chão simples)"), ...l.map((x) => el("option", { value: x.id, selected: x.id === id }, `${x.nome} (${LNUX.bytes(x.tamanho)})`)));
         if (!m.info) { ajustes.replaceChildren(); return; }
         const a = m.info.ajuste;
+        if (!Array.isArray(a.posicao)) a.posicao = [0, 0, 0];
+        // a posição: o mapa anda e a personagem fica onde está (bom para encaixar o mapa em volta dela)
+        const tam = m.caixa.getSize(new window.THREE.Vector3()), alcance = Math.max(10, Math.ceil(Math.max(tam.x, tam.y, tam.z) * 1.2));
+        const eixo = (rotulo, i) => faixa(rotulo, -alcance, alcance, 0.05, a.posicao[i] || 0, (v) => { a.posicao[i] = v; m.aplicarAjuste(); salvarAjuste(); }, (v) => " " + (+v).toFixed(2) + " m");
         const tamanho = el("input", { class: "lnux-entrada", type: "number", min: 0.0001, step: "any", value: a.escala, "aria-label": "Tamanho do cenário" });
         tamanho.addEventListener("change", () => { a.escala = Math.max(1e-4, +tamanho.value || 1); m.aplicarAjuste(); a.partida = null; m.partida(); palco().enquadrar(); salvarAjuste(); });
         const vezes = (k) => botao(k < 1 ? "÷ 10" : "× 10", () => { tamanho.value = +(a.escala * k).toPrecision(4); tamanho.dispatchEvent(new Event("change")); }, "pequeno");
@@ -393,17 +430,26 @@
           el("div", { class: "linha" }, el("label", { class: "lnux-campo" }, el("span", {}, "Tamanho (1 = como veio)"), tamanho), vezes(0.1), vezes(10)),
           faixa("Girar o cenário", 0, 355, 5, a.giro || 0, (v) => { a.giro = v; m.aplicarAjuste(); salvarAjuste(); }, (v) => " " + v + "°"),
           marcar("O mapa veio deitado (Z para cima)", a.deitado, (v) => { a.deitado = v; a.partida = null; m.aplicarAjuste(); m.partida(); palco().enquadrar(); salvarAjuste(); }, "Arquivos de programas em que o Z aponta para cima (.stl, .ply, alguns .obj) aparecem deitados: marque para levantar."),
+          el("details", { class: "posicao-mapa", open: !!(a.posicao[0] || a.posicao[1] || a.posicao[2]) }, el("summary", {}, "Posição do mapa"),
+            el("div", { class: "ajustes", style: { marginTop: "8px" } },
+              el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Move o mapa inteiro; a personagem fica onde está. Útil para encaixar o mapa em volta dela (depois, \"Começar aqui\")."),
+              eixo("Para os lados (X)", 0), eixo("Para cima e para baixo (Y)", 1), eixo("Para a frente e para trás (Z)", 2),
+              botao("Zerar a posição", () => { a.posicao = [0, 0, 0]; m.aplicarAjuste(); salvarAjuste(); atualizar(); }, "pequeno"))),
           el("div", { class: "linha" },
-            botao("Começar aqui", () => { m.marcarPartida(); salvarAjuste(); LNUX.aviso("Ponto de partida guardado: é aqui que ela aparece neste cenário.", "ok"); }, "pequeno"),
+            botao("Começar aqui", () => { m.marcarPartida(); salvarAjuste(); LNUX.aviso("Ponto de partida guardado: é aqui que ela aparece neste cenário" + (naSala ? " (para todos da sala)." : "."), "ok"); }, "pequeno"),
             botao("Voltar ao começo", () => m.partida(), "pequeno"),
             botao("Esquecer o começo", () => { a.partida = null; m.partida(); salvarAjuste(); }, "pequeno")));
+        // quem só visita a sala vê o ajuste, mas não mexe ("Voltar ao começo" continua valendo)
+        if (!mexe) for (const c of ajustes.querySelectorAll("input, button")) if (c.textContent !== "Voltar ao começo") c.disabled = true;
       };
       mapas.addEventListener("change", async () => { $carregando(true, "Abrindo o cenário..."); try { await abrirMapaGuardado(mapas.value); } catch (e) { LNUX.erro(e); } finally { $carregando(false); } atualizar(); });
-      const corpo = el("div", { class: "ajustes" }, anda,
-        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "W A S D ou as setas andam · Shift corre · Espaço pula · arrastar gira a câmera · a rodinha aproxima. No celular aparece um direcional."),
+      doDisco.append(botao("Abrir cenário...", importarMapa), botao("Salvar em .glb", salvarMapa),
+        botao("Apagar este", async () => { if (!m.info || !m.info.id) return; const id = m.info.id; if (!(await LNUX.confirmar("Apagar cenário", `Apagar "${m.info.nome}" deste aparelho?`, { rotulo: "Apagar", perigo: true }))) return; m.tirarMapa(); await C.mapas.apagar(id); gravarPref("mapa", ""); atualizar(); }));
+      const corpo = el("div", { class: "ajustes" }, el("div", { class: "linha" }, anda, voo),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "W A S D ou as setas andam · Shift corre · Espaço pula · V voa (Espaço sobe, C desce) · arrastar gira a câmera · a rodinha aproxima. No celular aparece um direcional."),
+        avisoSala,
         el("label", { class: "lnux-campo" }, el("span", {}, "Cenário"), mapas),
-        el("div", { class: "linha" }, botao("Abrir cenário...", importarMapa), botao("Salvar em .glb", salvarMapa),
-          botao("Apagar este", async () => { if (!m.info || !m.info.id) return; const id = m.info.id; if (!(await LNUX.confirmar("Apagar cenário", `Apagar "${m.info.nome}" deste aparelho?`, { rotulo: "Apagar", perigo: true }))) return; m.tirarMapa(); await C.mapas.apagar(id); gravarPref("mapa", ""); atualizar(); })),
+        doDisco,
         ajustes,
         el("details", { open: true }, el("summary", {}, "Luz e sombras"), el("div", { class: "ajustes", style: { marginTop: "8px" } },
           marcar("Luz e sombras realistas (no cenário)", palco().luzCfg.realista, (v) => { palco().definirLuz({ realista: v }); }, "Um sol com sombra, céu azulado e tons naturais. Desligado, a luz de frente de sempre (mais leve)."),
@@ -484,12 +530,13 @@
       { rotulo: "Parar o movimento", acao: parar, ativo: () => ehVRM() && palco().anim.tocando },
       "-",
       { rotulo: "Andar pelo cenário (W A S D)", marcado: () => ehVRM() && palco().mundo.andando, acao: () => alternarAndar(), ativo: ehVRM },
+      { rotulo: "Voar, atravessando as paredes (V)", marcado: () => ehVRM() && palco().mundo.voando, acao: () => alternarVoo(), ativo: () => ehVRM() && palco().mundo.podeVoar() },
       { rotulo: "Cenário (mapa)...", acao: painelCenario, ativo: ehVRM },
       { rotulo: "Converter mapa para .glb...", acao: () => converterMapa().catch(LNUX.erro) },
       "-",
       { rotulo: "Ajustar esqueleto...", acao: painelEsqueleto, ativo: ehVRM },
     ];
-    return { painelCaptura, painelMovimentos, painelCenario, painelEsqueleto, alternarCaptura, alternarAndar, tocar, parar, importarMovimentos, receberMovimentos, importarMapa, receberMapa, converterMapa, salvarMapa,
+    return { painelCaptura, painelMovimentos, painelCenario, painelEsqueleto, alternarCaptura, alternarAndar, alternarVoo, tocar, parar, importarMovimentos, receberMovimentos, importarMapa, receberMapa, converterMapa, salvarMapa,
       abrirMapaGuardado, aplicarAndar, aoAbrirPersonagem, itensDoMenu, fechar, atualizar: () => { if (aberto && aberto.atualizar) aberto.atualizar(); }, get aberto() { return aberto && aberto.id; } };
   };
 })();
