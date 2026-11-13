@@ -67,6 +67,7 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
   - **senha** (opcional);
   - **quantas pessoas** cabem (de 2 a 16);
   - **bate-papo** por texto, ligado ou não;
+  - **quem pode pôr vídeos na tela**: todos (padrão) ou só quem criou;
   - o **cenário**: o chão simples, um dos seus (*Movimento › Cenário*) ou um **mundo da loja**, com a prévia em
     3D antes de escolher. A miniatura da sala na lista é tirada dessa prévia.
 - **Depois de criar**, aparece o link da sala para mandar. Quem criou continua dona dela neste navegador:
@@ -85,9 +86,38 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só a Companhia* (veja "Site publicado só com a
   Companhia", abaixo): o link abre só a Companhia, sem a ponte. A sala fica no servidor do aparelho de quem criou e
   existe enquanto ele estiver ligado. Na rede de casa também dá (`--endereco 0.0.0.0`).
+- **Vídeo numa tela**: veja "Vídeo na tela", abaixo.
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
   personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
   some por 20 segundos sai da sala; uma sala vazia fecha depois de 15 minutos.
+
+### Vídeo na tela
+
+O botão **📺** (embaixo do palco) ou *Sala › Vídeo na tela* põe um vídeo numa **tela dentro do cenário**, na frente
+da sua personagem. Serve um link do **YouTube** (vídeo, *shorts*, ao vivo ou playlist; o `t=` do link vale), do
+**Vimeo**, da **Twitch** (canal ao vivo ou vídeo) ou de um **arquivo de vídeo** (`.mp4`, `.webm`, `.ogv`, `.mov`).
+Outros sites não abrem: a tela só monta o player oficial de cada site, nunca uma página qualquer.
+
+- **A tela**: *🚶 Segue a personagem* (fica sempre depois dela, na direção em que a sua câmera olha, aonde você
+  for) ou *📌 Fica parada aqui* (no lugar do cenário onde estava; *↩* traz de volta para a frente dela). Cinco
+  tamanhos: pequena (1,2 m), média, grande, cinema e telão (8 m).
+- **A barra de controles** (só para quem pôs o vídeo): pausar ou continuar, voltar e pular 10 segundos,
+  sincronizar, seguir ou parada, o tamanho, o som, trocar o vídeo e fechar. Com o mouse em cima da tela, os
+  cliques vão para o próprio player (no celular, o toque seguinte, por 5 segundos); clique no cenário para voltar a
+  andar.
+- **Na sala, todos veem**: a tela de cada um aparece para os outros no mesmo lugar e no **mesmo pedaço do vídeo**
+  (o servidor guarda quando o vídeo começou ou onde parou, e cada um calcula o ponto pelo relógio do servidor).
+  Pausar, pular e continuar valem para todos. Quem entra depois pega o vídeo no ponto em que está. Quem pôs o vídeo
+  e sai da sala continua com ele só para si.
+- **O som** das telas paradas e das dos outros diminui com a distância. *Sala › Som das telas dos outros* deixa as
+  dos outros mudas e *Ver as telas dos outros* as esconde (só para você).
+- **Quem pode pôr vídeo**: nas opções da sala, *Quem entra pode pôr vídeos na tela*. Desligado, só quem criou põe; as
+  telas dos outros somem na hora.
+- Como funciona: os sites de vídeo só deixam tocar pelo player deles, que não pode virar textura do 3D. Então o player
+  fica numa camada logo atrás do palco, posta em 3D junto com a câmera, e a cena abre um "furo" onde a tela aparece:
+  quem estiver na frente dela (uma personagem, uma parede) aparece por cima, como num lugar de verdade. O vídeo vem
+  direto do site dele para cada pessoa (o servidor só guarda o link, o lugar e o relógio). O YouTube abre pelo
+  endereço sem cookies (`youtube-nocookie.com`). A Twitch só deixa o player em endereços `https` (como o do túnel).
 
 ### Contas e perfil
 
@@ -536,6 +566,7 @@ js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3d
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
+js/video.js        vídeo numa tela do cenário (YouTube, Vimeo, Twitch, arquivo): segue a personagem ou fica parada, igual para todos da sala
 js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
 js/inicio.js       a tela de início: o cartão de entrar na conta (ou jogar sem conta) e o caminho para o chat bot
 js/contas.js       contas: criar com o código por e-mail, entrar, esqueci a senha, perfil (foto, capa, bio...) e os
