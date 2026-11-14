@@ -270,13 +270,10 @@
     }
     async mundo(blob) {
       const T = window.THREE, V = window.CompanhiaVRM;
-      const carregador = new V.GLTFLoader(), draco = new V.DRACOLoader();
-      draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
-      carregador.setDRACOLoader(draco);
-      carregador.setMeshoptDecoder(V.MeshoptDecoder);
+      const carregador = C.carregadorGLTF();
       const url = URL.createObjectURL(blob);
       let gltf;
-      try { gltf = await carregador.loadAsync(url); } finally { URL.revokeObjectURL(url); draco.dispose(); }
+      try { gltf = await carregador.loadAsync(url); } finally { URL.revokeObjectURL(url); carregador.soltar(); }
       const cena = gltf.scene;
       cena.traverse((o) => { if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals(); });
       this.cena.add(cena);

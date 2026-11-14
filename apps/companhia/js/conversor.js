@@ -146,13 +146,10 @@
     let objeto;
     try {
       if (tipo === "glb" || tipo === "gltf") {
-        const carregador = new V.GLTFLoader(g.gerente), draco = new V.DRACOLoader(g.gerente);
-        draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
-        carregador.setDRACOLoader(draco);
-        carregador.setMeshoptDecoder(V.MeshoptDecoder);
+        const carregador = C.carregadorGLTF(g.gerente); // com o specular/glossiness (vira o material padrão no .glb)
         try { const gltf = await carregador.loadAsync(g.url(principal)); objeto = gltf.scene; objeto.animations = gltf.animations || []; } // as animações do mapa vão junto
         catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o modelo: " + e.message); }
-        finally { draco.dispose(); }
+        finally { carregador.soltar(); }
       } else if (tipo === "fbx") objeto = new V.FBXLoader(g.gerente).parse(await blob.arrayBuffer(), "");
       else if (tipo === "obj") {
         const carregador = new V.OBJLoader(g.gerente), textoObj = await blob.text();
@@ -226,7 +223,12 @@
       const tipo = ext(principal), blob = arquivos.get(principal);
       if (!blob) throw new Error("Não achei o arquivo " + principal + ".");
       // um .glb sozinho já está no formato certo
-      if (tipo === "glb" && arquivos.size === 1) return { glb: blob, triangulos: null, avisos, como: "já estava em .glb" };
+      if (tipo === "glb" && arquivos.size === 1) {
+        // material specular/glossiness (exportações antigas do Sketchfab): escreve a alternativa padrão, que todo programa abre
+        const padrao = C.glbSemEspecular(await blob.arrayBuffer());
+        if (padrao) avisos.push("Os materiais specular/glossiness (exportações antigas do Sketchfab) ganharam a versão padrão: as texturas aparecem em qualquer programa.");
+        return { glb: padrao ? new Blob([padrao], { type: "model/gltf-binary" }) : blob, triangulos: null, avisos, como: "já estava em .glb" };
+      }
       if (tipo === "blend") {
         let pronto = null;
         try { pronto = await blendPelaPonte(principal, blob, arquivos, aoProgresso); }

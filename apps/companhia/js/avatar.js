@@ -332,13 +332,10 @@
       try {
         if (tipo === "fbx") objeto = new V.FBXLoader(gerente).parse(await blob.arrayBuffer(), "");
         else if (tipo === "glb" || tipo === "gltf") {
-          const carregador = new V.GLTFLoader(gerente), draco = new V.DRACOLoader();
-          draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
-          carregador.setDRACOLoader(draco);
-          carregador.setMeshoptDecoder(V.MeshoptDecoder);
+          const carregador = C.carregadorGLTF(gerente);
           const u = URL.createObjectURL(blob);
           urls.push(u);
-          try { objeto = (await carregador.loadAsync(u)).scene; } finally { draco.dispose(); }
+          try { objeto = (await carregador.loadAsync(u)).scene; } finally { carregador.soltar(); }
         } else throw new Error("Não sei converter avatares ." + tipo + " (use .fbx, .glb ou o .unitypackage).");
       } catch (e) {
         throw /^Não sei/.test(e.message) ? e : new Error(`Não consegui ler o modelo ${base(principal)}: ${(e && e.message) || e}`);

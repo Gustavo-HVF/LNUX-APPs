@@ -810,3 +810,20 @@
     [/^O servidor de e-mail \((.+)\) recusou a conexão na porta (\d+): confira a porta\.$/, "The email server ($1) refused the connection on port $2: check the port.", "メールサーバー（$1）がポート $2 での接続を拒否しました。ポートを確認してください。"],
   );
 })();
+
+// Arrumar a foto e o banner do perfil (zoom e posição) e os mapas com material specular/glossiness
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Não consegui abrir essa imagem (use PNG, JPEG, WebP ou GIF).": ["Couldn't open that image (use PNG, JPEG, WebP or GIF).", "その画像を開けませんでした（PNG、JPEG、WebP、GIF を使ってください）。"],
+    "Arraste para posicionar a imagem": ["Drag to position the image", "ドラッグして画像の位置を決めます"],
+    "Reduzir": ["Zoom out", "縮小"], "Ampliar": ["Zoom in", "拡大"], "Imagem inteira": ["Whole image", "画像全体"], "Preencher": ["Fill", "全体に合わせる"],
+    "Arraste para posicionar. Use o controle, a rodinha do mouse ou dois dedos para ampliar e reduzir. Fica com {l} × {a} pixels.": ["Drag to position. Use the slider, the mouse wheel or two fingers to zoom in and out. It will be {l} × {a} pixels.", "ドラッグして位置を決めます。スライダー、マウスホイール、または 2 本指で拡大・縮小できます。サイズは {l} × {a} ピクセルになります。"],
+    "Ajustar a imagem": ["Adjust the image", "画像を調整"], "Ajustar a foto": ["Adjust the photo", "写真を調整"], "Ajustar o banner": ["Adjust the banner", "バナーを調整"],
+    "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.": ["Profile photo and banner your way (drag, zoom in and out; the banner at 750 × 325), and each profile in the theme that person uses.", "プロフィールの写真とバナーを自由に調整（ドラッグ、拡大・縮小。バナーは 750 × 325）。各プロフィールはその人が使っているテーマで表示。"],
+    "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.": ["Maps with the old Sketchfab material (specular/glossiness) open with their textures.", "Sketchfab の古いマテリアル（スペキュラー／グロシネス）のマップがテクスチャ付きで開きます。"],
+    "Usar": ["Use", "使う"], "Banner do perfil": ["Profile banner", "プロフィールのバナー"], "Trocar o banner": ["Change the banner", "バナーを変更"], "Pôr um banner": ["Add a banner", "バナーを追加"],
+    "Os materiais specular/glossiness (exportações antigas do Sketchfab) ganharam a versão padrão: as texturas aparecem em qualquer programa.": ["The specular/glossiness materials (older Sketchfab exports) got the standard version: the textures show up in any program.", "スペキュラー／グロシネスのマテリアル（Sketchfab の古いエクスポート）に標準版を追加しました。どのソフトでもテクスチャが表示されます。"],
+  });
+})();

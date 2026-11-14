@@ -38,6 +38,7 @@
     widgets: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="10" y="10" width="19" height="19" rx="5"/><rect x="35" y="10" width="19" height="19" rx="5"/><rect x="10" y="35" width="19" height="19" rx="5"/><path stroke-linecap="round" d="M44.5 37v15M37 44.5h15"/></svg>',
     mais: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     fechar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+    foto: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.6"/></svg>',
   };
   C.iconeWebc = (nome) => svg(ICONES[nome] || "");
 
@@ -168,6 +169,8 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.",
+    "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.",
     "Mapas do Sketchfab na loja (com o crédito de quem fez) e mapas com movimento que tocam dentro do jogo.",
     "A tela do jogo: as expressões de 1 a 9, o bate-papo no canto e a janela Opções (personagem, sala, ajuda, acessibilidade, gráfico e controle).",
     "No início: o chat bot, as novidades e os widgets.",
@@ -199,6 +202,15 @@
 
   // ── o perfil ─────────────────────────────────────────────────────────
 
+  /** O banner do perfil: a imagem em 750 × 325 (como a pessoa arrumou), com ela mesma esmaecida dos lados na tela larga. */
+  function bannerDoPerfil(p, acoes) {
+    const capa = C.contas.imagem(p, "capa");
+    return el("div", { class: "perfil-banner" + (capa ? " com-imagem" : ""), style: { "--perfil-cor": p.cor || "var(--webc-azul, var(--accent))" } },
+      capa ? el("div", { class: "perfil-banner-fundo", style: { backgroundImage: `url("${capa}")` }, "aria-hidden": "true" }) : null,
+      el("div", { class: "perfil-banner-imagem", style: capa ? { backgroundImage: `url("${capa}")` } : {} }),
+      acoes || null);
+  }
+
   async function paginaPerfil(pag, { id } = {}) {
     const eu = C.contas && C.contas.eu;
     const alvo = id || (eu && eu.id);
@@ -219,6 +231,8 @@
     let p;
     try { p = meu ? await C.contas.carregar() : await C.contas.perfil(alvo); } catch (e) { caixa.replaceChildren(el("p", { class: "perfil-vazio" }, e.message)); return { fechar() {} }; }
     if (!p) { caixa.replaceChildren(el("p", { class: "perfil-vazio" }, t("Essa conta não existe."))); return { fechar() {} }; }
+    // o perfil de outra pessoa aparece no tema que ela usa (só a página dela; o resto do site fica no seu)
+    if (!meu && p.tema && p.tema !== C.temas.atual) C.temas.local(pag, p.tema);
     const capa = C.contas.imagem(p, "capa");
     const acoes = el("div", { class: "perfil-acoes" });
     const desenharAcoes = (relacao) => {
@@ -238,9 +252,13 @@
     const salvos = el("div", { class: "perfil-salvos" });
     const amigos = el("div", { class: "perfil-amigos" });
     const pedidos = el("div", { class: "perfil-pedidos" });
+    // no meu perfil, trocar o banner e a foto direto (escolher, arrumar com zoom e posição, mandar)
+    const trocarImagem = async (tipo) => { if (await C.trocarImagemDoPerfil(tipo)) ir("perfil", { semTransicao: true }); };
     caixa.replaceChildren(
-      el("div", { class: "perfil-banner", style: { background: capa ? `center / cover no-repeat url("${capa}")` : p.cor || "var(--destaque)" } }),
-      el("div", { class: "perfil-foto-grande" }, C.fotoDaConta(p, 150)),
+      bannerDoPerfil(p, meu ? el("div", { class: "perfil-banner-acoes" },
+        el("button", { type: "button", class: "lnux-botao perfil-banner-trocar", id: "perfil-trocar-banner", onclick: () => trocarImagem("capa") }, C.iconeWebc("foto"), t(capa ? "Trocar o banner" : "Pôr um banner"))) : null),
+      el("div", { class: "perfil-foto-grande" }, C.fotoDaConta(p, 150),
+        meu ? el("button", { type: "button", class: "perfil-foto-trocar", id: "perfil-trocar-foto", title: t("Trocar a foto"), "aria-label": t("Trocar a foto"), onclick: () => trocarImagem("foto") }, C.iconeWebc("foto")) : null),
       el("h1", { class: "perfil-nome", translate: "no" }, p.nome),
       p.pronomes ? el("p", { class: "perfil-pronomes fraco", translate: "no" }, p.pronomes) : null,
       acoes,

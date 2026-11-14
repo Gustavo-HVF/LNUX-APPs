@@ -77,7 +77,20 @@
     definir(id) {
       try { localStorage.setItem(CHAVE, id); } catch (e) { /* sem armazenamento */ }
       LNUX.preferencia.gravar("lnux.tema", TEMAS.find((x) => x.id === id) && TEMAS.find((x) => x.id === id).base === "light" ? "claro" : "escuro");
-      return this.aplicar(id);
+      const t = this.aplicar(id);
+      // com conta, o tema vai para o perfil: quem abre o perfil vê nele o tema que a pessoa usa
+      if (C.contas && C.contas.eu && C.contas.eu.tema !== t.id) C.contas.salvarPerfil({ tema: t.id }).catch(() => {});
+      return t;
+    },
+    /** O tema de outra pessoa só dentro de um elemento (o perfil dela). Devolve o tema, ou null se não conhece. */
+    local(elemento, id) {
+      const t = TEMAS.find((x) => x.id === id);
+      if (!t || !elemento) return null;
+      elemento.dataset.skin = t.id;
+      elemento.classList.add("tema-local", t.base === "light" ? "tema-local-claro" : "tema-local-escuro");
+      elemento.style.colorScheme = t.base;
+      carregarFontes(t);
+      return t;
     },
   };
 

@@ -96,10 +96,17 @@ function lerEmail(bruto) {
     ok(urso && urso.tags.join() === "fnaf,terror" && aceno && aceno.tags.join() === "fnaf", "publicar na loja com # (o urso ganha #fnaf e #terror)");
 
     // ── os idiomas: o navegador em inglês abre em inglês; troca sem recarregar e fica guardado ──
-    await visita.pagina.addInitScript(() => document.addEventListener("DOMContentLoaded", () => {
-      const app = document.querySelector(".lnux-app");
-      window.__abertura = { carregando: document.documentElement.hasAttribute("data-carregando"), app: app && getComputedStyle(app).visibility, logo: !!document.querySelector(".webc-abrindo") };
-    }));
+    // o estado assim que o layout do app chega na página (no DOMContentLoaded era tarde: em localhost a tela de entrar
+    // às vezes já estava pronta e a abertura já tinha saído)
+    await visita.pagina.addInitScript(() => {
+      const ver = () => {
+        const app = document.querySelector(".lnux-app");
+        if (!app) return false;
+        window.__abertura = { carregando: document.documentElement.hasAttribute("data-carregando"), app: getComputedStyle(app).visibility, logo: !!document.querySelector(".webc-abrindo") };
+        return true;
+      };
+      new MutationObserver((_, obs) => { if (ver()) obs.disconnect(); }).observe(document, { childList: true, subtree: true });
+    });
     await visita.pagina.goto(`${BASE}/apps/companhia/`);
     await visita.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
     const abertura = await visita.ev(() => ({ ...window.__abertura, depois: document.documentElement.hasAttribute("data-carregando") }));
