@@ -869,6 +869,140 @@ def _():
         lnux_apps.TENTATIVAS.clear()
 
 
+def gltf_de_teste(com_textura=False):
+    """Um glTF mínimo (um triângulo; com uma textura PNG, se pedir): (json, bin, png)."""
+    import struct as st
+    pos = st.pack("<9f", 0, 0, 0, 1, 0, 0, 0, 1, 0)
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+    g = {"asset": {"version": "2.0"}, "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"mesh": 0, "name": "Moinho"}],
+         "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+         "buffers": [{"byteLength": len(pos), "uri": "scene.bin"}], "bufferViews": [{"buffer": 0, "byteLength": len(pos)}],
+         "accessors": [{"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3", "min": [0, 0, 0], "max": [1, 1, 0]}],
+         "animations": [{"channels": [{"sampler": 0, "target": {"node": 0, "path": "rotation"}}], "samplers": [{"input": 0, "output": 0}]}]}
+    if com_textura:
+        g["images"] = [{"uri": "textures/cor.png"}]
+        g["textures"] = [{"source": 0}]
+    return g, pos, png
+
+
+def glb_de(g, corpo):
+    import struct as st
+    g = dict(g, buffers=[{"byteLength": len(corpo)}])
+    js = json.dumps(g).encode()
+    js += b" " * (-len(js) % 4)
+    corpo = corpo + b"\x00" * (-len(corpo) % 4)
+    return b"glTF" + st.pack("<II", 2, 12 + 8 + len(js) + 8 + len(corpo)) + st.pack("<I", len(js)) + b"JSON" + js + st.pack("<I", len(corpo)) + b"BIN\x00" + corpo
+
+
+@caso("Sketchfab: a chave fica no servidor; buscar e trazer mapas para a loja (.glb ou o .zip do glTF, que vira .glb), com licença, crédito e os # do Sketchfab")
+def _():
+    import io
+    import struct as st
+    import zipfile as zf
+    from http.server import BaseHTTPRequestHandler as BH, ThreadingHTTPServer as TS
+    g, pos, png = gltf_de_teste()
+    glb = glb_de(g, pos)
+    gt, post, pngt = gltf_de_teste(com_textura=True)
+    pacote = io.BytesIO()
+    with zf.ZipFile(pacote, "w") as z:
+        z.writestr("scene.gltf", json.dumps(gt))
+        z.writestr("scene.bin", post)
+        z.writestr("textures/cor.png", pngt)
+    jpg = b"\xff\xd8\xff\xe0" + b"\x00" * 60
+    A, B, Cz = "a" * 32, "b" * 32, "c" * 32
+    vistos = []
+    def modelo(uid, nome, lic, anim):
+        return {"uid": uid, "name": nome, "user": {"displayName": "Joana", "profileUrl": "https://sketchfab.example/joana"}, "viewerUrl": f"https://sketchfab.example/3d-models/{uid}",
+                "license": {"slug": lic, "label": lic.upper()}, "animationCount": anim, "faceCount": 1, "isDownloadable": True,
+                "thumbnails": {"images": [{"url": f"http://127.0.0.1:{{porta}}/miniatura.jpg", "width": 640}]}, "tags": [{"name": "fnaf"}, {"name": "Moinho de Vento"}],
+                "description": "Um moinho que gira."}
+    class Falso(BH):
+        def log_message(self, *a):
+            pass
+        def enviar(self, corpo, tipo="application/json", status=200):
+            if isinstance(corpo, (dict, list)):
+                corpo = json.dumps(corpo).replace("{porta}", str(self.server.server_address[1])).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", tipo)
+            self.send_header("Content-Length", str(len(corpo)))
+            self.end_headers()
+            self.wfile.write(corpo)
+        def do_GET(self):
+            vistos.append((self.path, self.headers.get("Authorization")))
+            caminho = self.path.split("?")[0]
+            ms = {A: modelo(A, "Moinho animado", "by", 2), B: modelo(B, "Castelo comprado", "st", 0), Cz: modelo(Cz, "Praça CC0", "cc0", 0)}
+            if caminho == "/v3/search":
+                return self.enviar({"results": list(ms.values()), "cursors": {"next": "24"}})
+            partes = caminho.split("/")
+            if len(partes) >= 4 and partes[2] == "models" and partes[3] in ms:
+                if len(partes) == 5 and partes[4] == "download":
+                    if self.headers.get("Authorization") != "Token chave-de-teste-123":
+                        return self.enviar({"detail": "nao"}, status=401)
+                    base = f"http://127.0.0.1:{self.server.server_address[1]}"
+                    return self.enviar({"glb": {"url": base + "/arquivos/a.glb", "size": len(glb), "expires": 300}} if partes[3] == A
+                                       else {"gltf": {"url": base + "/arquivos/c.zip", "size": len(pacote.getvalue()), "expires": 300}})
+                return self.enviar(ms[partes[3]])
+            if caminho == "/arquivos/a.glb":
+                return self.enviar(glb, "model/gltf-binary")
+            if caminho == "/arquivos/c.zip":
+                return self.enviar(pacote.getvalue(), "application/zip")
+            if caminho == "/miniatura.jpg":
+                return self.enviar(jpg, "image/jpeg")
+            return self.enviar({"detail": "nada"}, status=404)
+    falso = TS(("127.0.0.1", 0), Falso)
+    threading.Thread(target=falso.serve_forever, daemon=True).start()
+    os.environ["LNUX_SKETCHFAB_API"] = f"http://127.0.0.1:{falso.server_address[1]}/v3"
+    os.environ.pop("SKETCHFAB_TOKEN", None)
+    try:
+        (lnux_apps.DADOS / "chaves.json").unlink(missing_ok=True)
+        status, r, _ = S.json("GET", "/api/loja/sketchfab")
+        assert status == 200 and r["chave"] is False and "by" in r["licencas"], r
+        assert S.json("GET", "/api/loja/sketchfab", token=False)[0] == 403  # quem não é o dono não usa
+        assert S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A})[0] == 400  # sem a chave
+        status, r, _ = S.json("PUT", "/api/loja/sketchfab", json_corpo={"token": "chave-de-teste-123"})
+        assert status == 200 and r["chave"] is True
+        arquivo = lnux_apps.DADOS / "chaves.json"
+        assert json.loads(arquivo.read_text())["sketchfab"]["token"] == "chave-de-teste-123" and (arquivo.stat().st_mode & 0o777) == 0o600
+        status, r, _ = S.json("GET", "/api/loja/sketchfab/buscar?q=moinho&animado=1")
+        assert status == 200 and [m["uid"] for m in r["modelos"]] == [A, B, Cz] and r["proximo"] == "24", r
+        porUid = {m["uid"]: m for m in r["modelos"]}
+        assert porUid[A]["pode_loja"] and porUid[A]["animacoes"] == 2 and porUid[A]["licenca_nome"] == "CC BY 4.0" and porUid[A]["autor"] == "Joana"
+        assert not porUid[B]["pode_loja"] and porUid[Cz]["pode_loja"]
+        assert any("animated=true" in v[0] and "q=moinho" in v[0] for v in vistos)
+        assert S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": "x"})[0] == 400
+        status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": B})
+        assert status == 403 and "não deixa redistribuir" in r["erro"], r
+        # o .glb, direto
+        status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "tags": "praia"})
+        assert status == 201, r
+        item = r["item"]
+        assert item["tipo"] == "mundo" and item["nome"] == "Moinho animado" and item["autor"] == "Joana" and item["arquivo"] == "moinho-animado.glb" and item["animacoes"] == 2
+        assert item["origem"]["site"] == "Sketchfab" and item["origem"]["uid"] == A and item["licenca"] == {"slug": "by", "nome": "CC BY 4.0", "url": "https://creativecommons.org/licenses/by/4.0/"}, item
+        assert item["tags"][:3] == ["praia", "fnaf", "moinho-de-vento"] and item["miniatura"] > 0, item["tags"]
+        assert S.pedir("GET", f"/api/loja/{item['id']}/arquivo", token=False)[2] == glb
+        assert ("/v3/models/" + A + "/download", "Token chave-de-teste-123") in vistos
+        # o .zip do glTF vira um .glb só, com o .bin e a textura dentro
+        status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": Cz})
+        assert status == 201, r
+        dados = S.pedir("GET", f"/api/loja/{r['item']['id']}/arquivo", token=False)[2]
+        assert dados[:4] == b"glTF" and st.unpack("<I", dados[8:12])[0] == len(dados)
+        njs = st.unpack("<I", dados[12:16])[0]
+        js = json.loads(dados[20:20 + njs])
+        nbin = st.unpack("<I", dados[20 + njs:24 + njs])[0]
+        binario = dados[28 + njs:28 + njs + nbin]
+        img = js["images"][0]
+        vista = js["bufferViews"][img["bufferView"]]
+        assert "uri" not in img and img["mimeType"] == "image/png" and binario[vista["byteOffset"]:vista["byteOffset"] + vista["byteLength"]] == pngt
+        assert js["buffers"] == [{"byteLength": nbin}] and binario[:len(post)] == post and "uri" not in js["buffers"][0]
+        assert r["item"]["licenca"]["slug"] == "cc0"
+    finally:
+        for i in S.json("GET", "/api/loja")[1]["itens"]:  # a loja volta vazia para os outros casos
+            S.json("DELETE", f"/api/loja/{i['id']}")
+        falso.shutdown()
+        os.environ.pop("LNUX_SKETCHFAB_API", None)
+        (lnux_apps.DADOS / "chaves.json").unlink(missing_ok=True)
+
+
 @caso("WEBC: na loja, # para achar, curtir só com conta, quem baixou (uma vez por pessoa); amigos e itens salvos no perfil")
 def _():
     visita = dict(token=False)

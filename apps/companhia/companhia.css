@@ -900,3 +900,19 @@
 .novidades-lista { margin: 0; padding-left: 1.2em; display: grid; gap: 8px; line-height: 1.45; }
 .novidades-lista li::marker { color: var(--accent); }
 @media (max-width: 760px) { .webc-inicio .webc-cartoes { min-height: 0; } .webc-quadrados { grid-template-columns: 1fr; } }
+
+/* ── o Sketchfab na loja (o dono traz mapas) ── */
+.janela-sketchfab { min-width: min(860px, 86vw); }
+.sketchfab-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 52vh; overflow: auto; padding: 2px; }
+.sketchfab-cartao { display: grid; border-radius: 18px; overflow: hidden; background: var(--painel-2); border: 2px solid var(--borda); }
+.sketchfab-cartao.bloqueado { opacity: .62; }
+.sketchfab-cartao .capa { position: relative; aspect-ratio: 16 / 10; background: var(--painel-3); }
+.sketchfab-cartao .capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sketchfab-cartao .capa .selo-novo { position: absolute; top: 8px; right: 8px; }
+.sketchfab-info { display: grid; gap: 4px; padding: 10px 12px 12px; min-width: 0; }
+.sketchfab-info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sketchfab-licenca { justify-self: start; font-size: .78em; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: color-mix(in srgb, var(--perigo, #c33) 18%, transparent); color: var(--texto); }
+.sketchfab-licenca.livre { background: color-mix(in srgb, var(--destaque) 22%, transparent); }
+.sketchfab-info .linha { gap: 6px; flex-wrap: wrap; }
+.loja-credito { margin: 0; font-size: .9em; color: var(--texto-2); }
+.loja-credito a { color: inherit; text-decoration: underline; }

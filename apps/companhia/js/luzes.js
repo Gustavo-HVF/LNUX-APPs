@@ -419,7 +419,7 @@
       mapa.updateMatrixWorld(true);
       // 1. as malhas e o tamanho dos pedaços (os triângulos grandes são divididos, até o limite da qualidade)
       const malhas = [];
-      mapa.traverse((o) => { if (o.isMesh && o.visible && !o.isSkinnedMesh && o.geometry && o.geometry.attributes.position) malhas.push(o); });
+      mapa.traverse((o) => { if (o.isMesh && o.visible && !o.isSkinnedMesh && !o.userData.animado && o.geometry && o.geometry.attributes.position) malhas.push(o); }); // o que se mexe fica com a luz em tempo real
       let area = 0, tris = 0;
       for (const o of malhas) { area += triangulosDe(o, o.matrixWorld, () => true, false).area; tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; }
       const lado = tris >= q.triangulos ? Infinity : Math.max(0.2, Math.sqrt((4.4 * area) / Math.max(1, q.triangulos - tris)));

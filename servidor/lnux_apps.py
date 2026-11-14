@@ -60,6 +60,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import zipfile
+import base64
+import struct
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -215,6 +218,161 @@ def normalizar_tags(valor) -> list:
         if t and t not in tags:
             tags.append(t)
     return tags[:LOJA_TAGS]
+
+
+# ── WEBC: o Sketchfab (mapas para a loja) ──────────────────────────────
+# A chave fica NESTE aparelho (~/.lnux-apps/chaves.json, permissão 600, que o LNUX preenche em 🧩 Apps Web › 🔑 Chaves
+# das APIs; ou SKETCHFAB_TOKEN no ambiente) e nunca vai para o navegador: é o servidor que busca e baixa. Só entram na
+# loja os modelos com licença que deixa redistribuir (as Creative Commons sem "ND"), com o crédito de quem fez.
+SKETCHFAB_API = "https://api.sketchfab.com/v3"
+SKETCHFAB_LICENCAS = {  # slug → (nome, endereço da licença)
+    "cc0": ("CC0 (domínio público)", "https://creativecommons.org/publicdomain/zero/1.0/"),
+    "by": ("CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"),
+    "by-sa": ("CC BY-SA 4.0", "https://creativecommons.org/licenses/by-sa/4.0/"),
+    "by-nc": ("CC BY-NC 4.0", "https://creativecommons.org/licenses/by-nc/4.0/"),
+    "by-nc-sa": ("CC BY-NC-SA 4.0", "https://creativecommons.org/licenses/by-nc-sa/4.0/"),
+}
+SKETCHFAB_MAXIMO = 600 * 1024 * 1024   # um modelo baixado (o .glb ou o .zip do glTF)
+
+
+def chaves_das_apis() -> dict:
+    """As chaves das APIs de fora (Sketchfab...): ~/.lnux-apps/chaves.json, que o LNUX grava."""
+    try:
+        d = json.loads((DADOS / "chaves.json").read_text("utf-8"))
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def gravar_chaves_das_apis(d: dict) -> None:
+    DADOS.mkdir(parents=True, exist_ok=True)
+    alvo = DADOS / "chaves.json"
+    temporario = alvo.with_suffix(".tmp")
+    temporario.write_text(json.dumps(d, ensure_ascii=False, indent=2), "utf-8")
+    os.chmod(temporario, 0o600)
+    os.replace(temporario, alvo)
+
+
+def chave_sketchfab() -> str:
+    c = chaves_das_apis().get("sketchfab")
+    if isinstance(c, dict):
+        c = c.get("token")
+    return str(os.environ.get("SKETCHFAB_TOKEN") or c or "").strip()
+
+
+def api_sketchfab() -> str:
+    return (os.environ.get("LNUX_SKETCHFAB_API") or SKETCHFAB_API).rstrip("/")
+
+
+def pedir_sketchfab(caminho: str, chave: str = "", tempo: float = 30):
+    """GET na API do Sketchfab (a chave vai como "Token", a pessoal da conta). Devolve o JSON."""
+    cab = {"User-Agent": "WEBC (LNUX-APPs)", "Accept": "application/json"}
+    if chave:
+        cab["Authorization"] = ("Bearer " + chave[7:]) if chave.lower().startswith("bearer ") else "Token " + chave
+    try:
+        with urllib.request.urlopen(urllib.request.Request(api_sketchfab() + caminho, headers=cab), timeout=tempo) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        motivo = {401: "A chave do Sketchfab não vale (confira em 🔑 Chaves das APIs).", 403: "O Sketchfab não deixou baixar este modelo.",
+                  404: "Esse modelo não existe no Sketchfab.", 429: "O Sketchfab pediu para esperar um pouco (pedidos demais)."}.get(e.code, f"O Sketchfab respondeu {e.code}.")
+        raise ErroPonte(e.code if e.code in (401, 403, 404, 429) else 502, motivo)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        raise ErroPonte(502, f"Não consegui falar com o Sketchfab ({getattr(e, 'reason', e)}). Tem internet?")
+
+
+def baixar_de_fora(url: str, destino: Path, maximo: int, tempo: float = 120) -> int:
+    """Baixa um endereço para um arquivo, sem passar do máximo. Devolve o tamanho."""
+    if urllib.parse.urlsplit(str(url)).scheme not in ("https", "http"):  # nada de file:// e afins vindo de uma resposta de fora
+        raise ErroPonte(502, "O endereço do download não é da internet.")
+    total = 0
+    req = urllib.request.Request(url, headers={"User-Agent": "WEBC (LNUX-APPs)"})
+    try:
+        with urllib.request.urlopen(req, timeout=tempo) as r, open(destino, "wb") as f:
+            while True:
+                pedaco = r.read(1024 * 256)
+                if not pedaco:
+                    break
+                total += len(pedaco)
+                if total > maximo:
+                    raise ErroPonte(413, f"O arquivo passa de {maximo // (1024 * 1024)} MB.")
+                f.write(pedaco)
+    except urllib.error.HTTPError as e:
+        raise ErroPonte(502, f"O download respondeu {e.code}.")
+    except (urllib.error.URLError, OSError) as e:
+        raise ErroPonte(502, f"O download não terminou ({getattr(e, 'reason', e)}).")
+    return total
+
+
+def gltf_zip_para_glb(caminho_zip: Path, maximo: int = SKETCHFAB_MAXIMO) -> bytes:
+    """O .zip de um glTF (scene.gltf + .bin + texturas, como o Sketchfab manda) → um .glb só, com tudo dentro."""
+    with zipfile.ZipFile(caminho_zip) as z:
+        infos = {i.filename: i for i in z.infolist() if not i.is_dir()}
+        if sum(i.file_size for i in infos.values()) > maximo:
+            raise ErroPonte(413, "O pacote do modelo é grande demais.")
+        principais = sorted((n for n in infos if n.lower().endswith(".gltf")), key=lambda n: (n.count("/"), n))
+        if not principais:
+            raise ErroPonte(422, "O pacote não tem um .gltf.")
+        principal = principais[0]
+        base = principal.rsplit("/", 1)[0] + "/" if "/" in principal else ""
+
+        def ler(uri: str) -> bytes:
+            if uri.startswith("data:"):
+                return base64.b64decode(uri.split(",", 1)[1])
+            nome = os.path.normpath(base + urllib.parse.unquote(uri)).replace("\\", "/")
+            if nome.startswith("../") or nome.startswith("/") or nome not in infos:
+                raise ErroPonte(422, f"O glTF pede um arquivo que não veio no pacote ({uri[:60]}).")
+            return z.read(nome)
+
+        gltf = json.loads(z.read(principal).decode("utf-8"))
+        corpo = bytearray()
+
+        def anexar(dados: bytes) -> tuple:
+            while len(corpo) % 4:
+                corpo.append(0)
+            inicio = len(corpo)
+            corpo.extend(dados)
+            return inicio, len(dados)
+
+        inicios = [anexar(ler(b["uri"]))[0] if b.get("uri") else anexar(b"\0" * int(b.get("byteLength", 0)))[0] for b in gltf.get("buffers", [])]
+        for v in gltf.get("bufferViews", []):
+            v["byteOffset"] = int(v.get("byteOffset", 0)) + inicios[int(v.get("buffer", 0))]
+            v["buffer"] = 0
+        tipos = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".ktx2": "image/ktx2"}
+        for img in gltf.get("images", []):
+            uri = img.pop("uri", None)
+            if not uri:
+                continue
+            if uri.startswith("data:"):
+                mime = uri[5:].split(";", 1)[0] or "image/png"
+            else:
+                mime = tipos.get(Path(urllib.parse.unquote(uri)).suffix.lower(), "image/png")
+            inicio, tamanho = anexar(ler(uri))
+            gltf.setdefault("bufferViews", []).append({"buffer": 0, "byteOffset": inicio, "byteLength": tamanho})
+            img["bufferView"] = len(gltf["bufferViews"]) - 1
+            img["mimeType"] = mime
+        while len(corpo) % 4:
+            corpo.append(0)
+        gltf["buffers"] = [{"byteLength": len(corpo)}] if corpo else []
+        js = json.dumps(gltf, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        js += b" " * (-len(js) % 4)
+        total = 12 + 8 + len(js) + (8 + len(corpo) if corpo else 0)
+        saida = b"glTF" + struct.pack("<II", 2, total) + struct.pack("<I", len(js)) + b"JSON" + js
+        if corpo:
+            saida += struct.pack("<I", len(corpo)) + b"BIN\0" + bytes(corpo)
+        return saida
+
+
+def resumo_sketchfab(m: dict) -> dict:
+    """Um modelo do Sketchfab, do jeito que a tela precisa (a licença diz se pode ir para a loja)."""
+    lic = m.get("license") or {}
+    slug = str(lic.get("slug") or lic.get("label") or "").lower() if isinstance(lic, dict) else str(lic or "").lower()
+    imgs = sorted(((m.get("thumbnails") or {}).get("images") or []), key=lambda i: abs(int(i.get("width") or 0) - 640))
+    autor = m.get("user") or {}
+    return {"uid": str(m.get("uid") or ""), "nome": str(m.get("name") or "")[:80], "autor": str(autor.get("displayName") or autor.get("username") or "")[:60],
+            "autor_url": str(autor.get("profileUrl") or ""), "url": str(m.get("viewerUrl") or ""), "miniatura": str(imgs[0].get("url") or "") if imgs else "",
+            "licenca": slug, "licenca_nome": (SKETCHFAB_LICENCAS.get(slug) or (str(lic.get("label") or slug) if isinstance(lic, dict) else slug,))[0],
+            "pode_loja": slug in SKETCHFAB_LICENCAS, "animacoes": int(m.get("animationCount") or 0), "faces": int(m.get("faceCount") or 0),
+            "baixavel": bool(m.get("isDownloadable", True))}
 
 
 class Sala:
@@ -1896,7 +2054,8 @@ class Manipulador(BaseHTTPRequestHandler):
                              "video": (x.get("video") or {}).get("n", 0)}
                             for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
-                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo, "videos": sala.videos})
+                "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo, "videos": sala.videos,
+                "agora": round(time.time(), 3)})  # o relógio do servidor: as animações do mapa tocam no mesmo ponto para todos
 
     # ── loja da Companhia
 
@@ -1923,7 +2082,8 @@ class Manipulador(BaseHTTPRequestHandler):
                         itens.append({"id": f.name, "tipo": tipo, "nome": str(dados.get("nome") or arq.stem), "descricao": str(dados.get("descricao") or ""),
                                       "autor": str(dados.get("autor") or ""), "conta": str(dados.get("conta") or ""), "arquivo": arq.name, "tamanho": arq.stat().st_size,
                                       "criado": int(dados.get("criado") or arq.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
-                                      "solto": False, "_arq": arq, "_mini": mini, "_pasta": f, "_segredo": str(dados.get("segredo") or "")})
+                                      "solto": False, "_arq": arq, "_mini": mini, "_pasta": f, "_segredo": str(dados.get("segredo") or ""),
+                                      **{k: dados[k] for k in ("origem", "licenca", "animacoes") if k in dados}})
                     elif f.is_file() and f.suffix.lower() in exts and ".enviando-" not in f.name:
                         ident = "a" + hashlib.sha1(f"{sub}/{f.name}".encode("utf-8", "surrogateescape")).hexdigest()[:11]
                         # a miniatura de um arquivo posto à mão fica numa pasta escondida ao lado (.miniaturas/<id>.png)
@@ -1944,6 +2104,8 @@ class Manipulador(BaseHTTPRequestHandler):
         partes = [x for x in resto.split("/") if x]
         p = self.parametros()
         dono = self.autorizado(False)
+        if partes and partes[0] == "sketchfab":
+            return self.loja_sketchfab(m, partes[1:], p, dono)
         publico = lambda item: {k: v for k, v in item.items() if not k.startswith("_")}
         if not partes and m in ("GET", "HEAD"):
             conta = self.conta_da_sessao()
@@ -2064,6 +2226,101 @@ class Manipulador(BaseHTTPRequestHandler):
                     self.loja_social_gravar(social)
             return self.responder_json({"ok": True})
         raise ErroPonte(404, f"A loja não conhece /{acao} ({m}).")
+
+    def loja_sketchfab(self, m: str, partes: list, p: dict, dono: bool):
+        """O Sketchfab na loja (só o dono): GET /api/loja/sketchfab (se há chave), PUT (guardar a chave), GET .../buscar
+        (q, cursor, animado) e POST .../importar {uid, tags} (baixa o modelo, vira .glb e entra na loja como mapa)."""
+        if not dono:
+            raise ErroPonte(403, "Só o dono do servidor traz mapas do Sketchfab.")
+        if not partes and m == "GET":
+            return self.responder_json({"chave": bool(chave_sketchfab()), "licencas": {k: v[0] for k, v in SKETCHFAB_LICENCAS.items()}})
+        if not partes and m == "PUT":
+            d = self.ler_json()
+            token = str(d.get("token") or "").strip()
+            if token and not re.fullmatch(r"[A-Za-z0-9_\-. ]{8,200}", token):
+                raise ErroPonte(400, "Essa chave do Sketchfab não parece certa.")
+            c = chaves_das_apis()
+            if token:
+                c["sketchfab"] = {"token": token}
+            else:
+                c.pop("sketchfab", None)
+            gravar_chaves_das_apis(c)
+            return self.responder_json({"chave": bool(token)})
+        if partes == ["buscar"] and m == "GET":
+            q = {"type": "models", "downloadable": "true", "count": "24", "q": str(p.get("q", ""))[:120]}
+            if p.get("animado") in ("1", "true"):
+                q["animated"] = "true"
+            if p.get("cursor"):
+                q["cursor"] = str(p["cursor"])[:200]
+            r = pedir_sketchfab("/search?" + urllib.parse.urlencode(q), chave_sketchfab())
+            proximo = (r.get("cursors") or {}).get("next") if isinstance(r.get("cursors"), dict) else None
+            if not proximo and r.get("next"):
+                proximo = (urllib.parse.parse_qs(urllib.parse.urlparse(str(r["next"])).query).get("cursor") or [None])[0]
+            return self.responder_json({"modelos": [resumo_sketchfab(x) for x in r.get("results", []) if isinstance(x, dict)], "proximo": proximo or ""})
+        if partes == ["importar"] and m == "POST":
+            d = self.ler_json()
+            uid = str(d.get("uid") or "")
+            if not re.fullmatch(r"[0-9a-f]{32}", uid):
+                raise ErroPonte(400, "Esse não é um modelo do Sketchfab (falta o código dele).")
+            chave = chave_sketchfab()
+            if not chave:
+                raise ErroPonte(400, "Falta a chave do Sketchfab (em 🔑 Chaves das APIs).")
+            info = pedir_sketchfab(f"/models/{uid}", chave)
+            r = resumo_sketchfab(info)
+            if not r["pode_loja"]:
+                raise ErroPonte(403, f"A licença deste modelo ({r['licenca_nome'] or 'sem licença'}) não deixa redistribuir: ele não pode ir para a loja.")
+            arquivos = pedir_sketchfab(f"/models/{uid}/download", chave)
+            escolha = next(((k, arquivos[k]) for k in ("glb", "gltf") if isinstance(arquivos.get(k), dict) and arquivos[k].get("url")), None)
+            if not escolha:
+                raise ErroPonte(502, "O Sketchfab não mandou um glTF para este modelo.")
+            tipo_arq, alvo = escolha
+            pasta_tipo = self.ponte.loja / LOJA_TIPOS["mundo"][0]
+            pasta_tipo.mkdir(parents=True, exist_ok=True)
+            cabe_no_disco(pasta_tipo, int(alvo.get("size") or 0) * 2)
+            ident = secrets.token_hex(6)
+            pasta = pasta_tipo / ident
+            pasta.mkdir()
+            try:
+                nome_arq = (re.sub(r"[^\w-]+", "-", r["nome"].lower()).strip("-")[:40] or "mapa") + ".glb"
+                bruto = pasta / (".baixando." + tipo_arq)
+                baixar_de_fora(str(alvo["url"]), bruto, SKETCHFAB_MAXIMO)
+                if tipo_arq == "gltf":
+                    (pasta / nome_arq).write_bytes(gltf_zip_para_glb(bruto))
+                    bruto.unlink()
+                else:
+                    os.replace(bruto, pasta / nome_arq)
+                if not formato_confere(pasta / nome_arq, ".glb"):
+                    raise ErroPonte(502, "O que veio do Sketchfab não é um glTF de verdade.")
+                if r["miniatura"]:
+                    try:
+                        baixar_de_fora(r["miniatura"], pasta / ".miniatura", 8 * 1024 * 1024, 30)
+                        cabeca = (pasta / ".miniatura").read_bytes()[:12]
+                        ext = "png" if cabeca[:4] == b"\x89PNG" else "webp" if cabeca[8:12] == b"WEBP" else "jpg"
+                        os.replace(pasta / ".miniatura", pasta / f"miniatura.{ext}")
+                    except ErroPonte:
+                        (pasta / ".miniatura").unlink(missing_ok=True)
+                slug = r["licenca"]
+                dados = {"nome": sala_texto(d.get("nome"), 60) or r["nome"] or "Mapa do Sketchfab", "descricao": sala_texto(str(info.get("description") or ""), 600),
+                         "autor": r["autor"], "conta": "", "arquivo": nome_arq, "criado": int(time.time()), "segredo": "",
+                         "origem": {"site": "Sketchfab", "uid": uid, "url": r["url"], "autor": r["autor"], "autor_url": r["autor_url"]},
+                         "licenca": {"slug": slug, "nome": SKETCHFAB_LICENCAS[slug][0], "url": SKETCHFAB_LICENCAS[slug][1]},
+                         "animacoes": r["animacoes"]}
+                (pasta / "item.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2), "utf-8")
+                # os # : os que o dono escreveu e os do próprio Sketchfab (quem pesquisa pelo nome do jogo acha)
+                tags = normalizar_tags(list(normalizar_tags(d.get("tags", ""))) + [str(t.get("name") if isinstance(t, dict) else t).strip().replace(" ", "-") for t in (info.get("tags") or [])])
+                if tags:
+                    with LOJA_TRAVA:
+                        social = self.loja_social()
+                        social.setdefault(ident, {})["tags"] = tags
+                        self.loja_social_gravar(social)
+            except BaseException:
+                shutil.rmtree(pasta, ignore_errors=True)
+                raise
+            item = next(i for i in self.loja_itens() if i["id"] == ident)
+            with LOJA_TRAVA:
+                publico = self.loja_com_social({k: v for k, v in item.items() if not k.startswith("_")}, self.loja_social(), self.conta_da_sessao())
+            return self.responder_json({"item": publico}, 201)
+        raise ErroPonte(404, f"A loja não conhece /sketchfab/{'/'.join(partes)} ({m}).")
 
     def loja_publicar(self, tipo: str, p: dict, dono: bool):
         if not dono and not self.ponte.loja_publicar():

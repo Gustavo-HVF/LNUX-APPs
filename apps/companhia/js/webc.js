@@ -168,6 +168,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Mapas do Sketchfab na loja (com o crédito de quem fez) e mapas com movimento que tocam dentro do jogo.",
     "A tela do jogo: as expressões de 1 a 9, o bate-papo no canto e a janela Opções (personagem, sala, ajuda, acessibilidade, gráfico e controle).",
     "No início: o chat bot, as novidades e os widgets.",
     "O nome é pedido na tela de entrar, também para quem joga sem conta.",

@@ -386,6 +386,7 @@
 
     // ── a cada quadro: entradas → velocidade → colisão ──────────────
     atualizar(dt) {
+      this.atualizarAnimacoes(); // as animações do mapa tocam andando ou não
       if (!this.andando || !this.palco.vrm) return;
       const raiz = this.palco.raiz, t = this.teclas, esc = this.altura / 1.5;
       let lado = (t.has("direita") ? 1 : 0) - (t.has("esquerda") ? 1 : 0) + this.direcional.x;
@@ -597,7 +598,7 @@
           carregador.setMeshoptDecoder(V.MeshoptDecoder);
           const u = URL.createObjectURL(arquivos.get(principal));
           urls.push(u);
-          try { objeto = (await carregador.loadAsync(u)).scene; }
+          try { const gltf = await carregador.loadAsync(u); objeto = gltf.scene; objeto.animations = gltf.animations || []; }
           catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o cenário: " + e.message); }
           finally { draco.dispose(); }
         } else if (tipo === "fbx") {
@@ -620,6 +621,7 @@
       if (!triangulos) throw new Error("Esse arquivo não tem nenhuma malha para servir de cenário.");
       this.tirarMapa();
       this.mapa = objeto;
+      this.prepararAnimacoes(objeto);
       this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, deitado: false, posicao: [0, 0, 0], partida: null }, info.ajuste || {}) };
       // tamanho: os FBX costumam vir em centímetros; um mapa "gigante" ou "minúsculo" é ajustado para caber uma pessoa
       const bruto = new T.Box3().setFromObject(objeto).getSize(new T.Vector3());
@@ -648,8 +650,11 @@
       this.caixa.setFromObject(this.mapa);
       if (this.colisor) { this.colisor.geometry.dispose(); this.colisor = null; }
       // todas as malhas viram uma só (só as posições), com a árvore que acelera a colisão
-      const malhas = [];
-      this.mapa.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.attributes.position && o.visible) malhas.push(o); });
+      // as peças que se mexem (as animadas) não entram: a colisão é a do mapa parado (a não ser que quase tudo se mexa)
+      const todas = [];
+      this.mapa.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.attributes.position && o.visible) todas.push(o); });
+      const paradas = todas.filter((o) => !o.isSkinnedMesh && !o.userData.animado);
+      const malhas = paradas.length >= todas.length * 0.4 ? paradas : todas;
       const gerador = new V.StaticGeometryGenerator(malhas);
       gerador.attributes = ["position"];
       const geo = gerador.generate();
@@ -684,8 +689,35 @@
         pmrem.dispose();
       } catch (e) { console.warn("ambiente", e); }
     }
+    /**
+     * As animações do mapa (moinho, água, portas, bichos...): tocam sem parar e, numa sala, no mesmo ponto para todos (pelo
+     * relógio do servidor). As peças animadas ficam marcadas (userData.animado): fora da colisão e da luz calculada.
+     */
+    prepararAnimacoes(objeto) {
+      const T = window.THREE;
+      this.mixer = null;
+      this.animacoes = (objeto.animations || []).filter((c) => c && c.tracks && c.tracks.length && c.duration > 0);
+      if (!this.animacoes.length) return;
+      const alvos = new Set();
+      for (const c of this.animacoes) for (const t of c.tracks) { try { alvos.add(T.PropertyBinding.parseTrackName(t.name).nodeName); } catch (e) { /* trilha estranha */ } }
+      objeto.traverse((o) => {
+        for (let p = o; p && p !== objeto.parent; p = p.parent) if (alvos.has(p.name) || alvos.has(p.uuid)) { o.userData.animado = true; break; }
+        if (o.isSkinnedMesh) o.userData.animado = true;
+      });
+      this.mixer = new T.AnimationMixer(objeto);
+      for (const c of this.animacoes) this.mixer.clipAction(c).play();
+      this.atualizarAnimacoes();
+    }
+    /** O ponto das animações do mapa: o relógio (o da sala, se estiver numa) — assim todos veem o moinho na mesma posição. */
+    atualizarAnimacoes() {
+      if (!this.mixer) return;
+      const agora = (C.relogioDaSala ? C.relogioDaSala() : Date.now() / 1000) % 86400;
+      this.mixer.setTime(agora);
+    }
     tirarMapa() {
       if (!this.mapa) return;
+      if (this.mixer) { this.mixer.stopAllAction(); this.mixer.uncacheRoot(this.mapa); this.mixer = null; }
+      this.animacoes = [];
       if (this.luzes) this.luzes.limpar();
       this.palco.cena.remove(this.mapa);
       this.mapa.traverse((o) => {

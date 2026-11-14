@@ -230,6 +230,34 @@ cartões com a miniatura, quantas **curtidas** (♥) e quantas pessoas **baixara
   `.social.json`, na mesma pasta.
 - É a única pasta do aparelho que os visitantes alcançam. O formato de cada arquivo é conferido ao publicar.
 
+### Mapas do Sketchfab na loja
+
+O dono da loja traz mapas do [Sketchfab](https://sketchfab.com) direto para a loja, pela API dele:
+
+1. **A chave**: em [sketchfab.com/settings/password](https://sketchfab.com/settings/password) (*API Token*), copie a
+   sua chave e guarde no LNUX (*🧩 Apps Web › 🔑 Chaves das APIs*) ou no próprio botão **Sketchfab** da loja aberta
+   no aparelho do servidor. Ela fica em `~/.lnux-apps/chaves.json` (permissão 600; ou na variável `SKETCHFAB_TOKEN`) e
+   **nunca vai para o navegador**: quem busca e baixa é o servidor.
+2. **Buscar**: o botão **Sketchfab** (só para o dono) procura entre os modelos que podem ser baixados, com
+   "Só os com animação" para achar os que se mexem. Cada cartão mostra a miniatura, o autor, a licença e quantas
+   animações tem.
+3. **Trazer para a loja**: o servidor baixa o modelo (o `.glb`, ou o glTF em ZIP, que ele junta num `.glb` com as
+   texturas dentro), tira a miniatura e publica em *Mapas*, com os # que você puser mais os # do próprio Sketchfab.
+
+**Licenças.** A loja redistribui o arquivo para quem entra pelo link, então só entram modelos com licença Creative
+Commons que deixa redistribuir: **CC0**, **CC BY**, **CC BY-SA**, **CC BY-NC** e **CC BY-NC-SA**. Os comprados na loja
+do Sketchfab (licença *Standard* / *Editorial*) e os *sem derivados* (ND) aparecem com "Licença não deixa": esses
+você baixa no site e usa só no seu *Cenário*, sem publicar. Todo item trazido mostra o **crédito**: o nome original,
+quem fez (com o link), "Sketchfab" e a licença — é o que as licenças BY pedem.
+
+### Mapas com movimento
+
+Mapas com animação (moinhos, portas, água, ventiladores, plataformas...) **tocam dentro do jogo**: as animações do
+`.glb` (e as que vêm do `.fbx`/`.dae` convertidos) rodam em laço. Numa sala, elas seguem o **relógio do servidor**:
+todo mundo vê a mesma peça no mesmo lugar ao mesmo tempo. As partes que se mexem ficam fora da colisão (você não
+fica preso numa pá girando) e fora da luz calculada por raios. A vitrine da loja já mostra o mapa se mexendo e
+avisa quantas animações ele tem.
+
 ### Site publicado só com o WEBC
 
 O servidor pode publicar **só o WEBC** (`python3 servidor/lnux_apps.py --so-app companhia`; no LNUX, *🧩 Apps
@@ -689,10 +717,10 @@ js/temas.js        os temas (o do WEBC e os do VLC-Web, em temas/vlc-web-temas.c
 js/idiomas.js      português, inglês e japonês: C.t() e a tradução sozinha do que aparece na tela
 js/textos.js       o dicionário (português → inglês e japonês)
 js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
-js/inicio.js       a tela de início: o cartão de entrar na conta (ou jogar sem conta) e o caminho para o chat bot
 js/contas.js       contas: criar com o código por e-mail, entrar, esqueci a senha, perfil (foto, capa, bio...) e os
                    ajustes do dono (o e-mail que manda os códigos, idade mínima, exigir conta)
-js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar
+js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine), publicar e
+                   trazer mapas do Sketchfab
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
@@ -724,6 +752,7 @@ python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois 
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
+python3 tests/testar_navegador.py companhia_sketchfab  # Sketchfab de mentira: buscar, licenças, trazer para a loja, mapa com movimento numa sala
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se
@@ -761,7 +790,11 @@ na hora. Se o aparelho tiver o Blender (ou o módulo `bpy`), ele confere também
   dos ossos.
 - **Salas**: só bate-papo por texto (ainda não há voz entre as pessoas) e a sala vive no servidor de quem criou:
   para pessoas de fora, o servidor precisa estar num endereço que elas alcancem (o túnel do LNUX ou a rede de casa).
-- **Loja**: não há preço, avaliações nem contas: quem publica é identificado só pelo nome que escreve.
+- **Loja**: não há preço nem comentários nos itens.
+- **Personagens do VRoid Hub e do BOOTH** não vêm direto para a loja. O VRoid Hub tem uma API oficial, mas ela pede
+  um app registrado na pixiv (com a aprovação deles) e proíbe guardar os modelos, então eles não poderiam ficar na
+  loja. O BOOTH não tem API (só a página da loja) e quase tudo nele é vendido com licença que não deixa redistribuir:
+  baixe pelo site e importe o `.vrm` ou o `.unitypackage` como já faz.
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.

@@ -32,7 +32,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video", "companhia_luzes", "companhia_webc"]  # render e audio: partes do Vídeo testadas sozinhas
+APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video", "companhia_luzes", "companhia_webc", "companhia_sketchfab"]  # render e audio: partes do Vídeo testadas sozinhas
 
 
 def porta_livre() -> int:
@@ -80,7 +80,10 @@ def main(argv: list) -> int:
     with tempfile.TemporaryDirectory(prefix="lnux-apps-navegador-") as tmp:
         tmp = Path(tmp)
         gerar_midias(tmp / "midias")
-        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados"), "LNUX_SALA_SUMIU": "240"}  # sem placa de vídeo, a página trava ao desenhar o cenário
+        porta_sketchfab = porta_livre()  # um Sketchfab de mentira, que o teste companhia_sketchfab sobe nessa porta
+        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados"), "LNUX_SALA_SUMIU": "240",  # sem placa de vídeo, a página trava ao desenhar o cenário
+               "LNUX_SKETCHFAB_API": f"http://127.0.0.1:{porta_sketchfab}/v3"}
+        env.pop("SKETCHFAB_TOKEN", None)
         porta = porta_livre()
         servidor = subprocess.Popen([sys.executable, str(RAIZ / "servidor" / "lnux_apps.py"), "--porta", str(porta), "--raiz", str(tmp)],
                                     env=env, stdout=subprocess.DEVNULL, stderr=open(tmp / "servidor.log", "w"))
@@ -93,7 +96,7 @@ def main(argv: list) -> int:
                     time.sleep(0.1)
             token = subprocess.run([sys.executable, str(RAIZ / "servidor" / "lnux_apps.py"), "--mostrar-token"], env=env, capture_output=True, text=True).stdout.strip()
             ambiente = {**os.environ, "LNUX_TESTE_BASE": f"http://127.0.0.1:{porta}", "LNUX_TESTE_TOKEN": token,
-                        "LNUX_TESTE_MIDIAS": str(tmp / "midias"), "LNUX_TESTE_SAIDA": str(tmp)}
+                        "LNUX_TESTE_MIDIAS": str(tmp / "midias"), "LNUX_TESTE_SAIDA": str(tmp), "LNUX_TESTE_SKETCHFAB_PORTA": str(porta_sketchfab)}
             falhou = []
             for app in escolhidos:
                 print(f"\n── {app} ──")

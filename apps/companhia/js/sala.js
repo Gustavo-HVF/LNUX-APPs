@@ -27,6 +27,10 @@
   /** Emoção → expressões do VRM (as mesmas do palco). */
   const ROSTO = { feliz: { happy: 0.8 }, rindo: { happy: 1, aa: 0.35 }, triste: { sad: 0.85 }, brava: { angry: 0.9 }, surpresa: { surprised: 0.9 }, apaixonada: { happy: 0.6, relaxed: 0.5 }, sonolenta: { relaxed: 0.6, blink: 0.45 },
     pensativa: { relaxed: 0.3 }, provocadora: { happy: 0.55, blinkLeft: 0.9 }, timida: { happy: 0.35, relaxed: 0.45 }, animada: { happy: 1, surprised: 0.2 }, confusa: { surprised: 0.35, sad: 0.25 } };
+  /** O relógio da sala (em segundos): o do servidor, para quem está numa sala; senão, o deste aparelho. As animações dos
+   *  mapas usam este relógio: todos na sala veem o moinho na mesma posição. */
+  let relogioDe = null;
+  C.relogioDaSala = () => Date.now() / 1000 + (relogioDe && relogioDe.dentro && relogioDe.desvio !== undefined ? relogioDe.desvio : 0);
   const PRESETS_ROSTO = ["happy", "sad", "angry", "relaxed", "surprised", "aa", "ih", "ou", "ee", "oh", "blink", "blinkLeft", "blinkRight"];
 
   /** Pede à sala (o código da sala é o que dá acesso; a chave da ponte só vai se houver: é o dono do servidor). */
@@ -505,8 +509,14 @@
       if (performance.now() - this.ultimaAparencia > 1000) { this.ultimaAparencia = performance.now(); this.enviarAparencia(); }
       this.ocupado = true;
       try {
+        const enviado = Date.now() / 1000;
         const r = await pedir("POST", `${this.codigo}/estado`, { json: { id: this.eu.id, segredo: this.eu.segredo, desde: this.visto, estado: this.meuEstado() } });
         this.falhas = 0;
+        if (typeof r.agora === "number") { // o relógio do servidor menos o meu (metade da ida e volta descontada), suavizado
+          const d = r.agora - (enviado + Date.now() / 1000) / 2;
+          this.desvio = this.desvio === undefined ? d : this.desvio * 0.85 + d * 0.15;
+          relogioDe = this;
+        }
         const vivos = new Set();
         for (const j of r.pessoas) {
           if (j.id === this.eu.id) { this.meuVideo = j.video || 0; continue; }
