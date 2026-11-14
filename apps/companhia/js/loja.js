@@ -59,6 +59,13 @@
       return !!publico.loja;
     },
     lista: () => pedir("GET", ""),
+    /** O Sketchfab (só o dono): a chave fica no servidor, que busca e baixa. */
+    sketchfab: {
+      estado: () => pedir("GET", "sketchfab"),
+      chave: (token) => pedir("PUT", "sketchfab", { json: { token } }),
+      buscar: (q, { animado = false, cursor = "" } = {}) => pedir("GET", "sketchfab/buscar?" + new URLSearchParams({ q, animado: animado ? "1" : "0", cursor })),
+      importar: (uid, tags = "") => pedir("POST", "sketchfab/importar", { json: { uid, tags } }),
+    },
     miniatura: (item) => `/api/loja/${item.id}/miniatura?v=${item.miniatura}`,
     /** Baixa o arquivo do item (com o andamento: aoProgresso(fração)). */
     async baixar(item, aoProgresso = () => {}) {
@@ -274,6 +281,13 @@
       cena.traverse((o) => { if (o.isMesh && o.geometry && !o.geometry.attributes.normal) o.geometry.computeVertexNormals(); });
       this.cena.add(cena);
       this.objeto = cena;
+      // um mapa com animações (moinho, água...): elas já tocam na prévia
+      if (gltf.animations && gltf.animations.length) {
+        const mixer = new T.AnimationMixer(cena);
+        for (const c of gltf.animations) mixer.clipAction(c).play();
+        this.aoQuadro = (dt) => mixer.update(dt);
+        this.animado = gltf.animations.length;
+      }
       const caixa = new T.Box3().setFromObject(cena), centro = caixa.getCenter(new T.Vector3()), raio = Math.max(0.5, caixa.getSize(new T.Vector3()).length() / 2);
       const o = this.olhar;
       o.alvo.copy(centro);
@@ -353,6 +367,91 @@
   };
 
   /** O cartão de um item: a prévia em cima e, embaixo, o nome, quem publicou, as curtidas e quantos baixaram. */
+  /** O crédito de um item que veio de fora (o Sketchfab): o nome, quem fez, o site e a licença, com os links. */
+  C.creditoDoItem = function (item) {
+    const o = item.origem || {}, l = item.licenca || {};
+    const link = (texto, url) => (url && /^https?:\/\//.test(url) ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer nofollow", translate: "no" }, texto) : el("span", { translate: "no" }, texto));
+    return LNUX.filhos(t("Original:") + " ", link("“" + item.nome + "”", o.url), " — ", link(o.autor || "?", o.autor_url), ` · ${o.site || ""}`, l.nome ? " · " : null, l.nome ? link(l.nome, l.url) : null);
+  };
+
+  /**
+   * Trazer mapas do Sketchfab para a loja (só o dono do servidor): buscar, ver a licença de cada um e trazer. A chave do
+   * Sketchfab fica no servidor (chaves.json); o servidor baixa o modelo, converte para .glb e põe na loja com o crédito.
+   * Resolve com o item que entrou na loja (ou null).
+   */
+  C.janelaSketchfab = async function () {
+    let estado;
+    try { estado = await C.loja.sketchfab.estado(); } catch (e) { LNUX.erro(e); return null; }
+    let resolvido = null, cursor = "", busca = "", animado = false;
+    const chaveCampo = el("input", { class: "lnux-entrada", type: "password", autocomplete: "off", placeholder: "Cole a sua chave da API do Sketchfab", "aria-label": "Chave da API do Sketchfab" });
+    const areaChave = el("div", { class: "sketchfab-chave" });
+    const campo = el("input", { class: "lnux-entrada", type: "search", placeholder: "Procurar mapas no Sketchfab (ex.: praça, castelo, fnaf)", "aria-label": "Procurar no Sketchfab", "data-enter-proprio": "1" });
+    const soAnimados = el("input", { type: "checkbox", "aria-label": "Só os com animação" });
+    const grade = el("div", { class: "sketchfab-grade" });
+    const mais = el("button", { type: "button", class: "lnux-botao", hidden: true, onclick: () => buscar(true) }, "Mais resultados");
+    const aviso = el("p", { class: "fraco pequeno", style: { margin: 0 } });
+    const tags = el("input", { class: "lnux-entrada", placeholder: "# para achar na loja (opcional)", "aria-label": "# para achar na loja" });
+    function desenharChave() {
+      areaChave.replaceChildren(...LNUX.filhos(
+        estado.chave ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("A chave do Sketchfab está guardada no servidor."), " ",
+          el("button", { type: "button", class: "lnux-botao plano conta-link", onclick: () => { estado.chave = false; desenharChave(); } }, t("Trocar a chave")))
+          : el("div", { class: "linha" }, chaveCampo, el("button", { type: "button", class: "lnux-botao primario", id: "sketchfab-guardar-chave", onclick: async () => {
+            try { estado = { ...estado, ...(await C.loja.sketchfab.chave(chaveCampo.value.trim())) }; chaveCampo.value = ""; desenharChave(); LNUX.aviso(t("Chave do Sketchfab guardada no servidor."), "ok"); } catch (e) { LNUX.erro(e); }
+          } }, t("Guardar a chave"))),
+        estado.chave ? null : el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Para baixar, o Sketchfab pede a chave da sua conta (sketchfab.com › Configurações › Senha e API). Ela fica só no servidor, nunca no navegador."))));
+    }
+    async function buscar(continuar) {
+      if (!continuar) { cursor = ""; grade.replaceChildren(el("p", { class: "fraco" }, t("Procurando..."))); }
+      busca = campo.value.trim();
+      animado = soAnimados.checked;
+      try {
+        const r = await C.loja.sketchfab.buscar(busca, { animado, cursor });
+        if (!continuar) grade.replaceChildren();
+        for (const m of r.modelos) grade.append(cartao(m));
+        if (!grade.children.length) grade.append(el("p", { class: "fraco" }, t("Nada com esse nome.")));
+        cursor = r.proximo || "";
+        mais.hidden = !cursor;
+      } catch (e) { grade.replaceChildren(el("p", { class: "conta-msg erro" }, e.message)); }
+    }
+    function cartao(m) {
+      const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno", disabled: !m.pode_loja, "data-uid": m.uid,
+        title: m.pode_loja ? "" : "A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.", onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
+      return el("article", { class: "sketchfab-cartao" + (m.pode_loja ? "" : " bloqueado"), "data-uid": m.uid },
+        el("div", { class: "capa" }, m.miniatura ? el("img", { src: m.miniatura, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : null,
+          m.animacoes ? el("span", { class: "selo-novo" }, t("animado")) : null),
+        el("div", { class: "sketchfab-info" },
+          el("b", { translate: "no" }, m.nome),
+          el("span", { class: "fraco pequeno", translate: "no" }, m.autor),
+          el("span", { class: "sketchfab-licenca" + (m.pode_loja ? " livre" : "") }, m.licenca_nome || "?"),
+          el("div", { class: "linha" }, trazer, /^https?:\/\//.test(m.url || "") ? el("a", { class: "lnux-botao plano pequeno", href: m.url, target: "_blank", rel: "noopener noreferrer nofollow" }, t("Ver no Sketchfab")) : null)));
+    }
+    async function importar(m, botao) {
+      if (!estado.chave) { LNUX.aviso(t("Falta a chave do Sketchfab."), "alerta"); chaveCampo.focus(); return; }
+      botao.disabled = true;
+      const prog = LNUX.progresso(t("Trazendo do Sketchfab"));
+      prog.definir(0.15, t("Baixando \"{nome}\" e convertendo para .glb...", { nome: m.nome }));
+      try {
+        const r = await C.loja.sketchfab.importar(m.uid, tags.value);
+        resolvido = r.item;
+        LNUX.aviso(t("\"{nome}\" está na loja.", { nome: r.item.nome }), "ok");
+        janela.fechar(r.item);
+      } catch (e) { LNUX.erro(e); botao.disabled = false; }
+      finally { prog.fechar(); }
+    }
+    campo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); buscar(false); } });
+    soAnimados.addEventListener("change", () => buscar(false));
+    desenharChave();
+    const corpo = el("div", { class: "ajustes janela-sketchfab" }, areaChave,
+      el("div", { class: "linha" }, campo, el("button", { type: "button", class: "lnux-botao primario", id: "sketchfab-buscar", onclick: () => buscar(false) }, t("Procurar"))),
+      el("label", { class: "lnux-alternar" }, soAnimados, t("Só os com animação (moinhos, água, portas...)")),
+      el("label", { class: "lnux-campo" }, el("span", {}, t("# (categorias)")), tags),
+      grade, mais, aviso,
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Só entram na loja os modelos com licença Creative Commons que deixa redistribuir (CC0, BY, BY-SA, BY-NC, BY-NC-SA), com o crédito de quem fez. Os comprados (licença Standard) não podem ir para a loja.")));
+    const janela = LNUX.dialogo({ titulo: t("Mapas do Sketchfab"), largo: true, corpo, botoes: [{ rotulo: "Fechar", valor: null }], aoAbrir: () => { buscar(false); campo.focus(); } });
+    const r = await janela;
+    return resolvido || (r && r.id ? r : null);
+  };
+
   C.cartaoDaLoja = function (item, { aoAbrir = () => {}, aoCurtir = null } = {}) {
     const tp = TIPOS[item.tipo];
     const capa = el("div", { class: "capa" }, item.miniatura ? el("img", { src: C.loja.miniatura(item), alt: "", loading: "lazy" }) : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, tp.icone),
@@ -394,12 +493,14 @@
     const botaoFiltro = el("button", { type: "button", class: "webc-filtro", "aria-expanded": "false", onclick: () => { filtro.hidden = !filtro.hidden; botaoFiltro.setAttribute("aria-expanded", String(!filtro.hidden)); desenharFiltro(); } },
       el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
     const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => janelaPublicar(ctx, { tipo: aba || "personagem" }).then((item) => { if (item) { recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "＋ Publicar");
+    const botaoSketchfab = el("button", { class: "lnux-botao", type: "button", id: "loja-sketchfab", hidden: true, title: "Trazer mapas do Sketchfab",
+      onclick: () => C.janelaSketchfab().then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "Sketchfab");
     const caixa = el("div", { class: "loja webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Loja", "aria-modal": pagina ? undefined : "true" },
       el("header", { class: "loja-topo webc-painel-topo" },
         el("h1", { class: "webc-painel-titulo" }, "LOJA"),
         el("label", { class: "webc-busca" }, C.iconeWebc ? C.iconeWebc("busca") : "🔍", campo),
         el("span", { class: "webc-espaco" }),
-        publicar, botaoFiltro,
+        botaoSketchfab, publicar, botaoFiltro,
         pagina ? null : el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a loja", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair() })),
       filtro, abas, dono, grade, vazio, detalhe);
     (dentro || document.body).append(caixa);
@@ -483,6 +584,7 @@
     }
     function desenharDono() {
       dono.hidden = !dados.dono;
+      botaoSketchfab.hidden = !dados.dono;
       if (!dados.dono) return;
       const caixaPublicar = el("input", { type: "checkbox", checked: dados.publicar });
       caixaPublicar.addEventListener("change", async () => {
@@ -557,6 +659,8 @@
               item.autor ? (item.conta && C.webc ? el("button", { type: "button", class: "webc-link-autor", translate: "no", onclick: () => C.webc.verPerfil(item.conta) }, t("por {autor}", { autor: item.autor })) : el("span", { translate: "no" }, t("por {autor}", { autor: item.autor }))) : null,
               " · " + [quando(item.criado), LNUX.bytes(item.tamanho)].filter(Boolean).join(" · "))),
             tags,
+            item.origem ? el("p", { class: "loja-credito" }, ...C.creditoDoItem(item)) : null,
+            item.animacoes ? el("p", { class: "fraco pequeno loja-animado", style: { margin: 0 } }, t(item.animacoes > 1 ? "Com {n} animações: elas tocam no jogo." : "Com 1 animação: ela toca no jogo.", { n: item.animacoes })) : null,
             item.descricao ? el("p", { class: "loja-descricao", translate: "no" }, item.descricao) : null,
             numeros,
             el("p", { class: "fraco pequeno", style: { margin: 0 } }, item.tipo === "personagem" ? "Arraste para girar; a rodinha aproxima. Usar guarda a personagem entre as suas." :

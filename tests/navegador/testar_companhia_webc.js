@@ -10,6 +10,7 @@
 // do perfil (capa, foto, bio, salvos e amigos); pedir, aceitar e desfazer amizade; a tela de carregamento ao entrar
 // numa sala; e que nada no site fala do LNUX nem do aparelho.
 const { chromium } = require("playwright");
+const { menus, nomeGuardado } = require("./companhia_menus.js");
 const fs = require("fs");
 const net = require("net");
 const path = require("path");
@@ -62,6 +63,7 @@ function lerEmail(bruto) {
   const consola = [];
   const pessoa = async (nome, locale = "pt-BR") => {
     const contexto = await navegador.newContext({ viewport: { width: 1280, height: 820 }, locale });
+    await nomeGuardado(contexto, nome);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !RUIDO.test(m.text()) && !/40[13]/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
@@ -94,8 +96,14 @@ function lerEmail(bruto) {
     ok(urso && urso.tags.join() === "fnaf,terror" && aceno && aceno.tags.join() === "fnaf", "publicar na loja com # (o urso ganha #fnaf e #terror)");
 
     // ── os idiomas: o navegador em inglês abre em inglês; troca sem recarregar e fica guardado ──
+    await visita.pagina.addInitScript(() => document.addEventListener("DOMContentLoaded", () => {
+      const app = document.querySelector(".lnux-app");
+      window.__abertura = { carregando: document.documentElement.hasAttribute("data-carregando"), app: app && getComputedStyle(app).visibility, logo: !!document.querySelector(".webc-abrindo") };
+    }));
     await visita.pagina.goto(`${BASE}/apps/companhia/`);
     await visita.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
+    const abertura = await visita.ev(() => ({ ...window.__abertura, depois: document.documentElement.hasAttribute("data-carregando") }));
+    ok(abertura.carregando && abertura.app === "hidden" && abertura.logo && !abertura.depois, "ao abrir, só o logo do WEBC aparece até a tela de entrar ficar pronta (o layout do chat bot não pisca)");
     const ingles = await visita.ev(() => ({ lang: document.documentElement.lang, entrar: document.querySelector("#conta-entrar").textContent, sem: document.querySelector("#inicio-sem-conta").textContent,
       email: document.querySelector('.tela-inicio input[type="email"]').getAttribute("aria-label"), ativo: document.querySelector(".webc-login-idiomas .ativo").dataset.idioma }));
     ok(ingles.lang === "en" && ingles.entrar === "Log in" && ingles.sem === "Play without an account" && ingles.ativo === "en", `o navegador em inglês já abre em inglês ("${ingles.entrar}", "${ingles.sem}")`);
@@ -106,6 +114,11 @@ function lerEmail(bruto) {
     ok(await visita.ev(() => document.querySelector("#conta-entrar").textContent === "Entrar" && document.documentElement.lang === "pt-BR"), "e de volta ao português");
     await visita.pagina.click('.webc-login-idiomas [data-idioma="en"]');
     await visita.pagina.click("#inicio-sem-conta");
+    await visita.pagina.waitForSelector("#inicio-nome");
+    ok(await visita.ev(() => document.querySelector("#inicio-jogar").textContent === "Play" && document.querySelector("#inicio-nome").getAttribute("aria-label") === "Your name"),
+      "jogar sem conta pede o nome no próprio cartão (\"Your name\", \"Play\")");
+    await visita.pagina.fill("#inicio-nome", "Visitor");
+    await visita.pagina.click("#inicio-jogar");
     await visita.pagina.waitForSelector('.webc-cartao[data-ir="loja"]', { timeout: 30000 });
     const inicioEn = await visita.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.textContent).join(" | "), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.textContent).join() }));
     ok(/store/i.test(inicioEn.cartoes) && /rooms/i.test(inicioEn.cartoes) && /profile/i.test(inicioEn.cartoes) && /^store,rooms,profile$/i.test(inicioEn.nav), `o início em inglês: ${inicioEn.nav}`);
@@ -190,6 +203,28 @@ function lerEmail(bruto) {
     ok(perfil.banner && perfil.foto && perfil.bio === "Gosto de terror e de pizza." && perfil.salvos.join() === "Urso animatrônico" && perfil.grupos === "Personagens,Mapas,Animações" && /Bio,Salvos,Amigos/.test(perfil.secoes),
       "a página Perfil: a capa (banner), a foto, e descendo a bio, os salvos (personagens, mapas e animações) e os amigos");
     await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-webc-perfil.png") });
+
+    // ── o início: os widgets que a pessoa escolhe e as novidades ──
+    await ana.pagina.click(".webc-logo, .webc-topo .webc-logo");
+    await ana.pagina.waitForSelector('.webc-quadrado[data-quadrado="widgets"]', { timeout: 20000 });
+    await ana.pagina.click('.webc-quadrado[data-quadrado="widgets"]');
+    await ana.pagina.waitForSelector(".webc-widgets-escolher");
+    for (const id of ["relogio", "notas", "salvos"]) await ana.pagina.click(`.webc-widget-opcao[data-widget="${id}"] button`);
+    await ana.pagina.click('.lnux-dialogo footer button.primario');
+    await ana.pagina.waitForSelector('.webc-widget[data-widget="salvos"] .webc-widget-miniatura', { timeout: 20000 });
+    await ana.pagina.fill(".webc-notas", "levar o urso para a praça");
+    await ana.pagina.waitForTimeout(500);
+    await ana.pagina.reload();
+    await ana.pagina.waitForSelector('.webc-widget[data-widget="notas"] .webc-notas', { timeout: 30000 });
+    const widgets = await ana.ev(() => ({ ordem: [...document.querySelectorAll(".webc-widget")].map((w) => w.dataset.widget).join(), notas: document.querySelector(".webc-notas").value,
+      hora: /\d/.test(document.querySelector(".webc-relogio-hora").textContent), salvo: [...document.querySelectorAll('.webc-widget[data-widget="salvos"] .nome')].map((n) => n.textContent).join() }));
+    ok(widgets.ordem === "relogio,notas,salvos" && widgets.notas === "levar o urso para a praça" && widgets.hora && widgets.salvo === "Urso animatrônico",
+      "os widgets que a Ana escolhe (relógio, notas, salvos) ficam no início dela, na ordem, e continuam depois de recarregar");
+    await ana.pagina.click('.webc-widget[data-widget="notas"] .webc-widget-tirar');
+    ok((await ana.ev(() => [...document.querySelectorAll(".webc-widget")].map((w) => w.dataset.widget).join())) === "relogio,salvos", "✕ tira um widget do início");
+    await ana.pagina.click('.webc-quadrado[data-quadrado="novidades"]');
+    await ana.pagina.waitForSelector(".novidades-pagina .novidades-loja .cartao-loja", { timeout: 20000 });
+    ok(await ana.ev(() => document.querySelectorAll(".novidades-pagina .novidades-lista li").length >= 5 && !!document.querySelector('.novidades-loja .cartao-loja')), "Novidades: o que chegou na loja, as salas novas e o que mudou no WEBC");
 
     // ── amizade: a Ana pede, a Bia aceita ──
     await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);

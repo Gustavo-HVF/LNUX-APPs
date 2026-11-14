@@ -150,7 +150,7 @@
         draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
         carregador.setDRACOLoader(draco);
         carregador.setMeshoptDecoder(V.MeshoptDecoder);
-        try { objeto = (await carregador.loadAsync(g.url(principal))).scene; }
+        try { const gltf = await carregador.loadAsync(g.url(principal)); objeto = gltf.scene; objeto.animations = gltf.animations || []; } // as animações do mapa vão junto
         catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o modelo: " + e.message); }
         finally { draco.dispose(); }
       } else if (tipo === "fbx") objeto = new V.FBXLoader(g.gerente).parse(await blob.arrayBuffer(), "");
@@ -159,7 +159,7 @@
         const mtl = (textoObj.match(/^mtllib\s+(.+)$/m) || [])[1], nomeMtl = mtl && [...arquivos.keys()].find((n) => base(n).toLowerCase() === base(mtl.trim()).toLowerCase());
         if (nomeMtl) { const materiais = new V.MTLLoader(g.gerente).parse(await arquivos.get(nomeMtl).text(), ""); materiais.preload(); carregador.setMaterials(materiais); }
         objeto = carregador.parse(textoObj);
-      } else if (tipo === "dae") objeto = new V.ColladaLoader(g.gerente).parse(await blob.text(), "").scene;
+      } else if (tipo === "dae") { const dae = new V.ColladaLoader(g.gerente).parse(await blob.text(), ""); objeto = dae.scene; objeto.animations = dae.animations || []; }
       else if (tipo === "stl") objeto = malhaDe(new V.STLLoader().parse(await blob.arrayBuffer()));
       else if (tipo === "ply") objeto = malhaDe(new V.PLYLoader().parse(await blob.arrayBuffer()));
       else if (tipo === "3ds") objeto = new V.TDSLoader(g.gerente).parse(await blob.arrayBuffer(), "");
@@ -198,7 +198,13 @@
       triangulos += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
     });
     for (const o of tirar) if (o.parent) o.parent.remove(o);
-    objeto.animations = [];
+    // as animações (moinhos, água, portas...) ficam, menos as trilhas de peças que saíram (câmeras, linhas)
+    const nomes = new Set();
+    objeto.traverse((o) => { if (o.name) nomes.add(o.name); nomes.add(o.uuid); });
+    objeto.animations = (objeto.animations || []).map((c) => {
+      const trilhas = c.tracks.filter((t) => { try { return nomes.has(T.PropertyBinding.parseTrackName(t.name).nodeName); } catch (e) { return false; } });
+      return trilhas.length ? new T.AnimationClip(c.name, c.duration, trilhas) : null;
+    }).filter(Boolean);
     return Math.round(triangulos);
   }
 
@@ -235,7 +241,9 @@
       const cena = new T.Scene();
       cena.add(objeto);
       cena.updateMatrixWorld(true);
-      const saida = await new V.GLTFExporter().parseAsync(cena, { binary: true, onlyVisible: true, maxTextureSize: 4096 });
+      const saida = await new V.GLTFExporter().parseAsync(cena, { binary: true, onlyVisible: true, maxTextureSize: 4096, animations: objeto.animations || [] });
+      const nAnim = (objeto.animations || []).length;
+      if (nAnim) avisos.push(nAnim === 1 ? C.t("Com 1 animação: ela toca no jogo.") : C.t("Com {n} animações: elas tocam no jogo.", { n: nAnim }));
       objeto.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });
       return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como: tipo === "blend" ? "pelo leitor próprio de .blend" : "de ." + tipo };
     },

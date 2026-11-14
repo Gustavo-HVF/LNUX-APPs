@@ -40,6 +40,22 @@ function mapaDeTeste() {
     { scene: 0, scenes: [{ nodes: [0] }], nodes: [{ name: "Mapa", mesh: 0 }] });
   return glb(json, bin);
 }
+/** Cenário com animação: o piso (parado) e uma pá ("Pa") que gira em volta do eixo Y, uma volta a cada 4 s. */
+function mapaAnimado() {
+  const { json, bin } = gltfDeMalha(caixas([[-12, 0.5, -12, 12, 1, 12]]), { scene: 0, scenes: [{ nodes: [0, 1] }],
+    nodes: [{ name: "Chao", mesh: 0 }, { name: "Pa", mesh: 0, translation: [0, 3, -6], scale: [0.1, 2, 0.02] }] });
+  const tempos = Buffer.from(new Float32Array([0, 1, 2, 3, 4]).buffer);
+  const s = Math.SQRT1_2, giros = Buffer.from(new Float32Array([0, 0, 0, 1, 0, s, 0, s, 0, 1, 0, 0, 0, s, 0, -s, 0, 0, 0, -1]).buffer);
+  const inicio = bin.length;
+  const tudo = Buffer.concat([bin, tempos, giros]);
+  json.buffers[0].byteLength = tudo.length;
+  json.bufferViews.push({ buffer: 0, byteOffset: inicio, byteLength: tempos.length }, { buffer: 0, byteOffset: inicio + tempos.length, byteLength: giros.length });
+  const vt = json.bufferViews.length - 2;
+  json.accessors.push({ bufferView: vt, componentType: 5126, count: 5, type: "SCALAR", min: [0], max: [4] }, { bufferView: vt + 1, componentType: 5126, count: 5, type: "VEC4" });
+  const at = json.accessors.length - 2;
+  json.animations = [{ name: "Girar", channels: [{ sampler: 0, target: { node: 1, path: "rotation" } }], samplers: [{ input: at, output: at + 1, interpolation: "LINEAR" }] }];
+  return glb(json, tudo);
+}
 /** Cenário fechado: uma casa de 12 × 12 m com piso (topo em y = 0,2), quatro paredes sem porta e telhado (topo em y = 3,4). */
 function casaDeTeste() {
   const { json, bin } = gltfDeMalha(caixas([[-6, 0, -6, 6, 0.2, 6], [-6, 0.2, -6, 6, 3.2, -5.8], [-6, 0.2, 5.8, 6, 3.2, 6], [-6, 0.2, -5.8, -5.8, 3.2, 5.8], [5.8, 0.2, -5.8, 6, 3.2, 5.8],
@@ -366,4 +382,4 @@ function zip(arquivos) {
   return Buffer.concat([...partes, cd, fim]);
 }
 
-module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
+module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, mapaAnimado, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };

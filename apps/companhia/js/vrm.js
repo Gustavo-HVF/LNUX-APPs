@@ -296,7 +296,8 @@
       this.disponiveis = new Set();
       this.apelidos = {};
       this.renderer = new T.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
-      this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+      this.resolucao = Math.min(1, Math.max(0.4, +LNUX.preferencia.ler("companhia.resolucao", "1") || 1)); // Opções › Gráfico
+      this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1) * this.resolucao);
       this.renderer.outputColorSpace = T.SRGBColorSpace;
       this.view = this.renderer.domElement;
       this.view.classList.add("palco-canvas", "palco-3d");
@@ -366,6 +367,13 @@
     on(evento, f) { (this.ouvintes[evento] = this.ouvintes[evento] || []).push(f); }
     emit(evento, ...a) { for (const f of this.ouvintes[evento] || []) { try { f(...a); } catch (e) { console.error(e); } } }
 
+    /** A resolução do desenho (0,4 a 1 da tela): menos pesa menos (no celular, ajuda a não esquentar). */
+    definirResolucao(f) {
+      this.resolucao = Math.min(1, Math.max(0.4, +f || 1));
+      LNUX.preferencia.gravar("companhia.resolucao", String(this.resolucao));
+      this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1) * this.resolucao);
+      this.redimensionar();
+    }
     redimensionar() {
       const W = this.conteiner.clientWidth, H = this.conteiner.clientHeight;
       if (!W || !H) return;

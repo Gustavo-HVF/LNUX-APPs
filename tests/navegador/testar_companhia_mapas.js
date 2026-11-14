@@ -11,7 +11,7 @@
 const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
-const { bonecoVRM0, caixas, gltfDeMalha } = require("./companhia_arquivos.js");
+const { bonecoVRM0, caixas, gltfDeMalha, mapaAnimado } = require("./companhia_arquivos.js");
 
 const PASTA = process.env.LNUX_TESTE_SAIDA || __dirname;
 const TOKEN = process.env.LNUX_TESTE_TOKEN || fs.readFileSync(path.join(PASTA, "token.txt"), "utf8").trim();
@@ -57,7 +57,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     });
     const c = new THREE.Box3().setFromObject(g.scene);
     return { como: r.como, avisos: r.avisos, tamanho: r.glb.size, glTF: cab.getUint32(0, true) === 0x46546c67 && cab.getUint32(4, true) === 2, triangulos: t, materiais: Object.fromEntries(mats), texturas: tex, nos: nos.sort(),
-      caixa: [...c.min.toArray(), ...c.max.toArray()].map((v) => +v.toFixed(2)) };
+      caixa: [...c.min.toArray(), ...c.max.toArray()].map((v) => +v.toFixed(2)), animacoes: g.animations.map((x) => [x.name, x.tracks.map((k) => k.name).join(), +x.duration.toFixed(2)]) };
   }, [Object.fromEntries(Object.entries(arquivos).map(([n, d]) => [n, Buffer.from(d).toString("base64")])), principal]);
 
   try {
@@ -115,6 +115,12 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     json.buffers[0].uri = "dados.bin";
     r = await converter({ "pasta/cena.gltf": JSON.stringify(json), "pasta/dados.bin": bin }, "pasta/cena.gltf");
     ok(r.glTF && r.triangulos === 12 && JSON.stringify(r.caixa) === "[-2,0,-2,2,1,2]", ".gltf + .bin soltos → um .glb só, com tudo dentro");
+    // mapa com movimento: a animação passa pela conversão (e o aviso diz que ela toca no jogo)
+    const glbAnimado = mapaAnimado(), nJson = glbAnimado.readUInt32LE(12), jsonAnimado = JSON.parse(glbAnimado.slice(20, 20 + nJson).toString("utf8").trim());
+    jsonAnimado.buffers[0].uri = "moinho.bin";
+    r = await converter({ "moinho/moinho.gltf": JSON.stringify(jsonAnimado), "moinho/moinho.bin": glbAnimado.slice(20 + nJson + 8) }, "moinho/moinho.gltf");
+    ok(r.glTF && r.animacoes.length === 1 && r.animacoes[0][0] === "Girar" && r.animacoes[0][1] === "Pa.quaternion" && r.animacoes[0][2] === 4 && r.avisos.some((a) => /1 animação/.test(a)),
+      `a animação do mapa passa pela conversão para .glb (${JSON.stringify(r.animacoes)}; aviso: ${r.avisos.join(" | ")})`);
     const erro = await ev(async () => { try { await C.conversor.paraGLB(new Map([["vazio.obj", new Blob(["# nada\n"])]]), "vazio.obj"); return ""; } catch (e) { return e.message; } });
     ok(/nenhuma malha/.test(erro), "um arquivo sem malha é recusado com explicação: " + erro);
 

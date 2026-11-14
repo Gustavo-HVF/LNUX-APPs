@@ -696,3 +696,91 @@
   // por último: um emoji na frente de um texto do dicionário ("💃 Animação", "🎮 Entrar numa sala"...)
   C.PADROES.push([/^(\p{Extended_Pictographic}️?) (.+)$/u, "$1 $2", "$1 $2"]);
 })();
+
+// ── a tela do jogo (js/jogo.js), o nome na tela de entrar, o início (novidades e widgets) ──
+(function () {
+  "use strict";
+  const C = window.C, T = C.TEXTOS;
+  Object.assign(T, {
+    // as expressões e o canto
+    "Apaixonada": ["In love", "ときめき"], "Piscadinha": ["Wink", "ウインク"], "Pensativa": ["Thinking", "考え中"],
+    "Expressões da personagem (1 a 9)": ["Character expressions (1 to 9)", "キャラクターの表情（1〜9）"], "Bate-papo": ["Chat", "チャット"], "Bate-papo e vídeo": ["Chat and video", "チャットと動画"],
+    "Fechar o bate-papo": ["Close the chat", "チャットを閉じる"],
+    // a janela Opções
+    "Opções": ["Options", "オプション"], "Acessibilidade": ["Accessibility", "アクセシビリティ"], "Gráfico": ["Graphics", "グラフィック"], "Controle": ["Controls", "操作"],
+    "As expressões: clique nelas embaixo da tela ou aperte de 1 a 9 no teclado. Os outros na sala veem.": ["Expressions: click them at the bottom of the screen or press 1 to 9 on the keyboard. Others in the room see them.", "表情: 画面下のボタンをクリックするか、キーボードの 1〜9 を押します。ルームのみんなに見えます。"],
+    "Leitura": ["Reading", "読みやすさ"], "Tamanho da interface": ["Interface size", "表示サイズ"], "Maior": ["Larger", "特大"],
+    "Cores fortes: texto claro no preto": ["Strong colors: light text on black", "はっきりした色: 黒地に明るい文字"], "Movimento na tela": ["Motion on screen", "画面の動き"], "Reduzir animações": ["Reduce animations", "アニメーションを減らす"],
+    "Sem as transições entre as páginas e sem os efeitos que se mexem": ["No page transitions and no moving effects", "ページの切り替え効果や動く効果をなくします"],
+    "Mostrar os números das expressões": ["Show the expression numbers", "表情の番号を表示"],
+    "Desempenho": ["Performance", "パフォーマンス"], "Resolução": ["Resolution", "解像度"], "Luz, sombras e luzes do mapa...": ["Light, shadows and map lights...", "ライト、影、マップのライト..."],
+    "Teclado": ["Keyboard", "キーボード"], "Andar (ou as setas)": ["Walk (or the arrows)", "歩く（矢印キーでも可）"], "Voar (quem criou a sala)": ["Fly (the room's creator)", "飛ぶ（ルームの作成者）"],
+    "Subir e descer, voando": ["Up and down while flying", "飛行中の上昇・下降"], "Abrir o bate-papo": ["Open the chat", "チャットを開く"], "Espaço": ["Space", "スペース"],
+    "Câmera e andar": ["Camera and walking", "カメラと移動"], "Sensibilidade da câmera": ["Camera sensitivity", "カメラの感度"], "Inverter a câmera (para cima e para baixo)": ["Invert the camera (up and down)", "カメラの上下を反転"],
+    "Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar.": ["Open a VRoid character (.vrm) to change the camera and walking.", "カメラと移動を変更するには VRoid キャラクター（.vrm）を開いてください。"],
+    "No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima.": ["On a phone: the on-screen pad walks; dragging turns the camera; pinching zooms.", "スマホ: 画面のパッドで移動、ドラッグでカメラ回転、ピンチでズーム。"],
+    // o nome na tela de entrar
+    "Todo mundo entra com um nome: é como os outros vão te ver nas salas.": ["Everyone joins with a name: it's how others will see you in the rooms.", "みんな名前を付けて入ります。ルームでほかの人に表示される名前です。"],
+    "Trocar o meu nome": ["Change my name", "名前を変更"],
+    // o início
+    "Chat bot": ["Chat bot", "チャットボット"], "Converse com a personagem": ["Talk to the character", "キャラクターと話す"], "Novidades": ["What's new", "新着情報"], "O que há de novo": ["What's new", "最新のお知らせ"],
+    "Widgets": ["Widgets", "ウィジェット"], "Adicione ao seu início": ["Add to your home", "ホームに追加"], "NOVIDADES": ["WHAT'S NEW", "新着情報"], "Chegou na loja": ["New in the store", "ストアの新着"],
+    "Salas novas": ["New rooms", "新しいルーム"], "O que mudou no WEBC": ["What changed in WEBC", "WEBC の更新内容"], "Nada na loja ainda.": ["Nothing in the store yet.", "ストアにはまだ何もありません。"],
+    "A tela do jogo: as expressões de 1 a 9, o bate-papo no canto e a janela Opções (personagem, sala, ajuda, acessibilidade, gráfico e controle).": ["The game screen: expressions 1 to 9, the chat in the corner and the Options window (character, room, help, accessibility, graphics and controls).", "ゲーム画面: 1〜9 の表情、隅のチャット、オプション画面（キャラクター、ルーム、ヘルプ、アクセシビリティ、グラフィック、操作）。"],
+    "No início: o chat bot, as novidades e os widgets.": ["On the home page: the chat bot, what's new and widgets.", "ホームに: チャットボット、新着情報、ウィジェット。"],
+    "O nome é pedido na tela de entrar, também para quem joga sem conta.": ["The name is asked on the login screen, also for people playing without an account.", "名前はログイン画面で入力します。アカウントなしで遊ぶ人も同じです。"],
+    "A loja com # para achar, curtidas e quantas pessoas baixaram.": ["The store with # to find things, likes and download counts.", "ストアに検索用の #、いいね、ダウンロード数。"],
+    "O perfil com capa, salvos e amigos.": ["The profile with a banner, saved items and friends.", "プロフィールにバナー、保存したもの、フレンド。"],
+    "Português, English e 日本語, e os temas do VLC-Web.": ["Português, English and 日本語, and the VLC-Web themes.", "Português、English、日本語、そして VLC-Web のテーマ。"],
+    "Vídeo numa tela da sala e luz calculada por raios.": ["Video on a screen in the room and ray-traced lighting.", "ルームのスクリーンで動画、レイトレーシング照明。"],
+    // os widgets
+    "Relógio": ["Clock", "時計"], "A hora e o dia": ["The time and date", "時刻と日付"], "Salas abertas": ["Open rooms", "開いているルーム"], "As salas com mais gente agora": ["The busiest rooms right now", "今いちばん人が多いルーム"],
+    "Novos na loja": ["New in the store", "ストアの新着"], "O que acabou de chegar": ["What just arrived", "届いたばかりのもの"], "Os seus amigos": ["Your friends", "あなたのフレンド"],
+    "Meus salvos": ["My saved items", "保存したもの"], "O que você salvou na loja": ["What you saved in the store", "ストアで保存したもの"], "Bloco de notas": ["Notepad", "メモ帳"], "Anotações neste navegador": ["Notes in this browser", "このブラウザのメモ"],
+    "Escreva aqui...": ["Write here...", "ここに書く..."], "Entre na sua conta para ver os amigos.": ["Log in to see your friends.", "フレンドを見るにはログインしてください。"],
+    "Entre na sua conta para salvar itens da loja.": ["Log in to save store items.", "ストアのアイテムを保存するにはログインしてください。"], "Para a esquerda": ["Move left", "左へ"], "Para a direita": ["Move right", "右へ"],
+    "Tirar do início": ["Remove from home", "ホームから外す"], "Adicionar widget": ["Add widget", "ウィジェットを追加"], "Adicionar um widget ao seu início": ["Add a widget to your home", "ホームにウィジェットを追加"],
+    "Adicionar": ["Add", "追加"], "Pronto": ["Done", "完了"], "Escolha o que fica no seu início. Os widgets ficam guardados neste navegador.": ["Choose what goes on your home page. Widgets are saved in this browser.", "ホームに置くものを選んでください。ウィジェットはこのブラウザに保存されます。"],
+  });
+})();
+
+// ── o Sketchfab na loja e os mapas com animação ──────────────────────
+(function () {
+  "use strict";
+  const C = window.C, T = C.TEXTOS;
+  Object.assign(T, {
+    "Sketchfab": ["Sketchfab", "Sketchfab"], "Trazer mapas do Sketchfab": ["Bring maps from Sketchfab", "Sketchfab からマップを取り込む"], "Mapas do Sketchfab": ["Sketchfab maps", "Sketchfab のマップ"],
+    "Cole a sua chave da API do Sketchfab": ["Paste your Sketchfab API token", "Sketchfab の API トークンを貼り付け"], "Chave da API do Sketchfab": ["Sketchfab API token", "Sketchfab の API トークン"],
+    "Procurar mapas no Sketchfab (ex.: praça, castelo, fnaf)": ["Search Sketchfab for maps (e.g. plaza, castle, fnaf)", "Sketchfab でマップを検索（例: 広場、城、fnaf）"], "Procurar no Sketchfab": ["Search Sketchfab", "Sketchfab で検索"],
+    "Mais resultados": ["More results", "もっと見る"], "# para achar na loja (opcional)": ["# to find it in the store (optional)", "ストアで探すための #（任意）"], "# para achar na loja": ["# to find it in the store", "ストアで探すための #"],
+    "A chave do Sketchfab está guardada no servidor.": ["The Sketchfab token is saved on the server.", "Sketchfab のトークンはサーバーに保存されています。"], "Trocar a chave": ["Change the token", "トークンを変更"],
+    "Guardar a chave": ["Save the token", "トークンを保存"], "Chave do Sketchfab guardada no servidor.": ["Sketchfab token saved on the server.", "Sketchfab のトークンをサーバーに保存しました。"],
+    "Para baixar, o Sketchfab pede a chave da sua conta (sketchfab.com › Configurações › Senha e API). Ela fica só no servidor, nunca no navegador.": ["To download, Sketchfab asks for your account's API token (sketchfab.com › Settings › Password & API). It stays only on the server, never in the browser.", "ダウンロードには Sketchfab アカウントの API トークンが必要です（sketchfab.com › 設定 › パスワードと API）。トークンはサーバーだけに保存され、ブラウザには残りません。"],
+    "Procurando...": ["Searching...", "検索中..."], "Trazer para a loja": ["Bring to the store", "ストアに取り込む"], "Licença não deixa": ["License doesn't allow", "ライセンス上不可"],
+    "A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.": ["This model's license doesn't allow redistribution: it can't go into the store.", "このモデルのライセンスは再配布を認めていないため、ストアに入れられません。"],
+    "animado": ["animated", "アニメーション"], "Ver no Sketchfab": ["View on Sketchfab", "Sketchfab で見る"], "Falta a chave do Sketchfab.": ["The Sketchfab token is missing.", "Sketchfab のトークンがありません。"],
+    "Trazendo do Sketchfab": ["Bringing from Sketchfab", "Sketchfab から取り込み中"], "Baixando \"{nome}\" e convertendo para .glb...": ["Downloading \"{nome}\" and converting to .glb...", "「{nome}」をダウンロードして .glb に変換中..."],
+    "Procurar": ["Search", "検索"], "Só os com animação (moinhos, água, portas...)": ["Only animated ones (windmills, water, doors...)", "アニメーション付きだけ（風車、水、ドアなど）"],
+    "Só entram na loja os modelos com licença Creative Commons que deixa redistribuir (CC0, BY, BY-SA, BY-NC, BY-NC-SA), com o crédito de quem fez. Os comprados (licença Standard) não podem ir para a loja.": ["Only models with a Creative Commons license that allows redistribution (CC0, BY, BY-SA, BY-NC, BY-NC-SA) go into the store, credited to their creator. Purchased ones (Standard license) can't go into the store.", "ストアに入れられるのは、再配布できるクリエイティブ・コモンズのライセンス（CC0、BY、BY-SA、BY-NC、BY-NC-SA）のモデルだけで、作者のクレジットが付きます。購入したモデル（Standard ライセンス）は入れられません。"],
+    "Original:": ["Original:", "元の作品:"], "Com 1 animação: ela toca no jogo.": ["With 1 animation: it plays in the game.", "アニメーション 1 個: ゲーム内で再生されます。"],
+    "Com {n} animações: elas tocam no jogo.": ["With {n} animations: they play in the game.", "アニメーション {n} 個: ゲーム内で再生されます。"], "Com {n} animação(ões): elas tocam no jogo.": ["With {n} animation(s): they play in the game.", "アニメーション {n} 個: ゲーム内で再生されます。"],
+    // o que o servidor responde
+    "Só o dono do servidor traz mapas do Sketchfab.": ["Only the server owner can bring maps from Sketchfab.", "Sketchfab からマップを取り込めるのはサーバーの管理者だけです。"],
+    "Essa chave do Sketchfab não parece certa.": ["That Sketchfab token doesn't look right.", "その Sketchfab のトークンは正しくないようです。"], "Esse não é um modelo do Sketchfab (falta o código dele).": ["That's not a Sketchfab model (its code is missing).", "Sketchfab のモデルではありません（コードがありません）。"],
+    "Falta a chave do Sketchfab (em 🔑 Chaves das APIs).": ["The Sketchfab token is missing (in 🔑 API keys).", "Sketchfab のトークンがありません（🔑 API キー）。"], "O Sketchfab não mandou um glTF para este modelo.": ["Sketchfab didn't send a glTF for this model.", "Sketchfab はこのモデルの glTF を送りませんでした。"],
+    "O que veio do Sketchfab não é um glTF de verdade.": ["What came from Sketchfab isn't a real glTF.", "Sketchfab から届いたものは正しい glTF ではありません。"], "A chave do Sketchfab não vale (confira em 🔑 Chaves das APIs).": ["The Sketchfab token isn't valid (check 🔑 API keys).", "Sketchfab のトークンが無効です（🔑 API キーを確認）。"],
+    "O Sketchfab não deixou baixar este modelo.": ["Sketchfab didn't allow downloading this model.", "Sketchfab はこのモデルのダウンロードを許可しませんでした。"], "Esse modelo não existe no Sketchfab.": ["That model doesn't exist on Sketchfab.", "そのモデルは Sketchfab にありません。"],
+    "O Sketchfab pediu para esperar um pouco (pedidos demais).": ["Sketchfab asked to wait a bit (too many requests).", "Sketchfab から少し待つよう求められました（リクエストが多すぎます）。"],
+    "O pacote do modelo é grande demais.": ["The model package is too big.", "モデルのパッケージが大きすぎます。"], "O pacote não tem um .gltf.": ["The package has no .gltf.", "パッケージに .gltf がありません。"],
+    "O endereço do download não é da internet.": ["The download address isn't an internet address.", "ダウンロード先がインターネットのアドレスではありません。"],
+    "Mapas do Sketchfab na loja (com o crédito de quem fez) e mapas com movimento que tocam dentro do jogo.": ["Sketchfab maps in the store (credited to their creators) and animated maps that play inside the game.", "ストアに Sketchfab のマップ（作者のクレジット付き）、そしてゲーム内で動くアニメーション付きマップ。"],
+  });
+  C.PADROES.push(
+    [/^A licença deste modelo \((.+)\) não deixa redistribuir: ele não pode ir para a loja\.$/, "This model's license ($1) doesn't allow redistribution: it can't go into the store.", "このモデルのライセンス（$1）は再配布を認めていないため、ストアに入れられません。"],
+    [/^Não consegui falar com o Sketchfab \((.+)\)\. Tem internet\?$/, "Couldn't reach Sketchfab ($1). Is there internet?", "Sketchfab に接続できませんでした（$1）。インターネットにつながっていますか？"],
+    [/^O Sketchfab respondeu (\d+)\.$/, "Sketchfab responded $1.", "Sketchfab の応答: $1"],
+    [/^O download respondeu (\d+)\.$/, "The download responded $1.", "ダウンロードの応答: $1"],
+    [/^O download não terminou \((.+)\)\.$/, "The download didn't finish ($1).", "ダウンロードが終わりませんでした（$1）。"],
+    [/^O arquivo passa de (\d+) MB\.$/, "The file is over $1 MB.", "ファイルが $1 MB を超えています。"],
+  );
+})();

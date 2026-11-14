@@ -8,6 +8,7 @@
 // pular e continuar valendo para as duas; o player do YouTube (o endereço sem cookies, o ponto de início e os comandos);
 // o som das telas dos outros; a sala que deixa só quem criou pôr vídeos; e fechar.
 const { chromium } = require("playwright");
+const { menus, nomeGuardado } = require("./companhia_menus.js");
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
@@ -33,6 +34,7 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
   const consola = [];
   const pessoa = async (nome) => {
     const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
+    await nomeGuardado(contexto, nome);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     await contexto.route("https://videos.exemplo.com/**", (r) => {
       const faixa = /bytes=(\d+)-(\d*)/.exec(r.request().headers().range || "");
@@ -61,7 +63,6 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
     // ── a Ana cria a sala (chão simples) ──
     await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas #sala-criar", { timeout: 30000 });
-    await ana.pagina.fill('.salas input[aria-label="Seu nome"]', "Ana");
     await ana.pagina.click("#sala-criar");
     await ana.pagina.waitForSelector('.lnux-dialogo input[aria-label="Nome da sala"]');
     ok(await ana.ev(() => document.querySelector('.lnux-dialogo input[aria-label="Quem entra pode pôr vídeos na tela"]').checked), "criar sala: \"Quem entra pode pôr vídeos na tela\" (ligado)");
@@ -138,7 +139,6 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
     // ── a Bia entra e vê a tela da Ana, no mesmo lugar e no mesmo ponto ──
     await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await bia.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
-    await bia.pagina.fill('.salas input[aria-label="Seu nome"]', "Bia");
     await bia.pagina.click(`.cartao-sala[data-codigo="${codigo}"] .entrar`);
     await bia.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     await bia.pagina.waitForFunction(() => { const s = window.Companhia.sala, r = [...s.remotos.values()][0], t = r && window.Companhia.videos.telas.get(r.id); const v = t && t.el.querySelector("video"); return v && v.currentTime > 0.3; }, null, { timeout: 30000 });

@@ -41,13 +41,23 @@ disso aparece para quem joga: o site não fala do LNUX nem do aparelho que serve
 Ao abrir, aparece a **tela de entrar**: a arte de fundo e, no meio, o cartão preto com o logo do WEBC, o e-mail, a
 senha, **Entrar**, *Esqueci a senha*, "ou" e **Criar conta** (o código que chega por e-mail também é digitado no
 próprio cartão). Embaixo, **Jogar sem conta** (quando o servidor deixa) e os três idiomas. Quem já entrou neste
-navegador vai direto para o início.
+navegador vai direto para o início. Até o modo ser escolhido, só aparece o logo do WEBC (o layout do chat bot não
+pisca na tela).
 
-- **Início**: três cartões grandes — **Loja**, **Sala** e **Perfil**. No alto, sempre: o logo (volta ao início), as
-  páginas, a **paleta** (os temas), o **idioma** e a conta (o nome e a foto; um clique abre o menu com *Meu perfil*,
-  *Sair da conta* e *Conversar com a personagem*, o chat bot).
+- **O nome**: todo mundo entra com um nome. Com conta, é o da conta; **Jogar sem conta** pede o nome no próprio
+  cartão (e ele fica guardado; dá para trocar no menu da conta, *Trocar o meu nome*). Quem chega por um link de sala
+  (`#sala=`) e já tem o nome guardado entra direto; os outros passam pela tela de entrar.
+
+- **Início**: três cartões grandes — **Loja**, **Sala** e **Perfil** — e, embaixo, quadrados menores: **Chat bot**
+  (conversar com a personagem), **Novidades** e **Widgets**. No alto, sempre: o logo (volta ao início), as páginas, a
+  **paleta** (os temas), o **idioma** e a conta (o nome e a foto; um clique abre o menu com *Meu perfil*, *Sair da
+  conta* e *Conversar com a personagem*).
+- **Widgets**: a pessoa escolhe o que fica no seu início — relógio, salas abertas, novos na loja, amigos, meus salvos
+  e um bloco de notas. ✕ tira, as setas mudam a ordem; ficam guardados neste navegador (`js/widgets.js`).
+- **Novidades**: o que chegou na loja, as salas novas e o que mudou no WEBC.
 - **Loja** e **Sala**: o mesmo molde — o título grande, a **pesquisa**, o **filtro** (a ordem e as opções) e os
-  cartões. A Sala tem ainda o seu nome, a sua personagem, o link de uma sala privada e **＋ Criar sala**.
+  cartões. A Sala tem ainda a personagem com que você entra, o link de uma sala privada e **＋ Criar sala** (o nome
+  vem da tela de entrar; a loja fica na página Loja).
 - **Perfil**: a **capa** (o banner) e a **foto** redonda em cima; descendo, a **bio**, os **salvos** (os mapas,
   personagens e animações que a pessoa salvou na loja) e os **amigos**. No seu perfil, *Editar perfil* e os pedidos
   de amizade; no dos outros, *Adicionar amigo* (pedido → aceitar → amigos; dá para desfazer).
@@ -56,6 +66,31 @@ navegador vai direto para o início.
   baixando o mapa, preparando a personagem). Com "reduzir movimento" no sistema, as animações somem.
 - **Dentro da sala**, o site some e fica o jogo; o logo do WEBC no alto leva ao site, e uma faixa lembra a sala com
   **Voltar à sala**.
+
+### A tela do jogo
+
+Com a personagem, a tela é só o jogo (`js/jogo.js`):
+
+- **No alto**, uma barra com o logo do WEBC (volta ao site), o nome da sala e o **☰**, que abre a janela **Opções**.
+- **Embaixo, no meio**, as **expressões da personagem**, de 1 a 9: feliz, rindo, surpresa, apaixonada, triste, brava,
+  acenar, piscadinha e pensativa. Um clique ou a **tecla do número** liga a expressão (a mesma de novo desliga; depois
+  de uns segundos ela volta ao normal sozinha), e os outros na sala veem. Os desenhos são próprios (SVG, sem emoji).
+- **No canto**, o **bate-papo** (abre e fecha a conversa da sala por cima do jogo; um número mostra as mensagens novas;
+  Enter abre, Esc fecha) e o **vídeo numa tela**.
+- **Opções**: seis cartões.
+  - **Personagem**: trocar e importar personagem, roupas, captura de movimento, pacotes de movimento, ajustar
+    esqueleto, exportar e apagar.
+  - **Sala**: salas, perfil, o link, quem está na sala, as opções da sala, o cenário, voar, o vídeo, sair e fechar, e
+    a conta.
+  - **Ajuda**: como jogar, atalhos e créditos.
+  - **Acessibilidade**: idioma, tamanho da interface (normal, grande, maior), alto contraste, reduzir animações e
+    mostrar os números das expressões.
+  - **Gráfico**: o tema, a resolução do desenho (50%, 75%, 100%), luz e sombras realistas, sombras, as luzes do mapa,
+    a qualidade das texturas, o fundo, a foto e a tela cheia.
+  - **Controle**: as teclas, a sensibilidade da câmera, inverter a câmera (para cima e para baixo) e a velocidade ao
+    andar.
+
+  As cores vêm do tema (no do WEBC, preto, branco e vermelho nas expressões).
 - **Temas**: a paleta abre a galeria com o tema do **WEBC** (preto e branco, como o mockup) e os **mesmos temas do
   VLC-Web** (31: escuro, claro, vidro, Frutiger Aero, Synthwave, Cyberpunk, pixel, Sakura, Nord, Drácula, Retrô 95,
   Steampunk...), com as cores, os fundos, os efeitos e as fontes deles (`temas/vlc-web-temas.css`). O tema fica
@@ -65,7 +100,7 @@ navegador vai direto para o início.
   fica em `js/textos.js` (cada texto em português → inglês e japonês); `js/idiomas.js` traduz sozinho o que aparece
   na tela (textos, `placeholder`, `title`, `aria-label`) e deixa como está o que as pessoas escrevem (nomes, bios,
   mensagens). Os e-mails do código também saem no idioma da pessoa.
-- **Endereços**: `#modo=jogar` (sem a tela de entrar), `#pagina=loja|sala|perfil` (abre direto na página),
+- **Endereços**: `#modo=jogar` (sem a tela de entrar, para quem já tem o nome ou a conta), `#pagina=loja|sala|perfil|novidades` (abre direto na página),
   `#sala=código` (o link de uma sala) e `#modo=conversa` (o chat bot).
 
 Neste modo **não há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas
@@ -112,7 +147,7 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Vídeo numa tela**: veja "Vídeo na tela", abaixo.
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
   personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
-  some por 20 segundos sai da sala; uma sala vazia fecha depois de 15 minutos.
+  some por 45 segundos sai da sala (quem fecha a aba sai na hora); uma sala vazia fecha depois de 15 minutos.
 
 ### Vídeo na tela
 
@@ -194,6 +229,34 @@ cartões com a miniatura, quantas **curtidas** (♥) e quantas pessoas **baixara
   miniaturas que faltam o dono gera sozinho ao abrir a loja. Os #, as curtidas e os downloads ficam em
   `.social.json`, na mesma pasta.
 - É a única pasta do aparelho que os visitantes alcançam. O formato de cada arquivo é conferido ao publicar.
+
+### Mapas do Sketchfab na loja
+
+O dono da loja traz mapas do [Sketchfab](https://sketchfab.com) direto para a loja, pela API dele:
+
+1. **A chave**: em [sketchfab.com/settings/password](https://sketchfab.com/settings/password) (*API Token*), copie a
+   sua chave e guarde no LNUX (*🧩 Apps Web › 🔑 Chaves das APIs*) ou no próprio botão **Sketchfab** da loja aberta
+   no aparelho do servidor. Ela fica em `~/.lnux-apps/chaves.json` (permissão 600; ou na variável `SKETCHFAB_TOKEN`) e
+   **nunca vai para o navegador**: quem busca e baixa é o servidor.
+2. **Buscar**: o botão **Sketchfab** (só para o dono) procura entre os modelos que podem ser baixados, com
+   "Só os com animação" para achar os que se mexem. Cada cartão mostra a miniatura, o autor, a licença e quantas
+   animações tem.
+3. **Trazer para a loja**: o servidor baixa o modelo (o `.glb`, ou o glTF em ZIP, que ele junta num `.glb` com as
+   texturas dentro), tira a miniatura e publica em *Mapas*, com os # que você puser mais os # do próprio Sketchfab.
+
+**Licenças.** A loja redistribui o arquivo para quem entra pelo link, então só entram modelos com licença Creative
+Commons que deixa redistribuir: **CC0**, **CC BY**, **CC BY-SA**, **CC BY-NC** e **CC BY-NC-SA**. Os comprados na loja
+do Sketchfab (licença *Standard* / *Editorial*) e os *sem derivados* (ND) aparecem com "Licença não deixa": esses
+você baixa no site e usa só no seu *Cenário*, sem publicar. Todo item trazido mostra o **crédito**: o nome original,
+quem fez (com o link), "Sketchfab" e a licença — é o que as licenças BY pedem.
+
+### Mapas com movimento
+
+Mapas com animação (moinhos, portas, água, ventiladores, plataformas...) **tocam dentro do jogo**: as animações do
+`.glb` (e as que vêm do `.fbx`/`.dae` convertidos) rodam em laço. Numa sala, elas seguem o **relógio do servidor**:
+todo mundo vê a mesma peça no mesmo lugar ao mesmo tempo. As partes que se mexem ficam fora da colisão (você não
+fica preso numa pá girando) e fora da luz calculada por raios. A vitrine da loja já mostra o mapa se mexendo e
+avisa quantas animações ele tem.
 
 ### Site publicado só com o WEBC
 
@@ -646,11 +709,18 @@ js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esquele
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
 js/video.js        vídeo numa tela do cenário (YouTube, Vimeo, Twitch, arquivo): segue a personagem ou fica parada, igual para todos da sala
+js/webc.js         o site do WEBC: cabeçalho, início (cartões, quadrados), novidades, perfil, transições e tela de carregamento
+js/inicio.js       a tela de entrar (conta ou só o nome) e o nome de quem joga sem conta
+js/jogo.js         a tela do jogo: a barra do alto com o ☰, as expressões de 1 a 9, o bate-papo e o vídeo no canto, a janela Opções
+js/widgets.js      os widgets do início (relógio, salas, loja, amigos, salvos, notas)
+js/temas.js        os temas (o do WEBC e os do VLC-Web, em temas/vlc-web-temas.css) e a paleta
+js/idiomas.js      português, inglês e japonês: C.t() e a tradução sozinha do que aparece na tela
+js/textos.js       o dicionário (português → inglês e japonês)
 js/salas.js        a lista de salas (como a de servidores) e o formulário de criar uma sala com as opções
-js/inicio.js       a tela de início: o cartão de entrar na conta (ou jogar sem conta) e o caminho para o chat bot
 js/contas.js       contas: criar com o código por e-mail, entrar, esqueci a senha, perfil (foto, capa, bio...) e os
                    ajustes do dono (o e-mail que manda os códigos, idade mínima, exigir conta)
-js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine) e publicar
+js/loja.js         loja de personagens, mundos e animações do servidor, com a prévia em 3D (a vitrine), publicar e
+                   trazer mapas do Sketchfab
 js/blend.js        leitor de arquivos .blend (Blender 2.6 ao 5.x), sem depender do Blender nem do navegador
 js/estudio.js      os painéis do menu Movimento (captura, movimentos, cenário, esqueleto)
 js/live2d.js       palco: núcleo, carregar o modelo (texturas no tamanho que a placa aguenta), sinais → parâmetros,
@@ -682,6 +752,7 @@ python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois 
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
+python3 tests/testar_navegador.py companhia_sketchfab  # Sketchfab de mentira: buscar, licenças, trazer para a loja, mapa com movimento numa sala
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se
@@ -719,7 +790,11 @@ na hora. Se o aparelho tiver o Blender (ou o módulo `bpy`), ele confere também
   dos ossos.
 - **Salas**: só bate-papo por texto (ainda não há voz entre as pessoas) e a sala vive no servidor de quem criou:
   para pessoas de fora, o servidor precisa estar num endereço que elas alcancem (o túnel do LNUX ou a rede de casa).
-- **Loja**: não há preço, avaliações nem contas: quem publica é identificado só pelo nome que escreve.
+- **Loja**: não há preço nem comentários nos itens.
+- **Personagens do VRoid Hub e do BOOTH** não vêm direto para a loja. O VRoid Hub tem uma API oficial, mas ela pede
+  um app registrado na pixiv (com a aprovação deles) e proíbe guardar os modelos, então eles não poderiam ficar na
+  loja. O BOOTH não tem API (só a página da loja) e quase tudo nele é vendido com licença que não deixa redistribuir:
+  baixe pelo site e importe o `.vrm` ou o `.unitypackage` como já faz.
 - **IA rodando dentro do navegador** (WebLLM/WebGPU) não está incluída: modelos assim pesam vários GB e não
   rodam na maioria dos celulares. A IA local é pelo Ollama, LM Studio ou llama.cpp, que rodam no aparelho ou num
   computador da rede.

@@ -1493,6 +1493,7 @@
       : el("div", { class: "msg " + (m.meu ? "eu" : "ela") }, m.meu ? null : el("b", { class: "quem", translate: "no" }, m.nome + ": "), el("span", { class: "t", translate: "no" }, m.texto), el("span", { class: "info" }, hora(Date.now())));
     listaMsgs.append(e);
     rolarFim();
+    if (jogo && !m.meu) jogo.novaMensagem();
   }
   function atualizarSala() {
     const dentro = !!(sala && sala.dentro);
@@ -1693,26 +1694,42 @@
     if (r.miniatura) await sala.trocarMiniatura(r.miniatura).catch(() => {});
   }
   /** Gestos e expressões que os outros veem. */
-  function barraDeGestos() {
-    const rosto = (emoji, emocao, dica) => el("button", { type: "button", title: dica, "aria-label": dica, onclick: () => { palco.definirEmocao(emocao); clearTimeout(voltarNeutraT); if (emocao !== "neutra") voltarNeutraT = setTimeout(() => palco.definirEmocao("neutra"), 8000); } }, emoji);
-    $("#gestos").replaceChildren(
-      el("button", { type: "button", title: "Acenar", "aria-label": "Acenar", onclick: () => { palco.gesto("acenar"); if (sala) sala.gestoMeu("acenar"); } }, "👋"),
-      el("button", { type: "button", id: "botao-video", title: "Vídeo na tela (YouTube, Vimeo, Twitch)", "aria-label": "Vídeo na tela", onclick: () => videos.janela() }, "📺"),
-      rosto("😀", "feliz", "Feliz"), rosto("😂", "rindo", "Rindo"), rosto("😮", "surpresa", "Surpresa"), rosto("😢", "triste", "Triste"), rosto("😠", "brava", "Brava"), rosto("😐", "neutra", "Neutra"));
+  /** A tela de quem joga (js/jogo.js): as expressões de 1 a 9, o bate-papo e o vídeo no canto, e a janela Opções (o ☰). */
+  let jogo = null;
+  function montarTelaDoJogo() {
+    jogo = C.Jogo({
+      palco: () => palco3d,
+      emocao: (nome) => palco.definirEmocao(nome),
+      gesto: (nome) => { palco.gesto(nome); if (sala) sala.gestoMeu(nome); },
+      video: () => videos.janela(),
+      cenario: () => estudio.painelCenario(),
+      secoes: secoesDoJogo,
+    });
+  }
+  /** As seções da janela Opções, com os itens dos menus de sempre (sem a loja: ela fica no site). */
+  function secoesDoJogo() {
+    const m = menusDoModo(), itens = (r) => ((m.find((x) => x.rotulo === r) || {}).itens || []);
+    const semLoja = (i) => typeof i === "string" || !/^Loja:/.test(i.rotulo);
+    return {
+      personagem: [...itens("Personagem").filter(semLoja), "-", ...itens("Movimento").filter((i) => typeof i === "string" || !/^(Andar pelo cenário|Voar|Cenário \(mapa\)|Converter mapa)/.test(i.rotulo))],
+      sala: [...itens("Sala").filter(semLoja), "-", ...itens("Conta")],
+      ajuda: itens("Ajuda"),
+      exibir: itens("Exibir"),
+    };
   }
   /** O começo do modo de jogar: sem o núcleo do Live2D nem a memória; abre a janela da sala (com o código do link, se veio). */
   async function iniciarJogo() {
     live2d = null;
-    barraDeGestos();
+    montarTelaDoJogo();
     await mostrarVazio();
     C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false),
       conversar: () => { if (sala && sala.dentro) sala.sair(); history.replaceState(null, "", location.pathname + location.search + "#modo=conversa"); location.reload(); } });
     ligarCabecalhoDoJogo();
     atualizarSala();
-    const codigo = fragmento.get("sala") || "", pagina = fragmento.get("pagina"); // #pagina=loja|sala|perfil: abre direto nela
-    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
+    const codigo = fragmento.get("sala") || "", pagina = fragmento.get("pagina"); // #pagina=loja|sala|perfil|novidades: abre direto nela
+    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
   }
-  /** No jogo (dentro de uma sala), o alto: o logo do WEBC leva ao site; a paleta e o idioma no lugar dos botões do LNUX. */
+  /** No jogo (dentro de uma sala), o alto: o logo do WEBC leva ao site; o ☰ (a janela Opções) no lugar dos botões do LNUX. */
   function ligarCabecalhoDoJogo() {
     const marca = $(".lnux-marca");
     if (marca) {
@@ -1723,11 +1740,7 @@
       marca.addEventListener("click", (e) => { e.preventDefault(); C.webc.ir("inicio"); });
     }
     const acoes = $(".lnux-topo-acoes");
-    if (acoes && !acoes.querySelector(".webc-jogo-acoes")) {
-      acoes.prepend(el("span", { class: "webc-jogo-acoes" },
-        el("button", { type: "button", class: "lnux-botao icone plano", title: "Tema", "aria-label": "Tema", onclick: (e) => C.escolherTema(e.currentTarget) }, C.iconePaleta(20)),
-        el("button", { type: "button", class: "lnux-botao icone plano", title: "Idioma", "aria-label": "Idioma", onclick: (e) => C.webc.menuIdioma(e.currentTarget) }, C.iconeWebc("globo"))));
-    }
+    if (acoes && !acoes.querySelector(".webc-jogo-acoes")) acoes.prepend(el("span", { class: "webc-jogo-acoes" }, jogo.botaoMenu()));
   }
   /** Pergunta de novo o que a pessoa quer fazer (recarrega sem o modo no endereço). */
   async function trocarModo() {
@@ -1737,8 +1750,10 @@
   }
   /** Antes de entrar: a tela de início (entrar na conta e jogar, jogar sem conta, ou conversar com a personagem). */
   async function escolherModo() {
-    if (MODO) return MODO;
-    return (await C.telaInicio()) || "conversa";
+    if (MODO === "conversa") return MODO;
+    // jogar pelo link (#sala=, #modo=jogar): quem já tem a conta ou o nome guardado entra direto; os outros passam pela tela de entrar
+    if (MODO === "jogar") { await C.telaInicio({ link: true }); return MODO; }
+    return (await C.telaInicio()) || "jogar";
   }
 
   // ── Menus ────────────────────────────────────────────────────────────
@@ -1918,15 +1933,16 @@
   }).then(async () => {
     aplicarFundo();
     if (jogando()) { await iniciarJogo(); return; } // jogar: nada de IA, voz, memória nem núcleo do Live2D
+    C.paginaPronta(); // o chat bot: só agora o layout dele aparece
     atualizarSeloIA();
     atualizarGasto();
     await ia.atualizarChaves();
     await tentarNucleo(false);
-  }).catch(LNUX.erro);
+  }).catch((e) => { C.paginaPronta(); LNUX.erro(e); });
 
   // Para os testes automáticos e para quem quiser mexer pelo console
   window.Companhia = {
-    palco, ia, voz, mem, enviar, abrirPersonagem, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala, abrirLoja, usarDaLoja, videos,
+    palco, ia, voz, mem, enviar, abrirPersonagem, get jogo() { return jogo; }, importarPacote, tentarNucleo, instalarNucleo, vestir, janelaRoupas, captura, estudio, janelaSala, abrirLoja, usarDaLoja, videos,
     get lojaDisponivel() { return lojaDisponivel; },
     get sala() { return sala; }, get modo() { return MODO; },
     get atual() { return atual; }, get estado() { return est; }, get live2d() { return live2d; }, get respondendo() { return respondendo; }, get pronto() { return pronto; },
