@@ -239,7 +239,7 @@
       // as minhas (postas à mão), guardadas no ajuste do cenário
       ((salvas && salvas.luzes) || []).forEach((l, i) => {
         if (!Array.isArray(l.p)) return;
-        fontes.push({ id: `minha:${i}`, tipo: "minha", nome: `Minha luz ${i + 1}`, local: new T.Vector3().fromArray(l.p), cor: new T.Color(l.cor || "#ffe2b8"), forca: 6 * limitar(+l.forca || 1, 0.05, 20),
+        fontes.push({ id: `minha:${i}`, tipo: "minha", nome: C.t("Minha luz {n}", { n: i + 1 }), local: new T.Vector3().fromArray(l.p), cor: new T.Color(l.cor || "#ffe2b8"), forca: 6 * limitar(+l.forca || 1, 0.05, 20),
           alcance: 0, raio: 0.1, normal: null, cone: null, indice: i });
       });
       // as mais fortes primeiro; no máximo 256
@@ -640,7 +640,7 @@
           er += cr / M; eg += cg / M; eb += cb / M;
           E1[i * 3] = er; E1[i * 3 + 1] = eg; E1[i * 3 + 2] = eb;
         }
-        aoProgresso(0.03 + 0.85 * (i / total), `Lançando os raios: ${Math.round((i / total) * 100)}% (${(raios / 1e6).toFixed(1)} milhão de raios)`);
+        aoProgresso(0.03 + 0.85 * (i / total), C.t("Lançando os raios: {p}% ({raios} milhão de raios)", { p: Math.round((i / total) * 100), raios: (raios / 1e6).toFixed(1) }));
         if (cancelado()) return null;
         await esperarQuadro();
       }
@@ -810,8 +810,8 @@
     function desenharMapa() {
       const l = L(), m = p().mundo, cfg = l.cfg, i = l.info, mexe = ctx.mexe();
       if (!m.mapa) { mapa.replaceChildren(el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Abra um cenário para achar as luzes dele.")); return; }
-      const partes = i ? [i.arquivo && `${i.arquivo} do arquivo`, i.brilho && `${i.brilho} que brilham`, i.nome && `${i.nome} pelo nome`, i.minha && `${i.minha} suas`].filter(Boolean) : [];
-      const resumo = l.fontes.length ? `Achei ${l.fontes.length} ${l.fontes.length === 1 ? "luz" : "luzes"}: ${partes.join(", ")}.` : "Não achei nenhuma luz neste mapa: ponha uma com \"Pôr uma luz aqui\".";
+      const partes = i ? [i.arquivo && C.t("{n} do arquivo", { n: i.arquivo }), i.brilho && C.t("{n} que brilham", { n: i.brilho }), i.nome && C.t("{n} pelo nome", { n: i.nome }), i.minha && C.t("{n} suas", { n: i.minha })].filter(Boolean) : [];
+      const resumo = l.fontes.length ? C.t(l.fontes.length === 1 ? "Achei 1 luz: {partes}." : "Achei {n} luzes: {partes}.", { n: l.fontes.length, partes: partes.join(C.t(", ")) }) : "Não achei nenhuma luz neste mapa: ponha uma com \"Pôr uma luz aqui\".";
       const ajuste = m.info.ajuste;
       const gravar = () => { ctx.salvarAjuste(); l.achar(); desenharMapa(); };
       const corNova = el("input", { type: "color", class: "lnux-entrada", value: "#ffe2b8", "aria-label": "Cor da luz nova" });
@@ -847,13 +847,13 @@
           gravar();
           LNUX.aviso("Luz posta acima e na frente da personagem.", "ok");
         }, "pequeno")) : el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Na sala, só quem criou acende, apaga e põe luzes no mapa."),
-        l.fontes.length ? el("details", { class: "luz-lista" }, el("summary", {}, `Lista das luzes (${l.fontes.length})`), lista) : null));
+        l.fontes.length ? el("details", { class: "luz-lista" }, el("summary", {}, C.t("Lista das luzes ({n})", { n: l.fontes.length })), lista) : null));
     }
     let calculando = null;
     function desenharRaios() {
       const l = L(), m = p().mundo, r = l.cfg.raios, defina = (mud) => { l.definir({ raios: mud }); };
       const estado = !m.mapa ? "Abra um cenário primeiro." : calculando ? "Calculando..." : l.assado ? (l.desatualizado ? "A luz calculada está desatualizada (o mapa ou as luzes mudaram): calcule de novo."
-        : `Luz calculada${l.calculo ? (l.calculo.guardado ? " (a guardada)" : ` com ${(l.calculo.raios / 1e6).toFixed(1)} milhão de raios em ${l.calculo.segundos.toFixed(1)} s`) : ""}.`) : "Ainda não calculada: o mapa usa a luz em tempo real.";
+        : l.calculo && !l.calculo.guardado ? C.t("Luz calculada com {raios} milhão de raios em {s} s.", { raios: (l.calculo.raios / 1e6).toFixed(1), s: l.calculo.segundos.toFixed(1) }) : l.calculo ? "Luz calculada (a guardada)." : "Luz calculada.") : "Ainda não calculada: o mapa usa a luz em tempo real.";
       raios.replaceChildren(
         el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Cada pedacinho do mapa lança raios para cada luz, para o sol e para o céu: as sombras de todas as luzes, a luz do céu só entrando por janelas e portas, e o rebote da luz nas paredes. Calcula uma vez (pode levar um tempo) e fica guardado; depois o mapa fica até mais leve. As personagens continuam com a luz em tempo real."),
         el("div", { class: "linha" },
@@ -875,7 +875,7 @@
       desenharRaios();
       try {
         const r = await L().calcular({ aoProgresso: (f, t) => prog.definir(f, t), cancelado: () => parar });
-        if (r) LNUX.aviso(r.guardado ? "Luz calculada (a guardada)." : `Luz calculada: ${(r.raios / 1e6).toFixed(1)} milhão de raios em ${r.segundos.toFixed(1)} s.`, "ok");
+        if (r) LNUX.aviso(r.guardado ? "Luz calculada (a guardada)." : C.t("Luz calculada: {raios} milhão de raios em {s} s.", { raios: (r.raios / 1e6).toFixed(1), s: r.segundos.toFixed(1) }), "ok");
       } finally { calculando = null; prog.fechar(); desenharRaios(); }
     }
     raiz.atualizar = () => { desenharSol(); desenharMapa(); desenharRaios(); };

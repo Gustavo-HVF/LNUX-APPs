@@ -260,7 +260,7 @@
     estado: await mem.estado(pid), mensagens: (await mem.todas(pid)).map(({ id, personagem, ...m }) => m) });
   /** Importa (junta) um JSON exportado. substituir=true apaga a memória atual antes. */
   mem.importar = async function (pid, dados, { substituir = false } = {}) {
-    if (!dados || !Array.isArray(dados.mensagens)) throw new Error("Este arquivo não é uma memória da Companhia.");
+    if (!dados || !Array.isArray(dados.mensagens)) throw new Error("Este arquivo não é uma memória do WEBC.");
     if (substituir) await mem.apagar(pid);
     const existentes = new Set((await mem.todas(pid)).map((m) => m.data + "|" + m.texto));
     let n = 0;

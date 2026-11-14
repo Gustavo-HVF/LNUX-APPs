@@ -41,7 +41,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
   const mundo = unityPackage("Assets/Mundo/mapa-do-pacote.glb", mapaDeTeste());
 
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
-  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 } });
+  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, locale: "pt-BR" });
   await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
   let pagina = await contexto.newPage();
   const consola = [];

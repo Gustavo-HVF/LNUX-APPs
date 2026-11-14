@@ -91,7 +91,7 @@ const mock = http.createServer((req, res) => {
   ok(rn.ok, "núcleo do Live2D guardado pela ponte");
 
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
-  const contexto = await navegador.newContext({ viewport: { width: 1360, height: 860 }, acceptDownloads: true });
+  const contexto = await navegador.newContext({ viewport: { width: 1360, height: 860 }, locale: "pt-BR", acceptDownloads: true });
   const pagina = await contexto.newPage();
   const consola = [];
   pagina.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource.*(404|502)/.test(m.text())) consola.push(m.text()); });
@@ -361,7 +361,7 @@ const mock = http.createServer((req, res) => {
     // ── aparelho cuja placa de vídeo não aguenta a textura grande (a personagem ficava preta) ──
     // A placa diz aceitar 8192 px, mas falha acima de 2048 (como num celular sem memória de vídeo): a textura não
     // sobe e fica preta. A Companhia tem de perceber, refazer com texturas menores e guardar o tamanho que funcionou.
-    const fraco = await navegador.newContext({ viewport: { width: 1100, height: 760 } });
+    const fraco = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
     await fraco.addInitScript(() => {
       for (const P of [WebGLRenderingContext.prototype, WebGL2RenderingContext.prototype]) {
         const gp = P.getParameter, tx = P.texImage2D;
@@ -405,7 +405,7 @@ const mock = http.createServer((req, res) => {
     await fraco.close();
 
     // ── celular ──
-    const cel = await navegador.newContext({ ...devices["Pixel 7"] });
+    const cel = await navegador.newContext({ ...devices["Pixel 7"], locale: "pt-BR" });
     const pc = await cel.newPage();
     await pc.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=conversa`);
     await pc.waitForFunction(() => window.Companhia && window.Companhia.live2d, null, { timeout: 15000 });
@@ -416,7 +416,7 @@ const mock = http.createServer((req, res) => {
     await cel.close();
 
     // ── sem a ponte: a pessoa escolhe o arquivo do núcleo ──
-    const sem = await navegador.newContext({ viewport: { width: 1200, height: 800 } });
+    const sem = await navegador.newContext({ viewport: { width: 1200, height: 800 }, locale: "pt-BR" });
     await sem.route(/cubism\.live2d\.com/, (rota) => rota.abort());
     const ps = await sem.newPage();
     await ps.goto(`${BASE}/apps/companhia/`);

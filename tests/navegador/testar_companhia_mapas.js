@@ -25,7 +25,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
   const boneco = path.join(PASTA, "boneco-vrm0.vrm");
   fs.writeFileSync(boneco, bonecoVRM0());
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
-  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, acceptDownloads: true });
+  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, locale: "pt-BR", acceptDownloads: true });
   await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
   const pagina = await contexto.newPage();
   const consola = [];

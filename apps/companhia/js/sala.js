@@ -422,7 +422,7 @@
       catch (e) { if (e.status === 403) e.senha = true; throw e; }
       try {
         if (info.mapa) {
-          aoProgresso(`Baixando o cenário da sala (${LNUX.bytes(info.mapa.tamanho)})...`);
+          aoProgresso(C.t("Baixando o cenário da sala ({tamanho})...", { tamanho: LNUX.bytes(info.mapa.tamanho) }));
           const glb = await pedir("GET", `${codigo}/mapa?v=${info.mapa.arquivo || info.mapa.versao}`, { como: "blob" });
           aoProgresso("Abrindo o cenário...");
           await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
@@ -511,10 +511,10 @@
           if (j.id === this.eu.id) { this.meuVideo = j.video || 0; continue; }
           vivos.add(j.id);
           let rem = this.remotos.get(j.id);
-          if (!rem) { rem = new Remoto(this, j.id, j.nome); this.remotos.set(j.id, rem); this.aoMensagem({ sistema: true, texto: `${j.nome} entrou.` }); this.aoMudar(); }
+          if (!rem) { rem = new Remoto(this, j.id, j.nome); this.remotos.set(j.id, rem); this.aoMensagem({ sistema: true, texto: C.t("{nome} entrou.", { nome: j.nome }) }); this.aoMudar(); }
           rem.receber(j);
         }
-        for (const [id, rem] of this.remotos) if (!vivos.has(id)) { this.aoMensagem({ sistema: true, texto: `${rem.nome} saiu.` }); rem.descartar(); this.remotos.delete(id); this.aoMudar(); }
+        for (const [id, rem] of this.remotos) if (!vivos.has(id)) { this.aoMensagem({ sistema: true, texto: C.t("{nome} saiu.", { nome: rem.nome }) }); rem.descartar(); this.remotos.delete(id); this.aoMudar(); }
         for (const m of r.mensagens || []) {
           this.visto = Math.max(this.visto, m.n);
           const meu = m.de === this.eu.id, rem = this.remotos.get(m.de);
@@ -555,7 +555,7 @@
       const glb = await pedir("GET", `${this.codigo}/mapa?v=${arquivo}`, { como: "blob" });
       await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
       this.mapaArquivo = arquivo;
-      this.aoMensagem({ sistema: true, texto: `O cenário da sala agora é "${info.mapa.nome}".` });
+      this.aoMensagem({ sistema: true, texto: C.t("O cenário da sala agora é \"{nome}\".", { nome: info.mapa.nome }) });
     }
     /** Quem criou mexeu no ajuste do cenário (Movimento › Cenário): vai para todos, sem mandar o arquivo de novo. */
     async mandarAjuste(ajuste) {

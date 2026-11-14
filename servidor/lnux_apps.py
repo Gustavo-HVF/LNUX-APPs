@@ -28,7 +28,7 @@ Uso:
     python3 servidor/lnux_apps.py                       # porta 8095, com a ponte
     python3 servidor/lnux_apps.py --porta 9000 --abrir  # abre a página inicial no navegador
     python3 servidor/lnux_apps.py --sem-ponte           # só os apps, sem acesso ao aparelho
-    python3 servidor/lnux_apps.py --so-app companhia    # publica só a Companhia (salas e loja; sem os outros apps)
+    python3 servidor/lnux_apps.py --so-app companhia    # publica só o WEBC (salas, loja e contas; sem os outros apps)
     python3 servidor/lnux_apps.py --mostrar-token       # mostra a chave e sai
 
 Publicar um app sozinho (--so-app): o endereço entrega só esse app (a página inicial dos Apps Web e os outros apps
@@ -193,6 +193,26 @@ LOJA_TIPOS = {  # tipo → (subpasta, extensões aceitas)
 }
 LOJA_MINIATURA = 3 * 1024 * 1024
 LOJA_TRAVA = threading.Lock()
+LOJA_TAGS = 12          # quantos # cada item pode ter
+AMIGOS_MAX = 500
+
+
+def idioma_de(valor) -> str:
+    """O idioma do WEBC: pt, en ou ja (o resto vira pt)."""
+    v = str(valor or "").lower()[:2]
+    return v if v in ("pt", "en", "ja") else "pt"
+
+
+def normalizar_tags(valor) -> list:
+    """Os # de um item: "fnaf, terror #Anime" → ["fnaf", "terror", "anime"] (letras de qualquer língua, números, - e _)."""
+    if isinstance(valor, str):
+        valor = re.split(r"[\s,;#]+", valor)
+    tags = []
+    for t in valor or []:
+        t = re.sub(r"[^\w-]+", "", str(t).strip().lstrip("#").lower())[:32]
+        if t and t not in tags:
+            tags.append(t)
+    return tags[:LOJA_TAGS]
 
 
 class Sala:
@@ -379,14 +399,26 @@ class Contas:
         return conta
 
     @staticmethod
-    def perfil_publico(c: dict) -> dict:
+    def resumo(c: dict) -> dict:
+        """O mínimo para mostrar alguém numa lista (amigos, pedidos): o nome, a foto e a cor."""
+        p = c.get("perfil", {})
+        return {"id": c["id"], "nome": c.get("nome", ""), "foto": p.get("foto", 0), "cor": p.get("cor", "")}
+
+    def amigos_de(self, c: dict) -> list:
+        contas = self.ler()["contas"]
+        return [self.resumo(contas[i]) for i in c.get("amigos", []) if i in contas]
+
+    def perfil_publico(self, c: dict) -> dict:
         p = c.get("perfil", {})
         return {"id": c["id"], "nome": c["nome"], "bio": p.get("bio", ""), "pronomes": p.get("pronomes", ""), "local": p.get("local", ""),
-                "links": p.get("links", []), "cor": p.get("cor", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0)}
+                "links": p.get("links", []), "cor": p.get("cor", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0),
+                "salvos": list(c.get("salvos", [])), "amigos": self.amigos_de(c)[:200]}
 
-    @classmethod
-    def perfil_proprio(cls, c: dict) -> dict:
-        return {**cls.perfil_publico(c), "email": c["email"], "idade": c.get("idade"), "verificada": bool(c.get("verificada"))}
+    def perfil_proprio(self, c: dict) -> dict:
+        contas = self.ler()["contas"]
+        enviados = [self.resumo(o) for o in contas.values() if c["id"] in o.get("pedidos", [])]
+        return {**self.perfil_publico(c), "email": c["email"], "idade": c.get("idade"), "verificada": bool(c.get("verificada")), "idioma": c.get("idioma", "pt"),
+                "pedidos": [self.resumo(contas[i]) for i in c.get("pedidos", []) if i in contas], "enviados": enviados}
 
 
 CONTAS: dict = {}  # pasta → Contas (uma por pasta de dados)
@@ -419,7 +451,7 @@ def mandar_email(para: str, assunto: str, texto: str) -> None:
     from email.utils import formataddr
     cfg = email_config()
     if not email_configurado(cfg):
-        raise ErroPonte(503, "O dono deste servidor ainda não configurou o envio de e-mails (Companhia › Contas › E-mail).")
+        raise ErroPonte(503, "O dono deste servidor ainda não configurou o envio de e-mails (Conta › Contas e e-mail do servidor).")
     msg = EmailMessage()
     msg["Subject"] = assunto
     msg["From"] = formataddr((cfg.get("nome") or "Companhia", cfg["remetente"]))
@@ -438,7 +470,7 @@ def mandar_email(para: str, assunto: str, texto: str) -> None:
                 conexao.login(cfg["usuario"], cfg.get("senha", ""))
             conexao.send_message(msg)
     except (OSError, smtplib.SMTPException) as e:
-        raise ErroPonte(502, f"Não consegui mandar o e-mail ({type(e).__name__}: {e}). Confira o e-mail do servidor (Companhia › Contas › E-mail).")
+        raise ErroPonte(502, f"Não consegui mandar o e-mail ({type(e).__name__}: {e}). Confira o e-mail do servidor (Conta › Contas e e-mail do servidor).")
 
 
 def cabe_no_disco(pasta: Path, tamanho: int) -> None:
@@ -448,7 +480,7 @@ def cabe_no_disco(pasta: Path, tamanho: int) -> None:
     except OSError:
         return
     if tamanho > livre - RESERVA_DISCO:
-        raise ErroPonte(507, f"Não cabe: o aparelho que guarda isso tem só {max(0, livre - RESERVA_DISCO) // (1024 * 1024)} MB livres para envios.")
+        raise ErroPonte(507, f"Não cabe: o servidor tem só {max(0, livre - RESERVA_DISCO) // (1024 * 1024)} MB livres para envios.")
 
 
 def formato_confere(caminho: Path, ext: str) -> bool:
@@ -1339,7 +1371,7 @@ class Manipulador(BaseHTTPRequestHandler):
         so_leitura = self.command in ("GET", "HEAD") and rota in ("arquivo", "live2d/core")
         if not self.autorizado(permitir_cookie=so_leitura):
             if self.ponte.so_app and not self.do_proprio_aparelho():
-                raise ErroPonte(403, "Este endereço publica só a " + str(self.ponte.so_app.get("nome") or "página") + ": daqui não dá para usar o aparelho (só as salas e a loja).")
+                raise ErroPonte(403, "Este endereço só dá acesso ao " + str(self.ponte.so_app.get("nome") or "app") + " (as salas, a loja e as contas).")
             raise ErroPonte(401, "Falta a chave da ponte. Abra o app pelo LNUX (🌐 Apps Web), que já manda a chave.")
 
         p = self.parametros()
@@ -1466,7 +1498,7 @@ class Manipulador(BaseHTTPRequestHandler):
         dados = ia_carregar()
         if not ia_host_permitido(url, dados.get("hosts", [])):
             raise ErroPonte(403, f"A ponte não repassa para {host_do_url(url)[2]}: só para provedores de IA conhecidos, "
-                                 "programas do próprio aparelho e os endereços que você liberar (Companhia › IA).")
+                                 "programas do próprio aparelho e os endereços que você liberar (menu IA).")
         cab = {k: str(v) for k, v in (d.get("cabecalhos") or {}).items() if k.lower() in IA_REPASSAR}
         cab["User-Agent"] = "LNUX-APPs/" + VERSAO
         provedor = str(d.get("provedor") or "")
@@ -1887,7 +1919,7 @@ class Manipulador(BaseHTTPRequestHandler):
                             continue
                         mini = next((f / ("miniatura." + e) for e in ("png", "jpg", "webp") if (f / ("miniatura." + e)).is_file()), None)
                         itens.append({"id": f.name, "tipo": tipo, "nome": str(dados.get("nome") or arq.stem), "descricao": str(dados.get("descricao") or ""),
-                                      "autor": str(dados.get("autor") or ""), "arquivo": arq.name, "tamanho": arq.stat().st_size,
+                                      "autor": str(dados.get("autor") or ""), "conta": str(dados.get("conta") or ""), "arquivo": arq.name, "tamanho": arq.stat().st_size,
                                       "criado": int(dados.get("criado") or arq.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
                                       "solto": False, "_arq": arq, "_mini": mini, "_pasta": f, "_segredo": str(dados.get("segredo") or "")})
                     elif f.is_file() and f.suffix.lower() in exts and ".enviando-" not in f.name:
@@ -1895,7 +1927,7 @@ class Manipulador(BaseHTTPRequestHandler):
                         # a miniatura de um arquivo posto à mão fica numa pasta escondida ao lado (.miniaturas/<id>.png)
                         lado = pasta / ".miniaturas"
                         mini = next((lado / f"{ident}.{e}" for e in ("png", "jpg", "webp") if (lado / f"{ident}.{e}").is_file()), None)
-                        itens.append({"id": ident, "tipo": tipo, "nome": f.stem, "descricao": "", "autor": "", "arquivo": f.name,
+                        itens.append({"id": ident, "tipo": tipo, "nome": f.stem, "descricao": "", "autor": "", "conta": "", "arquivo": f.name,
                                       "tamanho": f.stat().st_size, "criado": int(f.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
                                       "solto": True, "_arq": f, "_mini": mini, "_pasta": None, "_segredo": ""})
                 except (OSError, ValueError, TypeError, AttributeError):
@@ -1912,11 +1944,15 @@ class Manipulador(BaseHTTPRequestHandler):
         dono = self.autorizado(False)
         publico = lambda item: {k: v for k, v in item.items() if not k.startswith("_")}
         if not partes and m in ("GET", "HEAD"):
-            return self.responder_json({"itens": [publico(i) for i in self.loja_itens()], "publicar": self.ponte.loja_publicar(), "dono": dono,
+            conta = self.conta_da_sessao()
+            with LOJA_TRAVA:
+                social = self.loja_social()
+                itens = [self.loja_com_social(publico(i), social, conta) for i in self.loja_itens()]
+            return self.responder_json({"itens": itens, "publicar": self.ponte.loja_publicar(), "dono": dono, "conta": bool(conta),
                                         **({"pasta": str(self.ponte.loja)} if dono else {})})
         if partes == ["config"] and m == "POST":
             if not dono:
-                raise ErroPonte(403, "Só o dono da loja (com a chave da ponte, neste aparelho) muda isso.")
+                raise ErroPonte(403, "Só o dono do servidor muda isso.")
             d = self.ler_json()
             if "publicar" in d:
                 self.ponte.config["loja_publicar"] = bool(d["publicar"])
@@ -1937,7 +1973,52 @@ class Manipulador(BaseHTTPRequestHandler):
             return bool(segredo and item["_segredo"] and hmac.compare_digest(hashlib.sha256(segredo.encode()).hexdigest().encode(), item["_segredo"].encode()))
 
         if not acao and m == "GET":
-            return self.responder_json(publico(item))
+            with LOJA_TRAVA:
+                return self.responder_json(self.loja_com_social(publico(item), self.loja_social(), self.conta_da_sessao()))
+        # curtir (só quem tem conta), contar quem baixou (uma vez por pessoa) e mudar o nome, a descrição e os #
+        if acao == "curtir" and m == "POST":
+            conta = self.conta_da_sessao()
+            if not conta:
+                raise ErroPonte(401, "Entre na sua conta para curtir.")
+            quer = bool(self.ler_json().get("curtir", True))
+            with LOJA_TRAVA:
+                social = self.loja_social()
+                s = social.setdefault(item["id"], {})
+                curtidas = [c for c in s.get("curtidas", []) if c != conta["id"]] + ([conta["id"]] if quer else [])
+                s["curtidas"] = curtidas[-100000:]
+                self.loja_social_gravar(social)
+            return self.responder_json({"curtidas": len(s["curtidas"]), "curti": quer})
+        if acao == "baixou" and m == "POST":
+            conta = self.conta_da_sessao()
+            quem = resumo_hash("conta:" + conta["id"] if conta else "de:" + self.origem_do_pedido())[:16]
+            with LOJA_TRAVA:
+                social = self.loja_social()
+                s = social.setdefault(item["id"], {})
+                lista = s.setdefault("baixaram", [])
+                if quem not in lista:
+                    lista.append(quem)
+                    del lista[:-100000]
+                    self.loja_social_gravar(social)
+            return self.responder_json({"baixados": len(lista)})
+        if not acao and m == "POST":
+            if not (dono if item["solto"] else pode_mexer()):
+                raise ErroPonte(403, "Só quem publicou (ou o dono da loja) muda o item.")
+            d = self.ler_json()
+            with LOJA_TRAVA:
+                if "tags" in d:
+                    social = self.loja_social()
+                    social.setdefault(item["id"], {})["tags"] = normalizar_tags(d.get("tags"))
+                    self.loja_social_gravar(social)
+                if not item["solto"] and ("nome" in d or "descricao" in d):
+                    arquivo = item["_pasta"] / "item.json"
+                    dados = json.loads(arquivo.read_text("utf-8"))
+                    if "nome" in d:
+                        dados["nome"] = sala_texto(d.get("nome"), 60) or dados.get("nome")
+                    if "descricao" in d:
+                        dados["descricao"] = sala_texto(d.get("descricao"), 600)
+                    arquivo.write_text(json.dumps(dados, ensure_ascii=False, indent=2), "utf-8")
+                novo = next((i for i in self.loja_itens() if i["id"] == item["id"]), item)
+                return self.responder_json(self.loja_com_social(publico(novo), self.loja_social(), self.conta_da_sessao()))
         if acao == "arquivo" and m in ("GET", "HEAD"):
             return self.enviar_arquivo(item["_arq"], "application/octet-stream", cache="private, max-age=600",
                                        cabecalhos={"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(item["arquivo"])})
@@ -1975,6 +2056,10 @@ class Manipulador(BaseHTTPRequestHandler):
                 if not pode_mexer():
                     raise ErroPonte(403, "Só quem publicou (ou o dono da loja) apaga.")
                 shutil.rmtree(item["_pasta"], ignore_errors=True)
+            with LOJA_TRAVA:
+                social = self.loja_social()
+                if social.pop(item["id"], None) is not None:
+                    self.loja_social_gravar(social)
             return self.responder_json({"ok": True})
         raise ErroPonte(404, f"A loja não conhece /{acao} ({m}).")
 
@@ -1999,15 +2084,44 @@ class Manipulador(BaseHTTPRequestHandler):
             if not formato_confere(pasta / nome_arq, ext):
                 raise ErroPonte(400, f"Esse arquivo não é um {ext} de verdade.")
             segredo = secrets.token_urlsafe(18)
+            conta = self.conta_da_sessao()  # quem publica com a conta: o nome dela, e o perfil aparece no item
             dados = {"nome": sala_texto(p.get("nome"), 60) or Path(nome_arq).stem, "descricao": sala_texto(p.get("descricao"), 600),
-                     "autor": sala_texto(p.get("autor"), 40), "arquivo": nome_arq, "criado": int(time.time()),
-                     "segredo": hashlib.sha256(segredo.encode()).hexdigest()}
+                     "autor": (conta["nome"] if conta else "") or sala_texto(p.get("autor"), 40), "conta": conta["id"] if conta else "",
+                     "arquivo": nome_arq, "criado": int(time.time()), "segredo": hashlib.sha256(segredo.encode()).hexdigest()}
             (pasta / "item.json").write_text(json.dumps(dados, ensure_ascii=False, indent=2), "utf-8")
+            tags = normalizar_tags(p.get("tags", ""))
+            if tags:
+                with LOJA_TRAVA:
+                    social = self.loja_social()
+                    social.setdefault(ident, {})["tags"] = tags
+                    self.loja_social_gravar(social)
         except BaseException:
             shutil.rmtree(pasta, ignore_errors=True)
             raise
         item = next(i for i in self.loja_itens() if i["id"] == ident)
-        return self.responder_json({"item": {k: v for k, v in item.items() if not k.startswith("_")}, "segredo": segredo}, 201)
+        with LOJA_TRAVA:
+            publico = self.loja_com_social({k: v for k, v in item.items() if not k.startswith("_")}, self.loja_social(), conta)
+        return self.responder_json({"item": publico, "segredo": segredo}, 201)
+
+    # o que as pessoas fazem com os itens (os #, quem curtiu, quem baixou), num arquivo só: .social.json na pasta da loja
+    def loja_social(self) -> dict:
+        try:
+            d = json.loads((self.ponte.loja / ".social.json").read_text("utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def loja_social_gravar(self, d: dict) -> None:
+        self.ponte.loja.mkdir(parents=True, exist_ok=True)
+        temporario = self.ponte.loja / ".social.json.tmp"
+        temporario.write_text(json.dumps(d, ensure_ascii=False), "utf-8")
+        os.replace(temporario, self.ponte.loja / ".social.json")
+
+    @staticmethod
+    def loja_com_social(item: dict, social: dict, conta: dict | None) -> dict:
+        s = social.get(item["id"], {})
+        return {**item, "tags": s.get("tags", []), "curtidas": len(s.get("curtidas", [])), "baixados": len(s.get("baixaram", [])),
+                "curti": bool(conta and conta["id"] in s.get("curtidas", []))}
 
     def conta_da_sessao(self) -> dict | None:
         """A conta de quem pede (pelo cabeçalho X-Conta-Sessao), ou None."""
@@ -2038,9 +2152,21 @@ class Manipulador(BaseHTTPRequestHandler):
 
     @staticmethod
     def _mandar_codigo_email(conta: dict, codigo: str, para_que: str) -> None:
-        mandar_email(conta["email"], f"Seu código da Companhia: {codigo}",
-                     f"Olá, {conta['nome']}!\n\nO seu código para {para_que} na Companhia é:\n\n    {codigo}\n\n"
-                     f"Ele vale por {CODIGO_VALE // 60} minutos. Se não foi você que pediu, ignore este e-mail.\n")
+        idioma, minutos = conta.get("idioma", "pt"), CODIGO_VALE // 60
+        cadastro = para_que.startswith("confirmar")
+        if idioma == "en":
+            assunto = f"Your WEBC code: {codigo}"
+            texto = (f"Hi, {conta['nome']}!\n\nYour code to {'confirm your e-mail and finish signing up' if cadastro else 'create a new password'} on WEBC is:\n\n"
+                     f"    {codigo}\n\nIt is valid for {minutos} minutes. If you did not ask for it, ignore this e-mail.\n")
+        elif idioma == "ja":
+            assunto = f"WEBC の確認コード: {codigo}"
+            texto = (f"{conta['nome']} さん、こんにちは。\n\nWEBC で{'メールアドレスを確認して登録を完了する' if cadastro else '新しいパスワードを作成する'}ためのコードは次のとおりです。\n\n"
+                     f"    {codigo}\n\n有効期限は {minutos} 分です。心当たりがない場合は、このメールを無視してください。\n")
+        else:
+            assunto = f"Seu código do WEBC: {codigo}"
+            texto = (f"Olá, {conta['nome']}!\n\nO seu código para {para_que} no WEBC é:\n\n    {codigo}\n\n"
+                     f"Ele vale por {minutos} minutos. Se não foi você que pediu, ignore este e-mail.\n")
+        mandar_email(conta["email"], assunto, texto)
 
     def conferir_codigo(self, cadastro: Contas, email: str, motivo: str, codigo: str) -> None:
         d, chave = cadastro.ler(), motivo + ":" + email
@@ -2117,7 +2243,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 if not conta:
                     conta = {"id": secrets.token_hex(6), "email": email, "criada": int(time.time()), "verificada": False, "perfil": {}}
                     d["contas"][conta["id"]] = conta
-                conta.update({"nome": nome, "idade": idade, "senha": hash_senha(senha)})
+                conta.update({"nome": nome, "idade": idade, "senha": hash_senha(senha), "idioma": idioma_de(b.get("idioma"))})
                 cadastro.gravar()
                 self.mandar_codigo(cadastro, conta, "cadastro")
                 return self.responder_json({"pendente": True, "email": esconder_email(email)}, 201)
@@ -2131,7 +2257,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 conta["verificada"] = True
                 token = cadastro.nova_sessao(conta)
                 cadastro.gravar()
-                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+                return self.responder_json({"sessao": token, "conta": cadastro.perfil_proprio(conta)})
             if acao == "reenviar" and m == "POST":
                 email = email_de(corpo())
                 conta = cadastro.por_email(email)
@@ -2158,14 +2284,14 @@ class Manipulador(BaseHTTPRequestHandler):
                 TENTATIVAS.pop("entrar:" + email, None)
                 token = cadastro.nova_sessao(conta)
                 cadastro.gravar()
-                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+                return self.responder_json({"sessao": token, "conta": cadastro.perfil_proprio(conta)})
             if acao == "sair" and m == "POST":
                 if sessao:
                     d["sessoes"].pop(resumo_hash(sessao), None)
                     cadastro.gravar()
                 return self.responder_json({"ok": True})
             if acao == "eu" and m == "GET":
-                return self.responder_json(Contas.perfil_proprio(exigir_eu()))
+                return self.responder_json(cadastro.perfil_proprio(exigir_eu()))
             if acao == "perfil" and len(partes) == 1 and m == "POST":
                 c, b = exigir_eu(), corpo()
                 perfil = c.setdefault("perfil", {})
@@ -2186,12 +2312,69 @@ class Manipulador(BaseHTTPRequestHandler):
                         raise ErroPonte(400, "Os links precisam começar com http:// ou https://.")
                     perfil["links"] = links
                 cadastro.gravar()
-                return self.responder_json(Contas.perfil_proprio(c))
+                return self.responder_json(cadastro.perfil_proprio(c))
             if acao == "perfil" and len(partes) == 2 and m == "GET":
                 c = d["contas"].get(partes[1])
                 if not c or not c.get("verificada"):
                     raise ErroPonte(404, "Essa conta não existe.")
-                return self.responder_json(Contas.perfil_publico(c))
+                relacao = "" if not eu else "eu" if eu["id"] == c["id"] else "amigo" if c["id"] in eu.get("amigos", []) else \
+                    "enviado" if eu["id"] in c.get("pedidos", []) else "recebido" if c["id"] in eu.get("pedidos", []) else ""
+                return self.responder_json({**cadastro.perfil_publico(c), "relacao": relacao})
+            # os itens da loja guardados no perfil
+            if acao == "salvos" and m == "POST":
+                c, b = exigir_eu(), corpo()
+                ident = str(b.get("id") or "")
+                if not re.fullmatch(r"[0-9a-f]{12}", ident):
+                    raise ErroPonte(400, "Item da loja inválido.")
+                salvos = [x for x in c.get("salvos", []) if x != ident]
+                if b.get("salvar", True):
+                    salvos.insert(0, ident)
+                c["salvos"] = salvos[:300]
+                cadastro.gravar()
+                return self.responder_json({"salvos": c["salvos"]})
+            # amigos: pedir, aceitar, recusar e desfazer (desfazer também cancela um pedido que eu mandei)
+            if acao == "amigos" and m == "GET":
+                c = exigir_eu()
+                eu_p = cadastro.perfil_proprio(c)
+                return self.responder_json({"amigos": eu_p["amigos"], "recebidos": eu_p["pedidos"], "enviados": eu_p["enviados"]})
+            if acao == "amigos" and m == "POST":
+                c, b = exigir_eu(), corpo()
+                outro = d["contas"].get(str(b.get("id") or ""))
+                if not outro or not outro.get("verificada"):
+                    raise ErroPonte(404, "Essa conta não existe.")
+                if outro["id"] == c["id"]:
+                    raise ErroPonte(400, "Você não pode ser amigo de si mesmo.")
+                op = str(b.get("acao") or "")
+                meus, deles = c.setdefault("amigos", []), outro.setdefault("amigos", [])
+                if op == "pedir":
+                    if outro["id"] in c.get("pedidos", []):
+                        op = "aceitar"  # a pessoa já tinha pedido: viram amigos
+                    elif outro["id"] not in meus:
+                        if len(meus) >= AMIGOS_MAX:
+                            raise ErroPonte(429, "Você já tem amigos demais.")
+                        pedidos = outro.setdefault("pedidos", [])
+                        if c["id"] not in pedidos:
+                            pedidos.append(c["id"])
+                            del pedidos[:-200]
+                if op == "aceitar":
+                    if outro["id"] not in c.get("pedidos", []) and outro["id"] not in meus:
+                        raise ErroPonte(404, "Essa pessoa não pediu para ser sua amiga.")
+                    c["pedidos"] = [x for x in c.get("pedidos", []) if x != outro["id"]]
+                    if outro["id"] not in meus:
+                        meus.append(outro["id"])
+                    if c["id"] not in deles:
+                        deles.append(c["id"])
+                elif op == "recusar":
+                    c["pedidos"] = [x for x in c.get("pedidos", []) if x != outro["id"]]
+                elif op == "desfazer":
+                    c["amigos"] = [x for x in meus if x != outro["id"]]
+                    outro["amigos"] = [x for x in deles if x != c["id"]]
+                    outro["pedidos"] = [x for x in outro.get("pedidos", []) if x != c["id"]]
+                elif op != "pedir":
+                    raise ErroPonte(400, "Ação desconhecida (pedir, aceitar, recusar ou desfazer).")
+                cadastro.gravar()
+                relacao = "amigo" if outro["id"] in c.get("amigos", []) else "enviado" if c["id"] in outro.get("pedidos", []) else ""
+                return self.responder_json({"relacao": relacao, **{k: v for k, v in cadastro.perfil_proprio(c).items() if k in ("amigos", "pedidos", "enviados")}})
             if acao == "midia" and len(partes) == 1 and m in ("PUT", "DELETE"):
                 c, tipo = exigir_eu(), self.parametros().get("tipo", "foto")
                 if tipo not in ("foto", "capa"):
@@ -2210,7 +2393,7 @@ class Manipulador(BaseHTTPRequestHandler):
                     (cadastro.midia / f"{c['id']}-{tipo}.{ext}").write_bytes(dados)
                     perfil[tipo] = int(time.time() * 1000) % 2_000_000_000
                 cadastro.gravar()
-                return self.responder_json(Contas.perfil_proprio(c))
+                return self.responder_json(cadastro.perfil_proprio(c))
             if acao == "midia" and len(partes) == 3 and m in ("GET", "HEAD"):
                 c = d["contas"].get(partes[1])
                 if not c or partes[2] not in ("foto", "capa"):
@@ -2231,9 +2414,12 @@ class Manipulador(BaseHTTPRequestHandler):
                 return self.responder_json({"ok": True})
             if acao == "recuperar" and m == "POST":
                 contar_tentativa("recuperar:" + origem, 10, 3600)
-                email = email_de(corpo())
+                b = corpo()
+                email = email_de(b)
                 conta = cadastro.por_email(email)
                 if conta and conta.get("verificada"):
+                    if b.get("idioma"):
+                        conta["idioma"] = idioma_de(b.get("idioma"))
                     self.mandar_codigo(cadastro, conta, "senha")
                 # a mesma resposta com ou sem conta (não dá para descobrir quem tem conta)
                 return self.responder_json({"ok": True, "email": esconder_email(email)})
@@ -2249,7 +2435,7 @@ class Manipulador(BaseHTTPRequestHandler):
                     d["sessoes"].pop(k, None)
                 token = cadastro.nova_sessao(conta)
                 cadastro.gravar()
-                return self.responder_json({"sessao": token, "conta": Contas.perfil_proprio(conta)})
+                return self.responder_json({"sessao": token, "conta": cadastro.perfil_proprio(conta)})
             if acao == "apagar" and m == "POST":
                 c = exigir_eu()
                 if not senha_confere(str(corpo().get("senha") or ""), c.get("senha", {})):
@@ -2260,7 +2446,7 @@ class Manipulador(BaseHTTPRequestHandler):
             # ── do dono do servidor
             if acao in ("ajustes", "email-teste", "lista", "conta"):
                 if not dono:
-                    raise ErroPonte(403, "Só o dono do servidor (com a chave da ponte, neste aparelho) mexe nisso.")
+                    raise ErroPonte(403, "Só o dono do servidor muda isso.")
                 if acao == "ajustes" and m == "GET":
                     cfg = email_config()
                     return self.responder_json({"email": {k: cfg.get(k, "") for k in ("servidor", "porta", "seguranca", "usuario", "remetente", "nome")} | {"tem_senha": bool(cfg.get("senha")), "configurado": email_configurado(cfg)},
@@ -2319,6 +2505,10 @@ class Manipulador(BaseHTTPRequestHandler):
     def apagar_conta(cadastro: Contas, cid: str) -> None:
         d = cadastro.ler()
         d["contas"].pop(cid, None)
+        for o in d["contas"].values():  # some dos amigos e dos pedidos dos outros
+            for campo in ("amigos", "pedidos"):
+                if cid in o.get(campo, []):
+                    o[campo] = [x for x in o[campo] if x != cid]
         for k in [k for k, x in d["sessoes"].items() if x["conta"] == cid]:
             d["sessoes"].pop(k, None)
         for f in cadastro.midia.glob(f"{cid}-*"):
@@ -2344,7 +2534,7 @@ class Manipulador(BaseHTTPRequestHandler):
                                         "dono": dono, "abertas": len(SALAS), "maximo": SALA_MAXIMO, "pessoas_max": SALA_PESSOAS})
         if rota == "salas/ajustes" and m == "POST":
             if not dono:
-                raise ErroPonte(403, "Só o dono do servidor (com a chave da ponte, neste aparelho) muda isso.")
+                raise ErroPonte(403, "Só o dono do servidor muda isso.")
             d = self.ler_json()
             if "visitantes_criam" in d:
                 self.ponte.config["salas_visitantes"] = bool(d["visitantes_criam"])

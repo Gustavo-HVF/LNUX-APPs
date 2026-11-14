@@ -466,7 +466,7 @@
         LNUX.aviso("O seu vídeo saiu da tela: nesta sala, agora só quem criou põe vídeos.", "alerta", 7000);
       }
       const quero = new Map();
-      if (this.meu && p.vrm) quero.set("eu", { estado: this.meu, nome: "Você", pos: p.raiz.position, giro: m ? m.cam.giro : null, rumo: m ? m.rumo : 0, altura: p.altura, meu: true });
+      if (this.meu && p.vrm) quero.set("eu", { estado: this.meu, nome: C.t("Você"), pos: p.raiz.position, giro: m ? m.cam.giro : null, rumo: m ? m.rumo : 0, altura: p.altura, meu: true });
       if (s) for (const r of s.remotos.values()) if (r.video && this.verOutros) quero.set(r.id, { estado: r.video, nome: r.nome, pos: r.grupo.position, giro: r.giroCam, rumo: r.rumo, altura: r.altura });
       for (const [k, t] of this.telas) if (!quero.has(k)) { t.descartar(); this.telas.delete(k); }
       const cam = p.camera, ver = !!(m && m.andando);
@@ -518,7 +518,7 @@
     desenharBarra() {
       const m = this.meu;
       if (!m) { if (this.barra) { this.barra.remove(); this.barra = null; } return; }
-      const d = interpretar(m.url) || { site: "vídeo" }, pausado = m.pausado !== null && m.pausado !== undefined;
+      const d = interpretar(m.url) || { site: C.t("vídeo") }, pausado = m.pausado !== null && m.pausado !== undefined;
       const b = (rotulo, dica, acao, extra = {}) => el("button", { type: "button", class: "lnux-botao pequeno", title: dica, "aria-label": dica, onclick: async () => { try { await acao(); } catch (e) { LNUX.erro(e); } }, ...extra }, rotulo);
       const tam = el("select", { class: "lnux-selecao pequeno", "aria-label": "Tamanho da tela" }, TAMANHOS.map(([v, r]) => el("option", { value: v, selected: v === +m.tamanho }, r)));
       tam.addEventListener("change", () => this.trocarTamanho(+tam.value).catch(LNUX.erro));

@@ -20,12 +20,13 @@
     Thumb: "Polegar", Index: "Indicador", Middle: "Médio", Ring: "Anelar", Little: "Mínimo", Metacarpal: "base", Proximal: "1", Intermediate: "2", Distal: "ponta" };
   /** "leftIndexProximal" → "Indicador esq. 1" */
   C.nomeDoOsso = function (n) {
-    if (NOMES_OSSOS[n]) return NOMES_OSSOS[n];
+    const t = (x) => C.t(x);
+    if (NOMES_OSSOS[n]) return t(NOMES_OSSOS[n]);
     const m = n.match(/^(left|right)([A-Z][a-z]+)([A-Z][a-z]+)?([A-Z][a-z]+)?$/);
     if (!m) return n;
     const lado = m[1] === "left" ? "esq." : "dir.", resto = m[2] + (m[3] && !C.DEDOS_VRM.includes(m[2]) ? m[3] : "");
-    if (C.DEDOS_VRM.includes(m[2])) return `${NOMES_OSSOS[m[2]]} ${lado} ${NOMES_OSSOS[m[3]] || ""}`.trim();
-    return `${NOMES_OSSOS[resto] || resto} ${lado}`;
+    if (C.DEDOS_VRM.includes(m[2])) return `${t(NOMES_OSSOS[m[2]])} ${t(lado)} ${NOMES_OSSOS[m[3]] ? t(NOMES_OSSOS[m[3]]) : ""}`.trim();
+    return `${NOMES_OSSOS[resto] ? t(NOMES_OSSOS[resto]) : resto} ${t(lado)}`;
   };
   const ESTADOS_ANDAR = [["parado", "ficar parada"], ["andando", "andar"], ["correndo", "correr"], ["pulando", "pular"]];
 
@@ -131,8 +132,8 @@
         liga.classList.toggle("primario", !captura.ligada);
         const m = captura.medida, a = captura.achados || {}, d = m.delegado || {};
         estado.textContent = !captura.ligada ? "Desligada. A câmera comanda a personagem: o que você faz, ela faz."
-          : `${m.fps || "…"} quadros por segundo (${Math.round(m.ms || 0)} ms cada, ${Object.values(d).includes("GPU") ? "placa de vídeo" : "processador"}) · achou: ` +
-            ([a.rosto && "rosto", a.corpo && "corpo", a.maos && `${a.maos} mão${a.maos > 1 ? "s" : ""}`].filter(Boolean).join(", ") || "ninguém ainda (fique de frente para a câmera, com luz)");
+          : C.t("{fps} quadros por segundo ({ms} ms cada, {como}) · achou: {achou}", { fps: m.fps || "…", ms: Math.round(m.ms || 0), como: C.t(Object.values(d).includes("GPU") ? "placa de vídeo" : "processador"),
+            achou: [a.rosto && C.t("rosto"), a.corpo && C.t("corpo"), a.maos && C.t(a.maos > 1 ? "{n} mãos" : "{n} mão", { n: a.maos })].filter(Boolean).join(C.t(", ")) || C.t("ninguém ainda (fique de frente para a câmera, com luz)") });
       };
       const relogio = setInterval(atualizar, 700);
       const corpo = el("div", { class: "ajustes" }, liga, estado,
@@ -192,9 +193,9 @@
       try { prog.definir(0.3, "Convertendo para o esqueleto do VRM..."); r = await C.movimentos.importar(mapa); } finally { prog.fechar(); }
       // pelo nome (idle, walk, run, jump), os primeiros já ficam como o andar do cenário
       const escolhidos = andar(), usados = [];
-      for (const m of r.novos) { const e = C.movimentos.palpite(m.nome); if (e && !escolhidos[e]) { escolhidos[e] = m.id; usados.push(`"${m.nome}" ao ${ESTADOS_ANDAR.find((x) => x[0] === e)[1]}`); } }
+      for (const m of r.novos) { const e = C.movimentos.palpite(m.nome); if (e && !escolhidos[e]) { escolhidos[e] = m.id; usados.push(C.t("\"{nome}\" ao {estado}", { nome: m.nome, estado: C.t(ESTADOS_ANDAR.find((x) => x[0] === e)[1]) })); } }
       if (usados.length) { gravarPref("andar", JSON.stringify(escolhidos)); await aplicarAndar(); }
-      if (r.novos.length) LNUX.aviso(`${r.novos.length} movimento${r.novos.length > 1 ? "s" : ""} importado${r.novos.length > 1 ? "s" : ""}.` + (usados.length ? ` No cenário: ${usados.join(", ")}.` : ""), "ok", 7000);
+      if (r.novos.length) LNUX.aviso(C.t(r.novos.length > 1 ? "{n} movimentos importados." : "1 movimento importado.", { n: r.novos.length }) + (usados.length ? " " + C.t("No cenário: {lista}.", { lista: usados.join(C.t(", ")) }) : ""), "ok", 7000);
       if (r.erros.length) LNUX.dialogo({ titulo: "Movimentos que não abriram", corpo: el("div", { class: "ajustes" }, ...r.erros.map((t) => el("p", { style: { margin: 0 } }, t))), largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
       if (aberto && aberto.atualizar) aberto.atualizar();
       return r;
@@ -212,7 +213,7 @@
       const principais = C.OSSOS_VRM.filter((n) => !C.DEDOS_VRM.some((d) => n.includes(d)));
       const dedos = C.OSSOS_VRM.filter((n) => C.DEDOS_VRM.some((d) => n.includes(d)));
       const corpo = el("div", { class: "ajustes" },
-        el("p", { class: "fraco", style: { margin: 0 } }, `"${mov.nome}" tem ${info.ossos.length} ossos. A Companhia liga pelos nomes; se um membro mexe errado (ou não mexe), escolha aqui o osso certo do arquivo para cada osso da personagem.`),
+        el("p", { class: "fraco", style: { margin: 0 } }, C.t("\"{nome}\" tem {n} ossos. O WEBC liga pelos nomes; se um membro mexe errado (ou não mexe), escolha aqui o osso certo do arquivo para cada osso da personagem.", { nome: mov.nome, n: info.ossos.length })),
         el("div", { class: "tabela-ossos" }, principais.map(linha)),
         el("details", {}, el("summary", {}, "Dedos"), el("div", { class: "tabela-ossos", style: { marginTop: "8px" } }, dedos.map(linha))));
       const r = await LNUX.dialogo({ titulo: "Ossos do movimento", corpo, largo: true, botoes: [{ rotulo: "Voltar ao automático", valor: "auto" }, "espaco", { rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: "salvar" }] });
@@ -235,8 +236,8 @@
         const grupos = new Map();
         for (const m of l) { const g = m.pacote || "Avulsos"; if (!grupos.has(g)) grupos.set(g, []); grupos.get(g).push(m); }
         lista.replaceChildren(...[...grupos].flatMap(([g, itens]) => [
-          el("div", { class: "lnux-rotulo grupo" }, g, el("button", { class: "lnux-botao icone pequeno plano", type: "button", title: `Apagar o pacote "${g}"`, "aria-label": "Apagar pacote", html: LNUX.icone("lixo"),
-            onclick: async () => { if (!(await LNUX.confirmar("Apagar pacote", `Apagar os ${itens.length} movimentos de "${g}"?`, { rotulo: "Apagar", perigo: true }))) return; if (itens.some((m) => m.id === tocandoId)) parar(); await C.movimentos.apagar(itens.map((m) => m.id)); await aplicarAndar(); atualizar(); } })),
+          el("div", { class: "lnux-rotulo grupo" }, g, el("button", { class: "lnux-botao icone pequeno plano", type: "button", title: C.t("Apagar o pacote \"{nome}\"", { nome: g }), "aria-label": "Apagar pacote", html: LNUX.icone("lixo"),
+            onclick: async () => { if (!(await LNUX.confirmar("Apagar pacote", C.t("Apagar os {n} movimentos de \"{nome}\"?", { n: itens.length, nome: g }), { rotulo: "Apagar", perigo: true }))) return; if (itens.some((m) => m.id === tocandoId)) parar(); await C.movimentos.apagar(itens.map((m) => m.id)); await aplicarAndar(); atualizar(); } })),
           ...itens.map((m) => {
             const usos = ESTADOS_ANDAR.filter(([e]) => escolhidos[e] === m.id).map(([, n]) => n);
             const menu = el("button", { class: "lnux-botao icone pequeno plano", type: "button", title: "Mais", "aria-label": "Mais opções de " + m.nome }, "⋯");
@@ -304,7 +305,7 @@
       const r = await p.mundo.abrirMapa(arquivos, reg);
       if (!reg.ajuste || !reg.ajuste.escala) { reg.ajuste = { ...p.mundo.info.ajuste }; await C.mapas.atualizar(reg); }
       gravarPref("mapa", id);
-      if (avisar) LNUX.aviso(`Cenário "${reg.nome}": ${r.triangulos.toLocaleString("pt-BR")} triângulos, ${r.tamanho[0]} × ${r.tamanho[2]} m.`, "ok");
+      if (avisar) LNUX.aviso(C.t("Cenário \"{nome}\": {n} triângulos, {x} × {z} m.", { nome: reg.nome, n: r.triangulos.toLocaleString(), x: r.tamanho[0], z: r.tamanho[2] }), "ok");
       return true;
     }
     /** Escolhe os arquivos de um cenário (o modelo e o que vier junto: texturas, .mtl, .bin). */
@@ -333,7 +334,7 @@
       if (modelos.length > 1) {
         const s = el("select", { class: "lnux-selecao", size: Math.min(10, modelos.length), style: { width: "100%" } }, modelos.map((m, i) => el("option", { value: m, selected: i === 0 }, `${m} (${LNUX.bytes(arquivos.get(m).size)})`)));
         const ok = await LNUX.dialogo({ titulo: "Qual modelo é o cenário?", largo: true, corpo: el("div", { class: "ajustes" },
-          el("p", { class: "fraco", style: { margin: 0 } }, `O pacote tem ${modelos.length} modelos. Escolha o que é o mapa (em geral, o maior). Os outros (objetos soltos) não são colocados.`), s),
+          el("p", { class: "fraco", style: { margin: 0 } }, C.t("O pacote tem {n} modelos. Escolha o que é o mapa (em geral, o maior). Os outros (objetos soltos) não são colocados.", { n: modelos.length })), s),
           botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Converter", primario: true, valor: true }] });
         if (!ok) return null;
         principal = s.value || modelos[0];
@@ -345,7 +346,7 @@
       } finally { prog.fechar(); }
     }
     const avisarConversao = (r) => {
-      const partes = [`"${r.nome}" convertido ${r.como}: ${LNUX.bytes(r.glb.size)}` + (r.triangulos ? `, ${r.triangulos.toLocaleString("pt-BR")} triângulos` : "") + "."];
+      const partes = [C.t(r.triangulos ? "\"{nome}\" convertido {como}: {tamanho}, {n} triângulos." : "\"{nome}\" convertido {como}: {tamanho}.", { nome: r.nome, como: C.t(r.como), tamanho: LNUX.bytes(r.glb.size), n: (r.triangulos || 0).toLocaleString() })];
       LNUX.aviso(partes.concat(r.avisos).join(" "), r.avisos.length ? "alerta" : "ok", r.avisos.length ? 14000 : 6000);
     };
     async function importarMapa() {
@@ -419,7 +420,7 @@
         mapas.disabled = !!naSala; // na sala, abrir outro cenário aqui só mudaria para mim
         for (const b of doDisco.querySelectorAll("button")) b.disabled = !!naSala;
         const l = await C.mapas.lista(), id = m.info ? m.info.id : "";
-        mapas.replaceChildren(el("option", { value: "" }, naSala && m.info ? m.info.nome + " (o da sala)" : "Sem cenário (chão simples)"), ...l.map((x) => el("option", { value: x.id, selected: x.id === id }, `${x.nome} (${LNUX.bytes(x.tamanho)})`)));
+        mapas.replaceChildren(el("option", { value: "" }, naSala && m.info ? C.t("{nome} (o da sala)", { nome: m.info.nome }) : "Sem cenário (chão simples)"), ...l.map((x) => el("option", { value: x.id, selected: x.id === id }, `${x.nome} (${LNUX.bytes(x.tamanho)})`)));
         if (!m.info) { ajustes.replaceChildren(); return; }
         const a = m.info.ajuste;
         if (!Array.isArray(a.posicao)) a.posicao = [0, 0, 0];
@@ -440,14 +441,14 @@
               botao("Zerar a posição", () => { a.posicao = [0, 0, 0]; m.aplicarAjuste(); salvarAjuste(); atualizar(); }, "pequeno"))),
           el("div", { class: "linha" },
             botao("Começar aqui", () => { m.marcarPartida(); salvarAjuste(); LNUX.aviso("Ponto de partida guardado: é aqui que ela aparece neste cenário" + (naSala ? " (para todos da sala)." : "."), "ok"); }, "pequeno"),
-            botao("Voltar ao começo", () => m.partida(), "pequeno"),
+            ((b) => { b.dataset.sempre = "1"; return b; })(botao("Voltar ao começo", () => m.partida(), "pequeno")),
             botao("Esquecer o começo", () => { a.partida = null; m.partida(); salvarAjuste(); }, "pequeno")));
         // quem só visita a sala vê o ajuste, mas não mexe ("Voltar ao começo" continua valendo)
-        if (!mexe) for (const c of ajustes.querySelectorAll("input, button")) if (c.textContent !== "Voltar ao começo") c.disabled = true;
+        if (!mexe) for (const c of ajustes.querySelectorAll("input, button")) if (!c.dataset.sempre) c.disabled = true;
       };
       mapas.addEventListener("change", async () => { $carregando(true, "Abrindo o cenário..."); try { await abrirMapaGuardado(mapas.value); } catch (e) { LNUX.erro(e); } finally { $carregando(false); } atualizar(); });
       doDisco.append(botao("Abrir cenário...", importarMapa), botao("Salvar em .glb", salvarMapa),
-        botao("Apagar este", async () => { if (!m.info || !m.info.id) return; const id = m.info.id; if (!(await LNUX.confirmar("Apagar cenário", `Apagar "${m.info.nome}" deste aparelho?`, { rotulo: "Apagar", perigo: true }))) return; m.tirarMapa(); await C.mapas.apagar(id); gravarPref("mapa", ""); atualizar(); }));
+        botao("Apagar este", async () => { if (!m.info || !m.info.id) return; const id = m.info.id; if (!(await LNUX.confirmar("Apagar cenário", C.t("Apagar \"{nome}\" deste navegador?", { nome: m.info.nome }), { rotulo: "Apagar", perigo: true }))) return; m.tirarMapa(); await C.mapas.apagar(id); gravarPref("mapa", ""); atualizar(); }));
       const corpo = el("div", { class: "ajustes" }, el("div", { class: "linha" }, anda, voo),
         el("p", { class: "fraco pequeno", style: { margin: 0 } }, "W A S D ou as setas andam · Shift corre · Espaço pula · V voa (Espaço sobe, C desce) · arrastar gira a câmera · a rodinha aproxima. No celular aparece um direcional."),
         avisoSala,
@@ -460,7 +461,7 @@
         botao("Só converter um mapa para .glb...", converterMapa),
         el("details", {}, el("summary", {}, "Mapas do VRChat e do Unity"),
           el("p", { class: "fraco pequeno", style: { margin: "8px 0 0" } }, "Um mundo publicado do VRChat (.vrcw) é um pacote fechado do motor Unity e não abre fora dele. O que abre aqui: o cenário exportado em glTF/GLB " +
-            "(no Unity, com o UnityGLTF ou \"Export GLB\"), o arquivo .blend do Blender, modelos .fbx, .obj e .dae, um ZIP com o modelo e as texturas, ou o .unitypackage do mundo — a Companhia abre o pacote, " +
+            "(no Unity, com o UnityGLTF ou \"Export GLB\"), o arquivo .blend do Blender, modelos .fbx, .obj e .dae, um ZIP com o modelo e as texturas, ou o .unitypackage do mundo — o WEBC abre o pacote, " +
             "lista os modelos de dentro e converte para .glb (as peças soltas de uma cena montada no Unity não são reposicionadas). Use só mapas que você tem o direito de usar.")));
       painel("cenario", "Cenário", corpo, { atualizar });
       atualizar();

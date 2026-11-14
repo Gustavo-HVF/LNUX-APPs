@@ -733,7 +733,7 @@
         if (/\.(vrcw|vrca|unity3d|assetbundle|bundle)$/i.test(nome)) {
           const e = new Error("Esse é um mundo (ou avatar) já publicado do VRChat/Unity: um pacote fechado do motor Unity, que não abre fora dele. " +
             "Para usar um cenário aqui, abra o arquivo do projeto: o .blend do Blender, .fbx, .obj, .dae, glTF/GLB (no Unity, com o UnityGLTF ou \"Export GLB\") " +
-            "ou o .unitypackage do mundo, que a Companhia lista os modelos de dentro. Ela converte tudo para .glb.");
+            "ou o .unitypackage do mundo, e o WEBC lista os modelos de dentro e converte tudo para .glb.");
           e.explicacao = true;
           throw e;
         }
