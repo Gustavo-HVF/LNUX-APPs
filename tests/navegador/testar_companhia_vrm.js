@@ -71,7 +71,7 @@ function zip(arquivos) {
   ]));
 
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
-  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, acceptDownloads: true });
+  const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, locale: "pt-BR", acceptDownloads: true });
   // sem o núcleo do Live2D: as personagens VRoid não precisam dele
   await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
   const pagina = await contexto.newPage();

@@ -52,14 +52,18 @@
     async atualizarPublico() { this.publico = null; return this.disponivel(); },
     /** Lê a conta da sessão guardada (se ainda vale). */
     async carregar() {
-      if (!this.sessao()) { this.eu = null; return null; }
-      try { this.eu = await pedir("GET", "eu"); }
-      catch (e) { if (e.status === 401) this.guardarSessao(""); this.eu = null; }
-      this.avisar();
+      const antes = JSON.stringify(this.eu || null);
+      if (!this.sessao()) this.eu = null;
+      else {
+        try { this.eu = await pedir("GET", "eu"); }
+        catch (e) { if (e.status === 401) this.guardarSessao(""); this.eu = null; }
+      }
+      // só avisa se mudou: quem ouve (a página do perfil) carrega de novo, e avisar sempre faria um laço sem fim
+      if (JSON.stringify(this.eu || null) !== antes) this.avisar();
       return this.eu;
     },
     entrou(r) { this.guardarSessao(r.sessao); this.eu = r.conta; this.avisar(); return r.conta; },
-    cadastrar: (d) => pedir("POST", "cadastro", { json: d }),
+    cadastrar: (d) => pedir("POST", "cadastro", { json: { ...d, idioma: C.idioma || "pt" } }),
     async verificar(email, codigo) { return C.contas.entrou(await pedir("POST", "verificar", { json: { email, codigo } })); },
     reenviar: (email) => pedir("POST", "reenviar", { json: { email } }),
     async entrar(email, senha) { return C.contas.entrou(await pedir("POST", "entrar", { json: { email, senha } })); },
@@ -68,10 +72,15 @@
     async mandarImagem(tipo, blob) { this.eu = await pedir("PUT", "midia", { corpo: blob, parametros: { tipo } }); this.avisar(); return this.eu; },
     async tirarImagem(tipo) { this.eu = await pedir("DELETE", "midia", { parametros: { tipo } }); this.avisar(); return this.eu; },
     trocarSenha: (atual, nova) => pedir("POST", "senha", { json: { atual, nova } }),
-    recuperar: (email) => pedir("POST", "recuperar", { json: { email } }),
+    recuperar: (email) => pedir("POST", "recuperar", { json: { email, idioma: C.idioma || "pt" } }),
     async redefinir(email, codigo, senha) { return C.contas.entrou(await pedir("POST", "redefinir", { json: { email, codigo, senha } })); },
     async apagar(senha) { await pedir("POST", "apagar", { json: { senha } }); this.guardarSessao(""); this.eu = null; this.avisar(); },
     perfil: (id) => pedir("GET", "perfil/" + encodeURIComponent(id)),
+    /** Amizade: acao = pedir | aceitar | recusar | desfazer. Devolve {relacao, amigos, pedidos, enviados}. */
+    async amizade(acao, id) { const r = await pedir("POST", "amigos", { json: { acao, id } }); if (this.eu) Object.assign(this.eu, { amigos: r.amigos, pedidos: r.pedidos, enviados: r.enviados }); this.avisar(); return r; },
+    /** Guarda (ou tira) um item da loja no perfil. */
+    async salvar(id, salvar = true) { const r = await pedir("POST", "salvos", { json: { id, salvar } }); if (this.eu) this.eu.salvos = r.salvos; return r.salvos; },
+    salvou(id) { return !!(this.eu && (this.eu.salvos || []).includes(id)); },
     imagem: (p, tipo = "foto") => (p && p[tipo] ? `/api/contas/midia/${p.id}/${tipo}?v=${p[tipo]}` : ""),
     // do dono do servidor
     ajustes: () => pedir("GET", "ajustes"),
@@ -119,6 +128,7 @@
     const fechar = (conta) => { clearInterval(espera); aoEntrar(conta || null); };
     function desenhar(novo, msg) {
       modo = novo;
+      corpo.dataset.modo = modo;
       clearInterval(espera);
       corpo.replaceChildren(...telas[modo](msg).filter(Boolean));
       // o foco no primeiro campo: na hora, se a janela já está aberta (ao abrir, a própria janela cuida do foco)
@@ -148,7 +158,8 @@
         s.addEventListener("keydown", (ev) => { if (ev.key === "Enter") fazer(); });
         return [el("h3", {}, "Entrar na sua conta"), campo("E-mail", e), campo("Senha", s), msg || null,
           acoes(ir, link("Esqueci a senha", () => { email = e.value.trim(); desenhar("esqueci"); })),
-          el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Não tem conta? ", link("Criar uma conta", () => desenhar("criar")))];
+          el("div", { class: "conta-ou", role: "separator" }, el("span", {}, "ou")),
+          el("p", { class: "conta-criar", style: { margin: 0 } }, link("Criar uma conta", () => desenhar("criar")))];
       },
       criar(msg) {
         const n = entrada({ autocomplete: "nickname", maxlength: 30, "aria-label": "Nome" }), e = entrada({ type: "email", autocomplete: "email", "aria-label": "E-mail", value: email });
@@ -169,7 +180,7 @@
           el("div", { class: "grade" }, campo("Nome", n, "Como os outros vão te ver"), campo("Idade", i, pub.idade_minima ? `A partir de ${pub.idade_minima} anos` : "")),
           campo("E-mail", e, "Para o código de confirmação e para recuperar a senha"),
           el("div", { class: "grade" }, campo("Senha", s, "Pelo menos 8 caracteres"), campo("Repita a senha", s2)),
-          el("label", { class: "lnux-alternar" }, aceito, el("span", {}, "Concordo que o meu nome, e-mail, idade e perfil fiquem guardados no aparelho de quem tem este servidor.")),
+          el("label", { class: "lnux-alternar" }, aceito, el("span", {}, "Concordo que o meu nome, e-mail, idade e perfil fiquem guardados no WEBC.")),
           msg || null, acoes(ir), el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Já tem conta? ", link("Entrar", () => desenhar("entrar")))];
       },
       codigo(msg) {
@@ -273,7 +284,7 @@
       el("div", { class: "grade" }, campo("Cidade", local), el("label", { class: "lnux-campo" }, el("span", {}, "Cor do perfil"), cor)),
       el("div", { class: "lnux-rotulo" }, "Links (até 3)"), ...links,
       el("div", { class: "lnux-rotulo" }, "Conta"),
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, `E-mail: ${eu.email} · idade: ${eu.idade} anos. Ficam no aparelho de quem tem este servidor; os outros só veem o perfil.`),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, C.t("E-mail: {email} · idade: {idade} anos. Só você vê; os outros veem o perfil.", { email: eu.email, idade: eu.idade })),
       el("div", { class: "linha" }, senha, sair, apagar));
     d = LNUX.dialogo({ titulo: "Meu perfil", largo: true, corpo, botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: "salvar" }] });
     if ((await d) !== "salvar") return null;
@@ -316,7 +327,7 @@
     const usuario = entrada({ value: e.usuario || "", "aria-label": "Usuário do e-mail", autocomplete: "off", placeholder: "voce@gmail.com" });
     const senha = entrada({ type: "password", "aria-label": "Senha do e-mail", autocomplete: "new-password", placeholder: e.tem_senha ? "(guardada; escreva para trocar)" : "Senha de app" });
     const remetente = entrada({ type: "email", value: e.remetente || "", "aria-label": "Remetente", placeholder: "voce@gmail.com" });
-    const nomeRem = entrada({ value: e.nome || "", "aria-label": "Nome do remetente", placeholder: "Companhia" });
+    const nomeRem = entrada({ value: e.nome || "", "aria-label": "Nome do remetente", placeholder: "WEBC" });
     provedor.addEventListener("change", () => { const p = PROVEDORES[provedor.value]; if (p) { servidor.value = p[0]; porta.value = p[1]; seguranca.value = p[2]; } });
     const idade = entrada({ type: "number", min: 0, max: 99, value: a.idade_minima, "aria-label": "Idade mínima" });
     const exigir = el("input", { type: "checkbox", checked: a.exigir_conta, "aria-label": "Só joga quem tem conta" });
@@ -347,9 +358,9 @@
       return r;
     }
     const corpo = el("div", { class: "ajustes janela-contas-dono" },
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, `As contas ficam neste aparelho: ${a.pasta} (${a.contas} confirmadas).`),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, C.t("{n} contas confirmadas.", { n: a.contas })),
       el("div", { class: "lnux-rotulo" }, "E-mail que manda os códigos"),
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Use uma conta de e-mail sua. No Gmail, crie uma \"senha de app\" (Conta Google › Segurança › Senhas de app) e use aqui, não a senha normal. A senha fica só neste aparelho."),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Use uma conta de e-mail sua. No Gmail, crie uma \"senha de app\" (Conta Google › Segurança › Senhas de app) e use aqui, não a senha normal. A senha fica guardada só no servidor e não volta para a tela."),
       campo("Provedor", provedor),
       el("div", { class: "grade" }, campo("Servidor SMTP", servidor), campo("Porta", porta)),
       el("div", { class: "grade" }, campo("Segurança", seguranca), campo("Usuário", usuario)),

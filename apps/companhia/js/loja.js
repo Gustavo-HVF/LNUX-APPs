@@ -18,16 +18,19 @@
   const { el } = LNUX;
   const TIPOS = {
     personagem: { nome: "Personagens", um: "Personagem", icone: "🧍", usar: "Usar esta personagem" },
-    mundo: { nome: "Mundos", um: "Mundo", icone: "🗺️", usar: "Usar este mundo" },
+    mundo: { nome: "Mapas", um: "Mapa", icone: "🗺️", usar: "Usar este mapa" },
     animacao: { nome: "Animações", um: "Animação", icone: "💃", usar: "Usar esta animação" },
   };
+  const t = (s, v) => (C.t ? C.t(s, v) : s);
   const SEGREDOS = "companhia.loja.segredos";
 
   // ── O servidor ───────────────────────────────────────────────────────
 
   async function pedir(metodo, rota, { json, corpo, como = "json", segredo } = {}) {
     const cab = {};
-    if (LNUX.ponte._token) cab["X-Ponte-Token"] = LNUX.ponte._token; // o dono (no próprio aparelho)
+    if (LNUX.ponte._token) cab["X-Ponte-Token"] = LNUX.ponte._token; // o dono do servidor
+    const sessao = C.contas && C.contas.sessao();
+    if (sessao) cab["X-Conta-Sessao"] = sessao; // quem tem conta: curtir, e o nome dela no que publicar
     if (segredo) cab["X-Loja-Segredo"] = segredo;
     if (json !== undefined) cab["Content-Type"] = "application/json";
     let r;
@@ -73,13 +76,15 @@
       }
       return new Blob(partes);
     },
-    /** Publica: {tipo, blob, arquivo, nome, descricao, autor}. Guarda o segredo neste navegador. Devolve o item. */
-    publicar({ tipo, blob, arquivo, nome, descricao, autor }, aoProgresso = () => {}) {
+    /** Publica: {tipo, blob, arquivo, nome, descricao, autor, tags}. Guarda o segredo neste navegador. Devolve o item. */
+    publicar({ tipo, blob, arquivo, nome, descricao, autor, tags }, aoProgresso = () => {}) {
       return new Promise((ok, falhou) => {
-        const q = new URLSearchParams({ arquivo, nome: nome || "", descricao: descricao || "", autor: autor || "" });
+        const q = new URLSearchParams({ arquivo, nome: nome || "", descricao: descricao || "", autor: autor || "", tags: (tags || []).join(",") });
         const x = new XMLHttpRequest();
         x.open("PUT", `/api/loja/${tipo}?${q}`);
         if (LNUX.ponte._token) x.setRequestHeader("X-Ponte-Token", LNUX.ponte._token);
+        const sessao = C.contas && C.contas.sessao();
+        if (sessao) x.setRequestHeader("X-Conta-Sessao", sessao);
         x.upload.onprogress = (e) => { if (e.lengthComputable) aoProgresso(e.loaded / e.total); };
         x.onerror = () => falhou(new Error("A loja não respondeu (o servidor está ligado?)."));
         x.onload = () => {
@@ -95,6 +100,14 @@
     trocarMiniatura: (item, blob) => pedir("PUT", item.id + "/miniatura", { corpo: blob, segredo: lerSegredos()[item.id] }),
     async apagar(item) { await pedir("DELETE", item.id, { segredo: lerSegredos()[item.id] }); gravarSegredo(item.id, null); },
     configurar: (cfg) => pedir("POST", "config", { json: cfg }),
+    /** Curtir (só com conta). Devolve {curtidas, curti}. */
+    curtir: (item, curtir) => pedir("POST", item.id + "/curtir", { json: { curtir } }),
+    /** Conta que esta pessoa baixou (uma vez por pessoa). Devolve {baixados}. */
+    baixou: (item) => pedir("POST", item.id + "/baixou", { json: {} }).catch(() => null),
+    /** Muda os #, o nome ou a descrição (quem publicou, pelo segredo, ou o dono). */
+    editar: (item, dados) => pedir("POST", item.id, { json: dados, segredo: lerSegredos()[item.id] }),
+    /** "fnaf, terror #anime" → ["fnaf", "terror", "anime"] (como o servidor faz). */
+    tags: (texto) => [...new Set(String(texto || "").split(/[\s,;#]+/).map((x) => x.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, "")).filter(Boolean))].slice(0, 12),
     /** Quem pode apagar o item: o dono da loja ou quem publicou (o segredo ficou neste navegador). */
     podeMexer: (item, dono) => !!(dono || (!item.solto && lerSegredos()[item.id])),
   };
@@ -339,67 +352,133 @@
     return d < 1 ? "hoje" : d < 2 ? "ontem" : d < 30 ? `há ${Math.floor(d)} dias` : new Date(s * 1000).toLocaleDateString("pt-BR");
   };
 
+  /** O cartão de um item: a prévia em cima e, embaixo, o nome, quem publicou, as curtidas e quantos baixaram. */
+  C.cartaoDaLoja = function (item, { aoAbrir = () => {}, aoCurtir = null } = {}) {
+    const tp = TIPOS[item.tipo];
+    const capa = el("div", { class: "capa" }, item.miniatura ? el("img", { src: C.loja.miniatura(item), alt: "", loading: "lazy" }) : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, tp.icone),
+      el("span", { class: "selo-tipo" }, tp.um));
+    if (Date.now() / 1000 - item.criado < 3 * 86400) capa.append(el("span", { class: "selo-novo" }, "Novo"));
+    const curtir = el("button", { type: "button", class: "webc-curtir" + (item.curti ? " curti" : ""), "aria-pressed": String(!!item.curti), title: item.curti ? "Descurtir" : "Curtir", "aria-label": item.curti ? "Descurtir" : "Curtir",
+      onclick: (e) => { e.stopPropagation(); if (aoCurtir) aoCurtir(item); } }, C.iconeWebc ? C.iconeWebc("coracao") : "♥", el("span", { class: "numero" }, String(item.curtidas || 0)));
+    const cartao = el("article", { class: "cartao-loja webc-item", role: "listitem", tabindex: 0, "data-id": item.id, "data-tipo": item.tipo, onclick: () => aoAbrir(item),
+      onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); aoAbrir(item); } } },
+      capa,
+      el("div", { class: "webc-item-info" },
+        el("span", { class: "nome", translate: "no" }, item.nome),
+        el("span", { class: "autor" }, item.autor ? t("por {autor}", { autor: item.autor }) : t("sem autor")),
+        item.tags && item.tags.length ? el("span", { class: "webc-tags", translate: "no" }, item.tags.slice(0, 3).map((x) => "#" + x).join(" ")) : null,
+        el("div", { class: "webc-item-numeros" }, curtir, el("span", { class: "webc-baixados", title: "Quantas pessoas baixaram" }, C.iconeWebc ? C.iconeWebc("baixar") : "⤓", el("span", { class: "numero" }, String(item.baixados || 0))))));
+    return cartao;
+  };
+
   /**
-   * Abre a loja. opcoes: {tipo (aba inicial), aoUsar(item, blob) (o que "Usar" faz; padrão: ctx.usar), ctx}.
+   * Abre a loja. opcoes: {tipo (aba inicial), aoUsar(item, blob) (o que "Usar" faz; padrão: ctx.usar), dentro (o
+   * lugar: numa página do WEBC; sem ele, por cima de tudo), pagina (sem o botão de fechar), item (abre direto),
+   * busca}.
    * ctx (do app): {usar(item, blob), fontes(tipo) → [{id, nome}], arquivoDaFonte(tipo, id) → {blob, arquivo, nome},
    *                arquivoDoAparelho(tipo) → {blob, arquivo, nome} | null, autor()}.
    * Devolve uma Promise que resolve quando a loja fecha.
    */
-  C.abrirLoja = function (ctx, { tipo = "", aoUsar = null } = {}) {
+  C.abrirLoja = function (ctx, { tipo = "", aoUsar = null, dentro = null, pagina = false, item: itemInicial = "", busca: buscaInicial = "" } = {}) {
     let fechar;
     const terminou = new Promise((ok) => (fechar = ok));
-    let dados = { itens: [], publicar: false, dono: false }, aba = tipo, busca = "", vitrine = null, aberto = null, miniaturas = null;
-    const grade = el("div", { class: "loja-grade", role: "list" });
-    const abas = el("nav", { class: "loja-abas", role: "tablist" });
-    const campo = el("input", { type: "search", class: "lnux-entrada loja-busca", placeholder: "Procurar na loja...", "aria-label": "Procurar na loja" });
+    let dados = { itens: [], publicar: false, dono: false }, aba = TIPOS[tipo] ? tipo : "personagem", busca = "", vitrine = null, aberto = null, miniaturas = null;
+    let ordem = "curtidos", soSalvos = false;
+    const grade = el("div", { class: "loja-grade webc-grade", role: "list" });
+    const abas = el("nav", { class: "loja-abas webc-abas", role: "tablist" });
+    const campo = el("input", { type: "search", class: "loja-busca webc-busca-campo", placeholder: "pesquisa", "aria-label": "Procurar na loja", value: buscaInicial });
     const dono = el("div", { class: "loja-dono", hidden: true });
     const detalhe = el("section", { class: "loja-detalhe", hidden: true, "aria-live": "polite" });
     const vazio = el("div", { class: "loja-vazio", hidden: true });
-    const publicar = el("button", { class: "lnux-botao primario", type: "button", onclick: () => janelaPublicar(ctx, { tipo: aba || "personagem" }).then((item) => { if (item) { recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "＋ Publicar");
-    const caixa = el("div", { class: "loja", role: "dialog", "aria-label": "Loja", "aria-modal": "true" },
-      el("header", { class: "loja-topo" },
-        el("div", { class: "loja-titulo" }, el("b", {}, "🛍️ Loja"), el("span", { class: "fraco pequeno" }, "personagens, mundos e animações deste servidor")),
-        campo, publicar,
-        el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a loja", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair() })),
-      abas, dono, grade, vazio, detalhe);
-    document.body.append(caixa);
+    const filtro = el("div", { class: "webc-filtro-painel", hidden: true });
+    const botaoFiltro = el("button", { type: "button", class: "webc-filtro", "aria-expanded": "false", onclick: () => { filtro.hidden = !filtro.hidden; botaoFiltro.setAttribute("aria-expanded", String(!filtro.hidden)); desenharFiltro(); } },
+      el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
+    const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => janelaPublicar(ctx, { tipo: aba || "personagem" }).then((item) => { if (item) { recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "＋ Publicar");
+    const caixa = el("div", { class: "loja webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Loja", "aria-modal": pagina ? undefined : "true" },
+      el("header", { class: "loja-topo webc-painel-topo" },
+        el("h1", { class: "webc-painel-titulo" }, "LOJA"),
+        el("label", { class: "webc-busca" }, C.iconeWebc ? C.iconeWebc("busca") : "🔍", campo),
+        el("span", { class: "webc-espaco" }),
+        publicar, botaoFiltro,
+        pagina ? null : el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a loja", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair() })),
+      filtro, abas, dono, grade, vazio, detalhe);
+    (dentro || document.body).append(caixa);
     const teclas = (e) => {
       if (e.key !== "Escape" || document.querySelector(".lnux-fundo-modal")) return;
-      e.preventDefault();
-      if (!detalhe.hidden) voltar(); else sair();
+      if (!detalhe.hidden) { e.preventDefault(); voltar(); return; }
+      if (!pagina) { e.preventDefault(); sair(); }
     };
     document.addEventListener("keydown", teclas);
+    const pararDeOuvir = C.contas ? C.contas.aoMudar(() => recarregar().catch(() => {})) : () => {};
     function sair() {
       document.removeEventListener("keydown", teclas);
+      pararDeOuvir();
       if (vitrine) { vitrine.destruir(); vitrine = null; }
       if (miniaturas) miniaturas.parar = true;
       caixa.remove();
       fechar();
     }
-    campo.addEventListener("input", () => { busca = campo.value.trim().toLowerCase(); desenharGrade(); });
+    busca = buscaInicial.trim().toLowerCase();
+    campo.addEventListener("input", () => {
+      busca = campo.value.trim().toLowerCase();
+      if (!detalhe.hidden) voltar();
+      // nada nesta categoria, mas há em outra: vai para ela (quem pesquisa "praça" nas personagens acha o mapa)
+      if (busca && !filtrados().length) { const outra = Object.keys(TIPOS).find((tp) => filtrados(tp).length); if (outra) { aba = outra; desenharFiltro(); } }
+      desenharAbas();
+      desenharGrade();
+    });
 
     function desenharAbas() {
-      const conta = (t) => dados.itens.filter((i) => !t || i.tipo === t).length;
-      abas.replaceChildren(...[["", "Tudo"], ...Object.entries(TIPOS).map(([t, x]) => [t, x.icone + " " + x.nome])].map(([t, rotulo]) =>
-        el("button", { type: "button", role: "tab", class: "loja-aba" + (aba === t ? " ativa" : ""), "aria-selected": String(aba === t), "data-tipo": t,
-          onclick: () => { aba = t; voltar(); desenharAbas(); desenharGrade(); } }, rotulo, el("span", { class: "conta" }, String(conta(t))))));
+      const conta = (tp) => dados.itens.filter((i) => i.tipo === tp && passa(i)).length; // com uma pesquisa: quantos acharam em cada categoria
+      abas.replaceChildren(...Object.entries(TIPOS).map(([tp, x]) =>
+        el("button", { type: "button", role: "tab", class: "loja-aba" + (aba === tp ? " ativa" : ""), "aria-selected": String(aba === tp), "data-tipo": tp,
+          onclick: () => { aba = tp; voltar(); desenharAbas(); desenharGrade(); desenharFiltro(); } }, x.nome, el("span", { class: "conta" }, String(conta(tp))))));
     }
-    function cartao(item) {
-      const t = TIPOS[item.tipo];
-      const capa = el("div", { class: "capa" }, item.miniatura ? el("img", { src: C.loja.miniatura(item), alt: "", loading: "lazy" }) : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, t.icone),
-        el("span", { class: "selo-tipo" }, t.um));
-      if (Date.now() / 1000 - item.criado < 3 * 86400) capa.append(el("span", { class: "selo-novo" }, "Novo"));
-      return el("button", { type: "button", class: "cartao-loja", role: "listitem", "data-id": item.id, onclick: () => abrirItem(item.id) },
-        capa, el("span", { class: "nome" }, item.nome), el("span", { class: "fraco pequeno" }, [item.autor, LNUX.bytes(item.tamanho)].filter(Boolean).join(" · ")));
+    /** O filtro: a ordem, só os salvos e os # mais usados nesta categoria. */
+    function desenharFiltro() {
+      if (filtro.hidden) return;
+      const contagem = new Map();
+      for (const i of dados.itens) if (i.tipo === aba) for (const tg of i.tags || []) contagem.set(tg, (contagem.get(tg) || 0) + 1);
+      const populares = [...contagem].sort((a, b) => b[1] - a[1]).slice(0, 16);
+      const opcao = (v, r) => el("button", { type: "button", class: "webc-chip" + (ordem === v ? " ativo" : ""), "data-ordem": v, onclick: () => { ordem = v; desenharFiltro(); desenharGrade(); } }, r);
+      const salvos = el("input", { type: "checkbox", checked: soSalvos, disabled: !(C.contas && C.contas.eu), "aria-label": "Só os que eu salvei" });
+      salvos.addEventListener("change", () => { soSalvos = salvos.checked; desenharAbas(); desenharGrade(); });
+      filtro.replaceChildren(...LNUX.filhos(
+        el("div", { class: "webc-filtro-linha" }, el("span", { class: "fraco pequeno" }, "Ordenar:"), opcao("curtidos", "Mais curtidos"), opcao("baixados", "Mais baixados"), opcao("novos", "Mais novos"), opcao("nome", "Nome")),
+        el("label", { class: "lnux-alternar" }, salvos, "Só os que eu salvei no perfil"),
+        populares.length ? el("div", { class: "webc-filtro-linha" }, el("span", { class: "fraco pequeno" }, "#:"),
+          populares.map(([tg, n]) => el("button", { type: "button", class: "webc-chip" + (busca === "#" + tg ? " ativo" : ""), "data-tag": tg, translate: "no", onclick: () => { campo.value = busca === "#" + tg ? "" : "#" + tg; campo.dispatchEvent(new Event("input")); desenharFiltro(); } }, `#${tg} (${n})`))) : null));
     }
-    function filtrados() {
-      return dados.itens.filter((i) => (!aba || i.tipo === aba) && (!busca || (i.nome + " " + i.autor + " " + i.descricao).toLowerCase().includes(busca)));
+    async function curtirItem(item) {
+      if (!(C.contas && C.contas.eu)) {
+        LNUX.aviso("Entre na sua conta para curtir.", "alerta");
+        if (C.janelaConta && (C.contas.publico || {}).contas) C.janelaConta("entrar");
+        return;
+      }
+      try {
+        const r = await C.loja.curtir(item, !item.curti);
+        Object.assign(item, r);
+        desenharGrade();
+        if (aberto === item) desenharNumeros(item);
+      } catch (e) { LNUX.erro(e); }
+    }
+    /** O item passa na pesquisa (pelo nome, autor, descrição ou #) e no "só os salvos"? */
+    function passa(i) {
+      const tag = busca.startsWith("#") ? busca.slice(1) : "";
+      return (!soSalvos || (C.contas && C.contas.salvou(i.id))) &&
+        (!busca || (tag ? (i.tags || []).includes(tag) : (i.nome + " " + i.autor + " " + i.descricao + " " + (i.tags || []).join(" ")).toLowerCase().includes(busca)));
+    }
+    function filtrados(tipo = aba) {
+      const l = dados.itens.filter((i) => i.tipo === tipo && passa(i));
+      const por = { curtidos: (a, b) => (b.curtidas || 0) - (a.curtidas || 0) || b.criado - a.criado, baixados: (a, b) => (b.baixados || 0) - (a.baixados || 0) || b.criado - a.criado,
+        novos: (a, b) => b.criado - a.criado, nome: (a, b) => a.nome.localeCompare(b.nome) }[ordem];
+      return l.sort(por);
     }
     function desenharGrade() {
       const lista = filtrados();
-      grade.replaceChildren(...lista.map(cartao));
+      grade.replaceChildren(...lista.map((i) => C.cartaoDaLoja(i, { aoAbrir: (x) => abrirItem(x.id), aoCurtir: curtirItem })));
       vazio.hidden = !!lista.length || !detalhe.hidden;
-      vazio.replaceChildren(...LNUX.filhos(el("p", { style: { margin: 0 } }, busca ? "Nada com esse nome." : `Ainda não há ${aba ? TIPOS[aba].nome.toLowerCase() : "nada"} na loja.`),
+      vazio.replaceChildren(...LNUX.filhos(el("p", { style: { margin: 0 } }, busca ? (busca.startsWith("#") ? t("Nada com o {tag}.", { tag: busca }) : "Nada com esse nome.") : t("Ainda não há {tipo} na loja.", { tipo: t(TIPOS[aba].nome).toLowerCase() })),
         dados.publicar || dados.dono ? el("p", { class: "fraco", style: { margin: 0 } }, "Seja a primeira pessoa a publicar: ＋ Publicar.") : null));
     }
     function desenharDono() {
@@ -410,8 +489,7 @@
         try { dados.publicar = (await C.loja.configurar({ publicar: caixaPublicar.checked })).publicar; LNUX.aviso(dados.publicar ? "Os visitantes podem publicar na loja." : "Só você publica na loja agora.", "ok"); }
         catch (e) { caixaPublicar.checked = dados.publicar; LNUX.erro(e); }
       });
-      dono.replaceChildren(el("span", { class: "fraco pequeno" }, "A loja é sua: fica em ", el("code", {}, dados.pasta || ""), ". Pôr arquivos nas subpastas (personagens, mundos, animacoes) também publica."),
-        el("label", { class: "lnux-alternar" }, caixaPublicar, "Deixar quem entra pelo link publicar"));
+      dono.replaceChildren(el("label", { class: "lnux-alternar" }, caixaPublicar, "Deixar quem entra pelo link publicar"));
     }
     async function recarregar() {
       dados = await C.loja.lista();
@@ -419,7 +497,9 @@
       desenharAbas();
       desenharDono();
       desenharGrade();
+      desenharFiltro();
       gerarMiniaturas();
+      if (aberto) { const novo = dados.itens.find((i) => i.id === aberto.id); if (novo) { Object.assign(aberto, novo); desenharNumeros(aberto); } }
     }
     function voltar() {
       if (vitrine) { vitrine.destruir(); vitrine = null; }
@@ -429,53 +509,85 @@
       abas.hidden = false;
       vazio.hidden = !!filtrados().length;
     }
+    let numeros = null;
+    function desenharNumeros(item) {
+      if (!numeros) return;
+      const salvo = C.contas && C.contas.salvou(item.id);
+      numeros.replaceChildren(
+        el("button", { type: "button", class: "lnux-botao webc-curtir" + (item.curti ? " curti" : ""), id: "loja-curtir", "aria-pressed": String(!!item.curti), onclick: () => curtirItem(item) },
+          C.iconeWebc ? C.iconeWebc("coracao") : "♥", el("span", { class: "numero" }, String(item.curtidas || 0)), " ", item.curti ? t("Curtido") : t("Curtir")),
+        el("span", { class: "webc-baixados", title: "Quantas pessoas baixaram" }, C.iconeWebc ? C.iconeWebc("baixar") : "⤓", el("span", { class: "numero" }, String(item.baixados || 0)), " ", t("baixaram")),
+        C.contas && C.contas.eu ? el("button", { type: "button", class: "lnux-botao" + (salvo ? " ativo" : ""), id: "loja-salvar", "aria-pressed": String(!!salvo),
+          onclick: async () => { try { await C.contas.salvar(item.id, !salvo); desenharNumeros(item); LNUX.aviso(salvo ? t("Saiu do seu perfil.") : t("Salvo no seu perfil."), "ok"); } catch (e) { LNUX.erro(e); } } },
+          C.iconeWebc ? C.iconeWebc("salvar") : "🔖", " ", salvo ? t("Salvo no perfil") : t("Salvar no perfil")) : null);
+    }
     async function abrirItem(id) {
       const item = dados.itens.find((i) => i.id === id);
       if (!item) return;
+      if (item.tipo !== aba) { aba = item.tipo; desenharAbas(); }
       aberto = item;
-      const t = TIPOS[item.tipo];
+      const tp = TIPOS[item.tipo];
       grade.hidden = true;
       abas.hidden = true;
       vazio.hidden = true;
       detalhe.hidden = false;
       const palco = el("div", { class: "vitrine" }, el("div", { class: "vitrine-aviso" }, "Carregando a prévia..."));
-      const usar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-usar" }, t.usar);
+      const usar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-usar" }, tp.usar);
       const baixarArquivo = el("button", { class: "lnux-botao", type: "button" }, "Baixar o arquivo");
-      const apagar = C.loja.podeMexer(item, dados.dono) ? el("button", { class: "lnux-botao perigo", type: "button" }, "Apagar da loja") : null;
+      const mexe = C.loja.podeMexer(item, dados.dono);
+      const apagar = mexe ? el("button", { class: "lnux-botao perigo", type: "button" }, "Apagar da loja") : null;
+      numeros = el("div", { class: "loja-numeros" });
+      const tags = el("div", { class: "webc-tags-lista" });
+      const desenharTags = () => tags.replaceChildren(...(item.tags || []).map((tg) => el("button", { type: "button", class: "webc-chip", translate: "no", onclick: () => { campo.value = "#" + tg; campo.dispatchEvent(new Event("input")); } }, "#" + tg)),
+        mexe ? el("button", { type: "button", class: "webc-chip plano", id: "loja-editar-tags", onclick: async () => {
+          const c = el("input", { class: "lnux-entrada", value: (item.tags || []).map((x) => "#" + x).join(" "), "aria-label": "#", placeholder: "#fnaf #anime" });
+          const r = await LNUX.dialogo({ titulo: t("Os # deste item"), corpo: el("div", { class: "ajustes" }, el("label", { class: "lnux-campo" }, el("span", {}, "Separe por espaço ou vírgula (até 12)"), c)), aoAbrir: () => c.focus(),
+            botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: () => c.value }] });
+          if (r === null || r === undefined) return;
+          try { Object.assign(item, await C.loja.editar(item, { tags: C.loja.tags(r) })); desenharTags(); desenharGrade(); } catch (e) { LNUX.erro(e); }
+        } }, (item.tags || []).length ? "✎ #" : "＋ #") : null);
+      desenharTags();
       detalhe.replaceChildren(
-        el("button", { class: "lnux-botao plano loja-voltar", type: "button", onclick: voltar }, "← Voltar à loja"),
+        el("button", { class: "lnux-botao plano loja-voltar", type: "button", onclick: voltar }, C.iconeWebc ? C.iconeWebc("voltar") : "←", " ", t("Voltar à loja")),
         el("div", { class: "loja-produto" }, palco,
           el("div", { class: "loja-ficha" },
-            el("span", { class: "selo-tipo" }, t.icone + " " + t.um),
-            el("h2", {}, item.nome),
-            el("p", { class: "fraco", style: { margin: 0 } }, [item.autor ? "por " + item.autor : "", quando(item.criado), LNUX.bytes(item.tamanho), item.arquivo].filter(Boolean).join(" · ")),
-            item.descricao ? el("p", { class: "loja-descricao" }, item.descricao) : null,
+            el("span", { class: "selo-tipo" }, tp.icone + " " + tp.um),
+            el("h2", { translate: "no" }, item.nome),
+            el("p", { class: "fraco", style: { margin: 0 } }, ...LNUX.filhos(
+              item.autor ? (item.conta && C.webc ? el("button", { type: "button", class: "webc-link-autor", translate: "no", onclick: () => C.webc.verPerfil(item.conta) }, t("por {autor}", { autor: item.autor })) : el("span", { translate: "no" }, t("por {autor}", { autor: item.autor }))) : null,
+              " · " + [quando(item.criado), LNUX.bytes(item.tamanho)].filter(Boolean).join(" · "))),
+            tags,
+            item.descricao ? el("p", { class: "loja-descricao", translate: "no" }, item.descricao) : null,
+            numeros,
             el("p", { class: "fraco pequeno", style: { margin: 0 } }, item.tipo === "personagem" ? "Arraste para girar; a rodinha aproxima. Usar guarda a personagem entre as suas." :
-              item.tipo === "mundo" ? "Arraste para girar; a rodinha aproxima. Usar guarda o mundo em Movimento › Cenário." : "A animação, num boneco. Usar guarda em Movimento › Pacotes de movimento."),
+              item.tipo === "mundo" ? "Arraste para girar; a rodinha aproxima. Usar guarda o mapa em Movimento › Cenário." : "A animação, num boneco. Usar guarda em Movimento › Pacotes de movimento."),
             el("div", { class: "loja-acoes" }, usar, baixarArquivo, apagar))));
+      desenharNumeros(item);
       let blob = null;
       const pegar = async (titulo) => {
         if (blob) return blob;
         const prog = LNUX.progresso(titulo);
-        try { blob = await C.loja.baixar(item, (f) => prog.definir(f, `${LNUX.bytes(item.tamanho * f)} de ${LNUX.bytes(item.tamanho)}`)); }
+        try { blob = await C.loja.baixar(item, (f) => prog.definir(f, `${LNUX.bytes(item.tamanho * f)} / ${LNUX.bytes(item.tamanho)}`)); }
         finally { prog.fechar(); }
         return blob;
       };
+      const contar = () => C.loja.baixou(item).then((r) => { if (r) { item.baixados = r.baixados; desenharNumeros(item); } });
       usar.addEventListener("click", async () => {
         try {
-          const b = await pegar(`Baixando "${item.nome}"`);
+          const b = await pegar(t("Baixando \"{nome}\"", { nome: item.nome }));
+          contar();
           const fim = await (aoUsar || ctx.usar)(item, b);
-          if (fim !== false) sair();
+          if (fim !== false) { if (pagina) voltar(); else sair(); }
         } catch (e) { LNUX.erro(e); }
       });
-      baixarArquivo.addEventListener("click", async () => { try { LNUX.baixar(await pegar(`Baixando "${item.nome}"`), item.arquivo); } catch (e) { LNUX.erro(e); } });
+      baixarArquivo.addEventListener("click", async () => { try { LNUX.baixar(await pegar(t("Baixando \"{nome}\"", { nome: item.nome })), item.arquivo); contar(); } catch (e) { LNUX.erro(e); } });
       if (apagar) apagar.addEventListener("click", async () => {
-        if (!(await LNUX.confirmar("Apagar da loja", `Apagar "${item.nome}" da loja? Quem já usou continua com a cópia dele.`, { rotulo: "Apagar", perigo: true }))) return;
-        try { await C.loja.apagar(item); voltar(); await recarregar(); LNUX.aviso(`"${item.nome}" saiu da loja.`, "ok"); } catch (e) { LNUX.erro(e); }
+        if (!(await LNUX.confirmar(t("Apagar da loja"), t("Apagar \"{nome}\" da loja? Quem já usou continua com a cópia dele.", { nome: item.nome }), { rotulo: t("Apagar"), perigo: true }))) return;
+        try { await C.loja.apagar(item); voltar(); await recarregar(); LNUX.aviso(t("\"{nome}\" saiu da loja.", { nome: item.nome }), "ok"); } catch (e) { LNUX.erro(e); }
       });
       // a prévia: baixa e mostra em 3D
       try {
-        blob = await C.loja.baixar(item, (f) => { const a = palco.querySelector(".vitrine-aviso"); if (a) a.textContent = `Carregando a prévia... ${Math.round(f * 100)}%`; });
+        blob = await C.loja.baixar(item, (f) => { const a = palco.querySelector(".vitrine-aviso"); if (a) a.textContent = `${t("Carregando a prévia...")} ${Math.round(f * 100)}%`; });
         if (aberto !== item) return;
         await C.prepararVRM();
         if (vitrine) vitrine.destruir();
@@ -492,7 +604,7 @@
         }
       } catch (e) {
         const aviso = palco.querySelector(".vitrine-aviso");
-        if (aviso) aviso.textContent = "A prévia não abriu: " + e.message;
+        if (aviso) aviso.textContent = t("A prévia não abriu: {erro}", { erro: e.message });
       }
     }
     /** O dono da loja (ou quem publicou) gera as miniaturas que faltam, uma de cada vez, numa vitrine escondida. */
@@ -521,7 +633,7 @@
         }
       } finally { if (v) v.destruir(); escondido.remove(); miniaturas = null; }
     }
-    recarregar().catch((e) => { LNUX.erro(e); sair(); });
+    recarregar().then(() => { if (itemInicial) abrirItem(itemInicial); }).catch((e) => { LNUX.erro(e); if (!pagina) sair(); });
     caixa.recarregar = recarregar;
     caixa.abrirItem = abrirItem;
     return Object.assign(terminou, { fechar: sair, elemento: caixa });
@@ -538,13 +650,14 @@
     const nome = el("input", { class: "lnux-entrada", maxlength: 60, "aria-label": "Nome na loja" });
     const descricao = el("textarea", { class: "lnux-entrada", rows: 3, maxlength: 600, "aria-label": "Descrição", placeholder: "Conte o que é (opcional)" });
     const autor = el("input", { class: "lnux-entrada", maxlength: 40, value: ctx.autor ? ctx.autor() : "", "aria-label": "Seu nome", placeholder: "Como os outros vão te ver" });
+    const tags = el("input", { class: "lnux-entrada", maxlength: 200, "aria-label": "# (categorias)", placeholder: "#fnaf #anime #terror", translate: "no" });
     const previa = el("div", { class: "vitrine vitrine-publicar" }, el("div", { class: "vitrine-aviso" }, "Escolha o que publicar."));
     const desenharTipos = () => seletorTipo.replaceChildren(...Object.entries(TIPOS).map(([t, x]) =>
       el("button", { type: "button", role: "radio", "aria-checked": String(t === tipo), class: "loja-aba" + (t === tipo ? " ativa" : ""), "data-tipo": t, onclick: () => { tipo = t; desenharTipos(); carregarLista(); } }, x.icone + " " + x.um)));
     async function carregarLista() {
       const itens = await ctx.fontes(tipo);
       lista.replaceChildren(el("option", { value: "" }, itens.length ? "Escolha..." : "(nenhuma ainda)"), ...itens.map((i) => el("option", { value: i.id }, i.nome)),
-        el("option", { value: "@arquivo" }, "Um arquivo do aparelho..."));
+        el("option", { value: "@arquivo" }, "Um arquivo do seu aparelho..."));
       fonte = null;
       mostrarPrevia(null);
     }
@@ -580,10 +693,12 @@
         el("div", { class: "ajustes" },
           el("label", { class: "lnux-campo" }, el("span", {}, "O que publicar"), lista),
           el("label", { class: "lnux-campo" }, el("span", {}, "Nome na loja"), nome),
-          el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome (autor)"), autor),
+          C.contas && C.contas.eu ? null : el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome (autor)"), autor),
+          el("label", { class: "lnux-campo" }, el("span", {}, "# para achar (separe por espaço)"), tags,
+            el("small", { class: "fraco" }, "Ex.: quem pesquisar fnaf acha o que tem #fnaf, mesmo sem fnaf no nome.")),
           el("label", { class: "lnux-campo" }, el("span", {}, "Descrição"), descricao)),
         previa),
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Fica guardado no aparelho de quem tem o servidor, e quem entrar pode ver e baixar. A miniatura é tirada da prévia (gire antes, se quiser). Publique só o que você pode compartilhar."));
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Quem entrar no WEBC pode ver, curtir e baixar. A miniatura é tirada da prévia (gire antes, se quiser). Publique só o que você pode compartilhar."));
     desenharTipos();
     await carregarLista();
     d = LNUX.dialogo({ titulo: "Publicar na loja", largo: true, corpo, botoes: [{ rotulo: "Cancelar", valor: null },
@@ -596,7 +711,7 @@
       const prog = LNUX.progresso("Publicando na loja");
       let item;
       try {
-        item = await C.loja.publicar({ tipo, blob: fonte.blob, arquivo: fonte.arquivo, nome: nome.value.trim() || fonte.nome, descricao: descricao.value.trim(), autor: autor.value.trim() },
+        item = await C.loja.publicar({ tipo, blob: fonte.blob, arquivo: fonte.arquivo, nome: nome.value.trim() || fonte.nome, descricao: descricao.value.trim(), autor: autor.value.trim(), tags: C.loja.tags(tags.value) },
           (f) => prog.definir(f * 0.95, `${LNUX.bytes(fonte.blob.size * f)} de ${LNUX.bytes(fonte.blob.size)}`));
         if (miniatura) await C.loja.trocarMiniatura(item, miniatura).catch((e) => console.warn("loja: miniatura", e));
       } finally { prog.fechar(); }

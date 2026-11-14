@@ -31,7 +31,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const consola = [];
   const pessoa = async (nome, cabecalhos) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, acceptDownloads: true });
+    const contexto = await navegador.newContext({ viewport: { width: 1200, height: 800 }, acceptDownloads: true, locale: "pt-BR" });
     if (cabecalhos) await contexto.setExtraHTTPHeaders(cabecalhos);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
@@ -63,13 +63,13 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     }, bonecoVRM0().toString("base64"));
     await dono.pagina.waitForFunction(() => window.Companhia.pronto && window.Companhia.palco.modelo && window.Companhia.lojaDisponivel, null, { timeout: 60000 });
     await dono.pagina.click('.lnux-menubar > button:text-is("Personagem")');
-    await dono.pagina.click('.lnux-menu button:has(.rotulo:text-is("Loja: personagens, mundos e animações..."))');
+    await dono.pagina.click('.lnux-menu button:has(.rotulo:text-is("Loja: personagens, mapas e animações..."))');
     await dono.pagina.waitForSelector(".loja .loja-vazio:not([hidden])");
-    ok(await dono.ev(() => /Ainda não há nada na loja/.test(document.querySelector(".loja-vazio").textContent) && !document.querySelector(".loja-dono").hidden &&
+    ok(await dono.ev(() => /Ainda não há .+ na loja/.test(document.querySelector(".loja-vazio").textContent) && !document.querySelector(".loja-dono").hidden &&
       document.querySelector(".loja-dono input").checked), "a loja abre pelo menu Personagem; vazia, e o dono vê onde fica a pasta e se os visitantes publicam");
 
     // ── publicar pela tela: a prévia e a miniatura ──
-    await dono.pagina.click('.loja-topo button:has-text("Publicar")');
+    await dono.pagina.click(".loja #loja-publicar");
     await dono.pagina.waitForSelector(".loja-publicar select");
     await dono.pagina.selectOption(".loja-publicar select", { label: "Boneco de teste" });
     await dono.pagina.waitForSelector(".vitrine-publicar[data-pronta]", { timeout: 60000 });
@@ -97,14 +97,14 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await dono.pagina.screenshot({ path: path.join(PASTA, "companhia-loja-1.png") });
 
     // ── a visita: entra pelo link (sem a chave), no modo de jogar ──
-    await visita.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
+    await visita.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await visita.pagina.waitForSelector("#sala-loja-personagem", { timeout: 30000 });
     ok(await visita.ev(() => !window.LNUX.ponte.disponivel && !!document.querySelector(".salas #sala-loja-personagem")), "quem entra pelo link (sem a ponte) acha a loja na lista de salas: \"Personagens da loja\"");
     await visita.pagina.click("#sala-loja-personagem");
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
     const grade = await visita.ev(() => ({ abas: [...document.querySelectorAll(".loja-aba")].map((a) => a.textContent), ativa: document.querySelector(".loja-aba.ativa").dataset.tipo,
       cartoes: [...document.querySelectorAll(".loja:not(.salas) .cartao-loja")].map((c) => [c.querySelector(".nome").textContent, !!c.querySelector(".capa img")]), dono: !document.querySelector(".loja-dono").hidden }));
-    ok(grade.ativa === "personagem" && JSON.stringify(grade.cartoes) === JSON.stringify([["Boneco de teste", true]]) && grade.abas.join("|").includes("Mundos1") && !grade.dono,
+    ok(grade.ativa === "personagem" && JSON.stringify(grade.cartoes) === JSON.stringify([["Boneco de teste", true]]) && grade.abas.join("|").includes("Mapas1") && !grade.dono,
       `a loja abre nas personagens, como uma vitrine (cartões com miniatura; abas ${grade.abas.join(", ")}); a visita não vê a parte do dono`);
     await visita.pagina.click(".loja:not(.salas) .cartao-loja");
     await visita.pagina.waitForSelector(".loja-detalhe .vitrine[data-pronta]", { timeout: 60000 });
@@ -114,19 +114,19 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await visita.pagina.click("#loja-usar");
     await visita.pagina.waitForFunction(() => !document.querySelector(".loja:not(.salas)") && document.querySelector('.salas select[aria-label="Sua personagem"]').selectedOptions[0].text === "Boneco de teste", null, { timeout: 60000 });
     ok(true, "\"Usar esta personagem\" volta para a lista de salas com ela escolhida");
-    await visita.pagina.click('.salas button[aria-label="Fechar a lista de salas"]');
+    await visita.ev(() => C.webc.esconder());
     // o mundo e a animação
     await visita.ev(() => { window.Companhia.abrirLoja(); });
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
-    await visita.pagina.fill(".loja-busca", "praça");
-    ok(await visita.ev(() => [...document.querySelectorAll(".loja:not(.salas) .cartao-loja .nome")].map((n) => n.textContent).join() === "Praça de teste"), "a busca acha o mundo pelo nome");
+    await visita.pagina.fill(".loja:not(.salas) .loja-busca", "praça");
+    ok(await visita.ev(() => [...document.querySelectorAll(".loja:not(.salas) .cartao-loja .nome")].map((n) => n.textContent).join() === "Praça de teste" && document.querySelector(".loja:not(.salas) .loja-aba.ativa").dataset.tipo === "mundo"), "a busca acha o mapa pelo nome (e vai sozinha para a aba Mapas)");
     await visita.pagina.click(".loja:not(.salas) .cartao-loja");
     await visita.pagina.waitForSelector(".loja-detalhe .vitrine[data-pronta]", { timeout: 60000 });
     ok((await desenhado(visita)) > 150, "o mundo aparece em 3D, visto de cima");
     await visita.pagina.click("#loja-usar");
-    await visita.pagina.waitForFunction(() => !document.querySelector(".loja"), null, { timeout: 30000 });
+    await visita.pagina.waitForFunction(() => !document.querySelector(".loja:not(.salas)"), null, { timeout: 30000 });
     await visita.pagina.waitForFunction(async () => (await C.mapas.lista()).some((m) => m.nome === "Praça de teste"), null, { timeout: 30000 });
-    ok(true, "\"Usar este mundo\" guarda o mundo em Movimento › Cenário");
+    ok(true, "\"Usar este mapa\" guarda o mapa em Movimento › Cenário");
     await visita.ev(() => { window.Companhia.abrirLoja("animacao"); });
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
     await visita.pagina.click(".loja:not(.salas) .cartao-loja");
@@ -143,7 +143,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     fs.writeFileSync(bvh, bvhDeTeste());
     await visita.ev(() => { window.Companhia.abrirLoja(); });
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
-    await visita.pagina.click('.loja-topo button:has-text("Publicar")');
+    await visita.pagina.click(".loja:not(.salas) #loja-publicar");
     await visita.pagina.click('.loja-tipos button[data-tipo="animacao"]');
     await visita.pagina.waitForFunction(() => [...document.querySelector(".loja-publicar select").options].some((o) => o.value === "@arquivo"));
     const [escolha] = await Promise.all([visita.pagina.waitForEvent("filechooser"), visita.pagina.selectOption(".loja-publicar select", "@arquivo")]);
@@ -161,8 +161,8 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     ok(true, "apagar tira da loja (e do aparelho do servidor)");
     // o dono fecha a loja para publicações: a visita não vê mais o botão
     await dono.ev(() => C.loja.configurar({ publicar: false }));
-    await visita.ev(() => document.querySelector(".loja").recarregar());
-    ok(await visita.ev(() => document.querySelector('.loja-topo .primario').hidden), "o dono pode fechar a loja para publicações (o botão some para os visitantes)");
+    await visita.ev(() => document.querySelector(".loja:not(.salas)").recarregar());
+    ok(await visita.ev(() => document.querySelector('.loja:not(.salas) #loja-publicar').hidden), "o dono pode fechar a loja para publicações (o botão some para os visitantes)");
     await dono.ev(() => C.loja.configurar({ publicar: true }));
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
 
@@ -183,17 +183,17 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
       pastas: (await fetch("/api/pastas?caminho=~", { headers: { "X-Ponte-Token": window.LNUX.ponte._token } })).status,
       outro: (await fetch("/apps/video/")).status, inicio: (await fetch("/")).url.replace(location.origin, ""), loja: (await fetch("/api/loja")).status }));
     ok(resposta.ok && vistoDeFora.url === "/apps/companhia/" && vistoDeFora.inicio === "/apps/companhia/" && vistoDeFora.outro === 404,
-      "publicado sozinho: o endereço abre direto na Companhia; a página inicial leva a ela e os outros apps não existem ali");
+      "publicado sozinho: o endereço abre direto no WEBC; a página inicial leva a ele e os outros apps não existem ali");
     ok(!vistoDeFora.casa && vistoDeFora.marca === "./" && vistoDeFora.selo, "sem o botão dos Apps Web (nem pelo nome do app) e sem o selo da ponte");
     ok(!vistoDeFora.ponte && vistoDeFora.pastas === 403 && vistoDeFora.loja === 200, "de fora, nem a chave abre a ponte (as pastas do aparelho dão 403); a loja e as salas funcionam");
     // no próprio aparelho, com a chave, o dono continua usando a ponte (para criar as salas)
     const local = await pessoa("dono no aparelho");
-    await local.pagina.goto(`${sozinho}/apps/companhia/#token=${chave}&modo=jogar`);
+    await local.pagina.goto(`${sozinho}/apps/companhia/#token=${chave}&modo=jogar&pagina=sala`);
     await local.pagina.waitForSelector("#sala-criar", { timeout: 30000 });
     ok(await local.ev(() => window.LNUX.ponte.disponivel && !document.querySelector('a[href="../../"]')), "no próprio aparelho, o dono (com a chave) usa a ponte e cria as salas");
     // e quem chega pelo link isolado (sem a ponte) também cria a sala dele, pela lista de salas
     const jogador = await pessoa("jogador de fora", { "Cf-Connecting-Ip": "198.51.100.23", "Cf-Ray": "8a1b2c3d4e60-GRU" });
-    await jogador.pagina.goto(`${sozinho}/#modo=jogar`);
+    await jogador.pagina.goto(`${sozinho}/#modo=jogar&pagina=sala`);
     await jogador.pagina.waitForSelector(".salas #sala-criar:not([hidden])", { timeout: 30000 });
     await jogador.pagina.fill('.salas input[aria-label="Seu nome"]', "Carla");
     await jogador.pagina.click("#sala-criar");

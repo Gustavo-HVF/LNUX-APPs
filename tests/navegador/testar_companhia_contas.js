@@ -71,7 +71,7 @@ function png(w, h, [r, g, b]) {
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const consola = [];
   const pessoa = async (nome) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1200, height: 820 } });
+    const contexto = await navegador.newContext({ viewport: { width: 1200, height: 820 }, locale: "pt-BR" });
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !RUIDO.test(m.text()) && !/40[13]|409/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
@@ -84,7 +84,7 @@ function png(w, h, [r, g, b]) {
   const codigoDe = (m) => (m && (m.assunto.match(/\b(\d{6})\b/) || [])[1]) || "";
   try {
     // ── o dono configura o e-mail que manda os códigos ──
-    await dono.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar`);
+    await dono.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=sala`);
     await dono.pagina.waitForSelector(".salas #contas-dono", { timeout: 30000 });
     await dono.pagina.click("#contas-dono");
     await dono.pagina.waitForSelector('.lnux-dialogo input[aria-label="Servidor SMTP"]');
@@ -106,7 +106,7 @@ function png(w, h, [r, g, b]) {
     await dono.pagina.waitForFunction(() => !document.querySelector('.lnux-dialogo input[aria-label="Servidor SMTP"]'), null, { timeout: 10000 });
 
     // ── a Ana cria a conta pela lista de salas ──
-    await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
+    await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas #conta-abrir-criar", { timeout: 30000 });
     await ana.pagina.click("#conta-abrir-criar");
     await ana.pagina.waitForSelector("#conta-criar");
@@ -174,14 +174,15 @@ function png(w, h, [r, g, b]) {
     await dono.pagina.click('.lnux-menu button:has(.rotulo:text-is("Pessoas na sala"))');
     await dono.pagina.waitForSelector(".pessoas-sala .pessoa-sala.com-conta");
     await dono.pagina.click(".pessoas-sala .pessoa-sala.com-conta");
-    await dono.pagina.waitForSelector(".perfil-cartao", { timeout: 20000 });
+    await dono.pagina.waitForSelector('.perfil-pagina .perfil-nome:text-is("Ana Clara")', { timeout: 20000 });
     await dono.pagina.waitForTimeout(500);
-    const perfil = await dono.ev(() => { const c = document.querySelector(".perfil-cartao"); const img = c.querySelector(".foto-conta img"); return { texto: c.textContent, foto: !!(img && img.naturalWidth === 512), link: c.querySelector(".perfil-links a").getAttribute("rel") }; });
+    const perfil = await dono.ev(() => { const c = document.querySelector(".perfil-pagina"); const img = c.querySelector(".perfil-foto-grande .foto-conta img, .perfil-foto-grande img"); return { texto: c.textContent, foto: !!(img && img.naturalWidth === 512), link: c.querySelector(".perfil-links a").getAttribute("rel"), faixa: !!document.querySelector(".webc-na-sala:not([hidden]) #webc-voltar-sala") }; });
     ok(/Ana Clara/.test(perfil.texto) && /ela\/dela/.test(perfil.texto) && /Gosto de dançar/.test(perfil.texto) && /Recife/.test(perfil.texto) && perfil.foto && /noopener/.test(perfil.link) && !/ana@exemplo/.test(perfil.texto),
-      "o dono vê, em Pessoas na sala, a foto e o perfil da Ana (nome, pronomes, bio, cidade e link; sem o e-mail)");
+      "o dono clica na Ana em Pessoas na sala e abre a página de perfil dela (foto, nome, pronomes, bio, cidade e link; sem o e-mail)");
+    ok(perfil.faixa, "fora do jogo, uma faixa lembra a sala e tem \"Voltar à sala\"");
     await dono.pagina.screenshot({ path: path.join(PASTA, "companhia-contas-perfil.png") });
-    await dono.pagina.keyboard.press("Escape"); // fecha o perfil
-    await dono.pagina.keyboard.press("Escape"); // e a lista de pessoas
+    await dono.pagina.click("#webc-voltar-sala");
+    await dono.pagina.waitForFunction(() => !C.webc.visivel, null, { timeout: 10000 });
     await dono.pagina.waitForFunction(() => !document.querySelector(".lnux-fundo-modal"), null, { timeout: 10000 });
 
     // ── sair, entrar de novo e "esqueci a senha" ──
@@ -211,24 +212,33 @@ function png(w, h, [r, g, b]) {
     await ana.pagina.waitForSelector(".salas #conta-perfil", { timeout: 30000 });
     ok(true, "sair e entrar de novo com o e-mail e a senha");
 
-    // ── a tela de início: quem já entrou neste navegador continua; os outros entram pelo cartão ──
+    // ── a tela de entrar: quem já entrou neste navegador vai direto ao início do site; os outros entram pelo cartão ──
     await ana.pagina.goto("about:blank"); // só trocar o # do endereço não recarrega a página
     await ana.pagina.goto(`${BASE}/apps/companhia/`);
-    await ana.pagina.waitForSelector(".tela-inicio #inicio-continuar", { timeout: 30000 });
-    ok(await ana.ev(() => /Que bom te ver, Ana Clara/.test(document.querySelector(".inicio-cartao").textContent) && !!document.querySelector(".inicio-eu .foto-conta img")),
-      "a tela de início reconhece a conta deste navegador: \"Continuar\" como Ana Clara, com a foto");
-    await ana.pagina.click("#inicio-outra-conta");
-    await ana.pagina.waitForSelector('.tela-inicio input[aria-label="E-mail"]');
+    await ana.pagina.waitForSelector('.webc-cartao[data-ir="perfil"]', { timeout: 30000 });
+    ok(await ana.ev(() => !document.querySelector(".tela-inicio") && window.Companhia.modo === "jogar" && /Ana Clara/.test(document.querySelector("#webc-eu").textContent) && !!document.querySelector("#webc-eu .foto-conta img, #webc-eu img")),
+      "quem já entrou neste navegador vai direto ao início do site, com o nome e a foto da conta no alto");
+    // o perfil, como página: a capa, a foto, a bio e as seções
+    await ana.pagina.click('.webc-cartao[data-ir="perfil"]');
+    await ana.pagina.waitForSelector(".perfil-pagina .perfil-salvos > *", { timeout: 20000 });
+    await ana.pagina.waitForFunction(() => { const i = document.querySelector(".perfil-pagina .perfil-foto-grande img"); return i && i.complete; }, null, { timeout: 10000 }).catch(() => {});
+    ok(await ana.ev(() => { const p = document.querySelector(".perfil-pagina"); return !!p.querySelector(".perfil-banner") && !!p.querySelector(".perfil-foto-grande img") && /Gosto de dançar/.test(p.textContent) && /Salvos/.test(p.textContent) && /Amigos/.test(p.textContent) && !!p.querySelector("#perfil-editar"); }),
+      "a página Perfil: a capa (o banner), a foto redonda, a bio e embaixo os salvos e os amigos; \"Editar perfil\" para quem é dono");
+    await ana.pagina.click("#webc-eu");
+    await ana.pagina.click('.webc-menu [data-acao="sair"]');
+    await ana.pagina.waitForFunction(() => !C.contas.eu, null, { timeout: 10000 });
+    await ana.pagina.reload();
+    await ana.pagina.waitForSelector('.tela-inicio input[aria-label="E-mail"]', { timeout: 30000 });
     await ana.pagina.fill('.tela-inicio input[aria-label="E-mail"]', "ana@exemplo.com");
     await ana.pagina.fill('.tela-inicio input[aria-label="Senha"]', "errada999");
     await ana.pagina.click(".tela-inicio #conta-entrar");
     await ana.pagina.waitForSelector('.tela-inicio .conta-msg.erro:has-text("E-mail ou senha errados")');
     await ana.pagina.fill('.tela-inicio input[aria-label="Senha"]', "senhanova456");
     await ana.pagina.press('.tela-inicio input[aria-label="Senha"]', "Enter");
-    await ana.pagina.waitForSelector(".salas #conta-perfil", { timeout: 30000 });
+    await ana.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     await ana.pagina.waitForFunction(() => !document.querySelector(".tela-inicio"), null, { timeout: 5000 }).catch(() => {}); // some com um esmaecer
     ok(await ana.ev(() => window.Companhia.modo === "jogar" && !document.querySelector(".tela-inicio") && C.contas.eu && C.contas.eu.nome === "Ana Clara"),
-      "entrar pela tela de início: a senha errada avisa no próprio cartão; a certa (Enter) entra e vai direto para a lista de salas, já com a conta");
+      "saindo pelo menu da conta e entrando pela tela de entrar: a senha errada avisa no próprio cartão; a certa (Enter) entra e vai ao início do site, já com a conta");
 
     // ── o dono exige conta: quem não entrou precisa entrar antes ──
     await dono.ev(() => C.contas.salvarAjustes({ exigir_conta: true }));
@@ -238,7 +248,7 @@ function png(w, h, [r, g, b]) {
     ok(await ana.ev(() => !document.querySelector("#inicio-sem-conta") && /pede uma conta/.test(document.querySelector(".inicio-nota").textContent)),
       "com \"só entra quem tem conta\", a tela de início não oferece jogar sem conta");
     await ana.pagina.goto("about:blank");
-    await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
+    await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas .salas-pede-conta:not([hidden])", { timeout: 30000 });
     await ana.pagina.click("#sala-criar");
     await ana.pagina.waitForSelector("#conta-entrar", { timeout: 10000 });

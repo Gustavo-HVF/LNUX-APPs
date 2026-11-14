@@ -1100,7 +1100,7 @@
    */
   LNUX.iniciar = function (cfg) {
     Object.assign(config, cfg);
-    document.title = cfg.nome + " · LNUX";
+    document.title = cfg.titulo || cfg.nome + " · LNUX";
     const barra = $(".lnux-menubar");
     if (barra && cfg.menus) LNUX.menus(barra, cfg.menus);
     const acoes = $(".lnux-topo-acoes");

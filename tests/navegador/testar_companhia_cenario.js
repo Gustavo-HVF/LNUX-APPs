@@ -24,7 +24,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const consola = [];
   const pessoa = async (nome) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 } });
+    const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|voz do navegador/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
@@ -110,7 +110,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
 
     // ── na sala: só quem criou voa e mexe no cenário ──
     await ana.pagina.goto("about:blank"); // só trocar o # do endereço não recarrega a página
-    await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar`);
+    await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas #sala-criar", { timeout: 30000 });
     await ana.pagina.fill('.salas input[aria-label="Seu nome"]', "Ana");
     await ana.pagina.click("#sala-criar");
@@ -126,7 +126,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     p = await posicao(ana);
     ok(!!codigo && Math.abs(p.y - 0.2) < 0.05, `a Ana cria a sala com a casa e entra no piso de dentro (y = ${p.y.toFixed(2)})`);
 
-    await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
+    await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await bia.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
     await bia.pagina.fill('.salas input[aria-label="Seu nome"]', "Bia");
     await bia.pagina.click(`.cartao-sala[data-codigo="${codigo}"] .entrar`);

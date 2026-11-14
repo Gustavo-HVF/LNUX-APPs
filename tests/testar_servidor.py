@@ -17,6 +17,7 @@ from __future__ import annotations
 import http.client
 import json
 import os
+import secrets
 import struct
 import sys
 import tempfile
@@ -866,6 +867,90 @@ def _():
     finally:
         smtp.parar()
         lnux_apps.TENTATIVAS.clear()
+
+
+@caso("WEBC: na loja, # para achar, curtir só com conta, quem baixou (uma vez por pessoa); amigos e itens salvos no perfil")
+def _():
+    visita = dict(token=False)
+    # duas contas já confirmadas (direto no cadastro, sem e-mail)
+    cadastro = lnux_apps.contas_de(lnux_apps.DADOS)
+    with lnux_apps.CONTAS_TRAVA:
+        d = cadastro.ler()
+        contas = {}
+        for nome in ("Ana", "Bia", "Caio"):
+            c = {"id": secrets.token_hex(6), "email": nome.lower() + "@webc.exemplo", "nome": nome, "criada": int(time.time()), "verificada": True, "perfil": {}}
+            d["contas"][c["id"]] = c
+            contas[nome] = (c["id"], {"X-Conta-Sessao": cadastro.nova_sessao(c)})
+        cadastro.gravar()
+    (ana, eu_ana), (bia, eu_bia), (caio, eu_caio) = contas["Ana"], contas["Bia"], contas["Caio"]
+    try:
+        # publicar com # e com a conta: o autor é o nome da conta (e a conta fica no item, para abrir o perfil)
+        vrm = b"glTF\x02\x00\x00\x00" + b"f" * 300
+        status, r, _ = S.json("PUT", "/api/loja/personagem?nome=Urso%20da%20pizzaria&arquivo=urso.vrm&autor=outro&tags=%23FNAF,%20Terror%20%23anime%20%23fnaf%20%23%E3%82%A2%E3%83%8B%E3%83%A1",
+                              corpo=vrm, cabecalhos=eu_ana, **visita)
+        assert status == 201 and r["item"]["tags"] == ["fnaf", "terror", "anime", "アニメ"] and r["item"]["autor"] == "Ana" and r["item"]["conta"] == ana, r
+        item, segredo = r["item"], r["segredo"]
+        assert r["item"]["curtidas"] == 0 and r["item"]["baixados"] == 0 and r["item"]["curti"] is False
+        _, mapa, _ = S.json("PUT", "/api/loja/mundo?nome=Pizzaria&arquivo=pizzaria.glb&tags=fnaf", corpo=b"glTF" + b"z" * 50, **visita)
+        assert mapa["item"]["autor"] == "" and mapa["item"]["conta"] == "" and mapa["item"]["tags"] == ["fnaf"]
+        # curtir: só quem tem conta; desfazer; cada conta conta uma vez
+        assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": True}, **visita)[0] == 401
+        assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": True}, cabecalhos=eu_bia, **visita)[1] == {"curtidas": 1, "curti": True}
+        assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": True}, cabecalhos=eu_bia, **visita)[1]["curtidas"] == 1
+        assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": True}, cabecalhos=eu_caio, **visita)[1]["curtidas"] == 2
+        assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": False}, cabecalhos=eu_caio, **visita)[1] == {"curtidas": 1, "curti": False}
+        lista = S.json("GET", "/api/loja", cabecalhos=eu_bia, **visita)[1]
+        urso = next(i for i in lista["itens"] if i["id"] == item["id"])
+        assert urso["curtidas"] == 1 and urso["curti"] is True and lista["conta"] is True
+        assert next(i for i in S.json("GET", "/api/loja", **visita)[1]["itens"] if i["id"] == item["id"])["curti"] is False
+        # quem baixou: uma vez por conta (ou por endereço, sem conta)
+        for cab in (eu_bia, eu_bia, eu_caio, {}, {}):
+            S.json("POST", f"/api/loja/{item['id']}/baixou", cabecalhos=cab, **visita)
+        assert S.json("GET", f"/api/loja/{item['id']}", **visita)[1]["baixados"] == 3
+        # mudar os # e o nome: só quem publicou (pelo segredo) ou o dono
+        assert S.json("POST", f"/api/loja/{item['id']}", json_corpo={"tags": "outro"}, **visita)[0] == 403
+        r = S.json("POST", f"/api/loja/{item['id']}", json_corpo={"tags": ["Freddy", "fnaf"], "nome": "Freddy"}, cabecalhos={"X-Loja-Segredo": segredo}, **visita)[1]
+        assert r["tags"] == ["freddy", "fnaf"] and r["nome"] == "Freddy" and r["curtidas"] == 1
+        assert (S.ponte.loja / ".social.json").is_file()
+        # salvos: o item vai para o perfil (e qualquer um vê os salvos de alguém)
+        assert S.json("POST", "/api/contas/salvos", json_corpo={"id": item["id"]}, **visita)[0] == 401
+        assert S.json("POST", "/api/contas/salvos", json_corpo={"id": "../x"}, cabecalhos=eu_bia, **visita)[0] == 400
+        assert S.json("POST", "/api/contas/salvos", json_corpo={"id": item["id"], "salvar": True}, cabecalhos=eu_bia, **visita)[1]["salvos"] == [item["id"]]
+        S.json("POST", "/api/contas/salvos", json_corpo={"id": mapa["item"]["id"], "salvar": True}, cabecalhos=eu_bia, **visita)
+        assert S.json("GET", f"/api/contas/perfil/{bia}", **visita)[1]["salvos"] == [mapa["item"]["id"], item["id"]]
+        assert S.json("POST", "/api/contas/salvos", json_corpo={"id": mapa["item"]["id"], "salvar": False}, cabecalhos=eu_bia, **visita)[1]["salvos"] == [item["id"]]
+        # amigos: a Bia pede, a Ana vê o pedido e aceita; o Caio pede e a Ana recusa; desfazer
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": ana}, **visita)[0] == 401
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": bia}, cabecalhos=eu_bia, **visita)[0] == 400
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": ana}, cabecalhos=eu_bia, **visita)[1]["relacao"] == "enviado"
+        assert S.json("GET", f"/api/contas/perfil/{ana}", cabecalhos=eu_bia, **visita)[1]["relacao"] == "enviado"
+        assert S.json("GET", f"/api/contas/perfil/{bia}", cabecalhos=eu_ana, **visita)[1]["relacao"] == "recebido"
+        r = S.json("GET", "/api/contas/amigos", cabecalhos=eu_ana, **visita)[1]
+        assert [x["nome"] for x in r["recebidos"]] == ["Bia"] and r["amigos"] == [] and "email" not in json.dumps(r)
+        assert [x["nome"] for x in S.json("GET", "/api/contas/eu", cabecalhos=eu_bia, **visita)[1]["enviados"]] == ["Ana"]
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "aceitar", "id": caio}, cabecalhos=eu_ana, **visita)[0] == 404
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "aceitar", "id": bia}, cabecalhos=eu_ana, **visita)[1]["relacao"] == "amigo"
+        assert [x["nome"] for x in S.json("GET", f"/api/contas/perfil/{ana}", **visita)[1]["amigos"]] == ["Bia"]
+        assert S.json("GET", f"/api/contas/perfil/{ana}", cabecalhos=eu_bia, **visita)[1]["relacao"] == "amigo"
+        S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": ana}, cabecalhos=eu_caio, **visita)
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "recusar", "id": caio}, cabecalhos=eu_ana, **visita)[1]["pedidos"] == []
+        # pedir de volta quem já pediu: viram amigos na hora
+        S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": caio}, cabecalhos=eu_bia, **visita)
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": bia}, cabecalhos=eu_caio, **visita)[1]["relacao"] == "amigo"
+        assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "desfazer", "id": bia}, cabecalhos=eu_ana, **visita)[1]["amigos"] == []
+        assert [x["nome"] for x in S.json("GET", f"/api/contas/perfil/{bia}", **visita)[1]["amigos"]] == ["Caio"]
+        # apagar uma conta: some dos amigos dos outros
+        with lnux_apps.CONTAS_TRAVA:
+            lnux_apps.Manipulador.apagar_conta(cadastro, caio)
+        assert S.json("GET", f"/api/contas/perfil/{bia}", **visita)[1]["amigos"] == []
+        # apagar o item: o que as pessoas fizeram com ele some junto
+        assert S.json("DELETE", f"/api/loja/{item['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 200
+        assert item["id"] not in json.loads((S.ponte.loja / ".social.json").read_text())
+        S.json("DELETE", f"/api/loja/{mapa['item']['id']}")
+    finally:
+        with lnux_apps.CONTAS_TRAVA:
+            for cid, _ in contas.values():
+                lnux_apps.Manipulador.apagar_conta(cadastro, cid)
 
 
 @caso("Salas: a personagem e o cenário não têm limite de tamanho (só o espaço livre do aparelho)")

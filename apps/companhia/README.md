@@ -1,7 +1,13 @@
-# Companhia
+# WEBC (web chat)
 
-Converse com personagens **Live2D** (o mesmo tipo de modelo que o **VTube Studio** usa) ou **VRoid** (`.vrm`, em 3D). Ela responde
-num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** com a voz que você escolher,
+O **WEBC** (antes chamado Companhia) é o lugar para **jogar com outras pessoas** em salas, pelo link: cada um com a sua
+personagem VRoid (`.vrm`), andando pelos mapas, conversando por texto, com vídeos numa tela e luz calculada por raios.
+É um site: a tela de entrar, o **início**, a **loja** (mapas, personagens e animações, com #, curtidas e downloads),
+a página **Sala** (a lista de salas) e o **perfil** (capa, foto, bio, salvos e amigos), em **português, inglês e
+japonês** e com os **temas do VLC-Web**.
+
+O WEBC também conversa com personagens **Live2D** (o mesmo tipo de modelo que o **VTube Studio** usa) ou **VRoid**: ela
+responde num chat (com uma IA na nuvem, uma IA local ou o motor local, sem IA), **fala** com a voz que você escolher,
 **reage com o rosto e o corpo** ao que diz, **sente os toques** (cafuné, cutucar, puxar a orelha, cócegas) e
 **lembra** de você, porque as conversas ficam guardadas no próprio aparelho.
 
@@ -11,20 +17,17 @@ braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bv
 (inclusive `.blend`, do Blender) e **ajuste do esqueleto**. Avatares do **Unity / VRChat** (`.unitypackage`,
 `.fbx`) são convertidos para `.vrm` ao importar.
 
-Ao abrir, a Companhia pergunta o que você quer fazer: **conversar com a personagem** (o chat bot) ou **jogar com
-outras pessoas** numa **sala**, pelo link, sem chat bot nem nenhuma função de IA. A **loja** do servidor tem
-personagens, mundos e animações para ver em 3D, usar e publicar; e o servidor pode publicar **só a Companhia**,
-sem os outros apps e sem a ponte para quem vem de fora.
-
-Só HTML, CSS e JavaScript, como os outros apps do LNUX-APPs. Com a **ponte local** (abrindo pelo LNUX), as
-chaves das IAs ficam guardadas no aparelho, as IAs e vozes locais funcionam sem configurar nada no navegador e
-a memória pode ter uma cópia numa pasta do aparelho.
+O servidor pode publicar **só o WEBC**, sem os outros apps e sem a ponte para quem vem de fora. Só HTML, CSS e
+JavaScript, como os outros apps do LNUX-APPs; o código continua na pasta `apps/companhia/` (o id do app é
+`companhia`). Com a **ponte local** (abrindo pelo LNUX), as chaves das IAs ficam guardadas no aparelho, as IAs e
+vozes locais funcionam sem configurar nada no navegador e a memória pode ter uma cópia numa pasta do aparelho. Nada
+disso aparece para quem joga: o site não fala do LNUX nem do aparelho que serve as salas.
 
 ## Primeiros passos
 
 1. **Importe uma personagem**: *Personagem › Importar ZIP* (ou *Importar pasta*, ou arraste o ZIP para a tela).
    Vale qualquer modelo Live2D **Cubism 3 ou 4** (`.model3.json` + `.moc3` + texturas). Dos modelos do VTube
-   Studio, a Companhia aproveita também o `.vtube.json`: os **atalhos de expressão** (viram botões embaixo da
+   Studio, o WEBC aproveita também o `.vtube.json`: os **atalhos de expressão** (viram botões embaixo da
    personagem), o **movimento parado**, o **ícone** e a ligação dos parâmetros extras (sorriso nos olhos, boca
    de lado, bochecha inflada...). Para **trocar de personagem**, *Personagem › Trocar* (cada uma tem a própria
    conversa e memória).
@@ -33,34 +36,54 @@ a memória pode ter uma cópia numa pasta do aparelho.
 3. **Voz**: *Voz › Configurar*. O 🎤 ao lado da caixa de texto escuta você; **Mãos livres** abre o microfone
    sozinho depois que ela fala, então dá para conversar só por voz.
 
-## Conversar ou jogar com outras pessoas
+## O site do WEBC
 
-Ao abrir, aparece a **tela de início**: a página inteira, escura, com um cartão no meio para **entrar na conta**
-(e-mail e senha, *Esqueci a senha*, *Criar uma conta* e o código que chega por e-mail, tudo no próprio cartão).
-Quem já entrou neste navegador vê a foto e **Continuar**. Embaixo do cartão, quantas salas estão abertas agora.
+Ao abrir, aparece a **tela de entrar**: a arte de fundo e, no meio, o cartão preto com o logo do WEBC, o e-mail, a
+senha, **Entrar**, *Esqueci a senha*, "ou" e **Criar conta** (o código que chega por e-mail também é digitado no
+próprio cartão). Embaixo, **Jogar sem conta** (quando o servidor deixa) e os três idiomas. Quem já entrou neste
+navegador vai direto para o início.
 
-- **Entrar** (ou **Jogar sem conta**, quando o servidor deixa): o modo de jogar, com outras pessoas, numa sala. Neste
-  modo **não há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas da
-  personagem e os toques com reação; quem fala são as pessoas, num bate-papo por texto. Se o dono do servidor
-  exige conta, "Jogar sem conta" some.
-- **Conversar com a personagem** (no alto e no rodapé): o chat bot, como descrito no resto deste guia (IA ou motor
-  local, voz, toques, memória).
+- **Início**: três cartões grandes — **Loja**, **Sala** e **Perfil**. No alto, sempre: o logo (volta ao início), as
+  páginas, a **paleta** (os temas), o **idioma** e a conta (o nome e a foto; um clique abre o menu com *Meu perfil*,
+  *Sair da conta* e *Conversar com a personagem*, o chat bot).
+- **Loja** e **Sala**: o mesmo molde — o título grande, a **pesquisa**, o **filtro** (a ordem e as opções) e os
+  cartões. A Sala tem ainda o seu nome, a sua personagem, o link de uma sala privada e **＋ Criar sala**.
+- **Perfil**: a **capa** (o banner) e a **foto** redonda em cima; descendo, a **bio**, os **salvos** (os mapas,
+  personagens e animações que a pessoa salvou na loja) e os **amigos**. No seu perfil, *Editar perfil* e os pedidos
+  de amizade; no dos outros, *Adicionar amigo* (pedido → aceitar → amigos; dá para desfazer).
+- **Transições**: cada troca de página (entrar numa sala, ir ao perfil, à loja) tem uma transição; e ao entrar numa
+  sala aparece a **tela de carregamento** (o logo, o nome da sala e o que está acontecendo: procurando a sala,
+  baixando o mapa, preparando a personagem). Com "reduzir movimento" no sistema, as animações somem.
+- **Dentro da sala**, o site some e fica o jogo; o logo do WEBC no alto leva ao site, e uma faixa lembra a sala com
+  **Voltar à sala**.
+- **Temas**: a paleta abre a galeria com o tema do **WEBC** (preto e branco, como o mockup) e os **mesmos temas do
+  VLC-Web** (31: escuro, claro, vidro, Frutiger Aero, Synthwave, Cyberpunk, pixel, Sakura, Nord, Drácula, Retrô 95,
+  Steampunk...), com as cores, os fundos, os efeitos e as fontes deles (`temas/vlc-web-temas.css`). O tema fica
+  guardado neste navegador.
+- **Idiomas**: **português, English e 日本語**, oficiais. Na primeira vez vem do navegador (outro idioma: inglês);
+  trocar (na tela de entrar ou no 🌐 do alto) traduz a página na hora, sem recarregar, e fica guardado. O dicionário
+  fica em `js/textos.js` (cada texto em português → inglês e japonês); `js/idiomas.js` traduz sozinho o que aparece
+  na tela (textos, `placeholder`, `title`, `aria-label`) e deixa como está o que as pessoas escrevem (nomes, bios,
+  mensagens). Os e-mails do código também saem no idioma da pessoa.
+- **Endereços**: `#modo=jogar` (sem a tela de entrar), `#pagina=loja|sala|perfil` (abre direto na página),
+  `#sala=código` (o link de uma sala) e `#modo=conversa` (o chat bot).
 
-Sem contas no servidor (ou com a página aberta sem ele), o cartão oferece só jogar e conversar. A escolha fica no
-endereço (`#modo=conversa` ou `#modo=jogar`, e aí a tela de início não aparece); *Ajuda › Trocar de modo* volta a ela.
-Quem abre o link de uma sala (`#sala=código`) já cai no modo de jogar.
+Neste modo **não há chat bot nem nenhuma função de IA**: somem os menus Conversa, IA e Voz, a memória, as respostas
+da personagem e os toques com reação; quem fala são as pessoas, num bate-papo por texto. *Conversar com a
+personagem* (no menu da conta) abre o chat bot, como descrito no resto deste guia; *Ajuda › Trocar de modo* volta à
+tela de entrar.
 
 ### Salas
 
-Ao jogar, aparece a **lista de salas** deste servidor (como a lista de servidores de um jogo): a miniatura do
+A página **Sala** lista as salas deste servidor (como a lista de servidores de um jogo): a miniatura do
 cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (👥 2/8), um 🔒 nas que têm senha e
 "Cheia" nas lotadas. Ela se atualiza sozinha. Em cima ficam o **seu nome** e a **sua personagem** (uma das suas,
 `.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou o boneco simples).
 
 - **Entrar**: um clique na sala (pede a senha, se tiver). Uma sala **privada** não aparece na lista: entra quem
-  tiver o link, que abre a Companhia já com ela em destaque ("A sala do seu link"); dá também para colar o link.
-- **Criar** (＋ Criar sala): **não precisa da ponte**. Pelo link isolado (veja "Site publicado só com a
-  Companhia"), quem chega cria a sala dele, se o dono do servidor deixar: ele vê na lista a opção *Deixar quem
+  tiver o link, que abre o WEBC já com ela em destaque ("A sala do seu link"); dá também para colar o link.
+- **Criar** (＋ Criar sala): **não precisa da ponte**. Pelo link isolado (veja "Site publicado só com o
+  WEBC"), quem chega cria a sala dele, se o dono do servidor deixar: ele vê na lista a opção *Deixar quem
   entra pelo link criar salas* (ligada por padrão). As opções:
   - **nome** e **descrição**;
   - **pública** (aparece na lista) ou **privada** (só com o link);
@@ -83,8 +106,8 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
   proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
   correções dos ossos, as peças de roupa escondidas, as texturas trocadas e a roupa vestida.
-- **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só a Companhia* (veja "Site publicado só com a
-  Companhia", abaixo): o link abre só a Companhia, sem a ponte. A sala fica no servidor do aparelho de quem criou e
+- **Para pessoas de fora**: use no LNUX *🧩 Apps Web › 💬 Publicar só o WEBC* (veja "Site publicado só com o
+  WEBC", abaixo): o link abre só o WEBC, sem a ponte. A sala fica no servidor do aparelho de quem criou e
   existe enquanto ele estiver ligado. Na rede de casa também dá (`--endereco 0.0.0.0`).
 - **Vídeo numa tela**: veja "Vídeo na tela", abaixo.
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
@@ -142,35 +165,45 @@ de salas (ou no menu *Conta*):
   idade mínima, **só entra nas salas quem tem conta**, e a lista das contas (com a opção de apagar uma).
 - Sem o e-mail configurado, dá para jogar e entrar, mas não para criar contas.
 
-### Loja: personagens, mundos e animações
+### Loja: mapas, personagens e animações
 
-A **loja** (*Personagem › Loja*, *Sala › Loja* ou os botões 🛍️ na janela da sala) mostra o que está guardado no
-aparelho de quem tem o servidor, como uma vitrine: abas (personagens, mundos, animações), busca e cartões com a
-miniatura.
+A **loja** (a página Loja, *Personagem › Loja* ou os botões 🛍️ da página Sala) mostra o que está guardado no
+servidor, como uma vitrine: as três categorias (**mapas**, **personagens** e **animações**), a pesquisa, o filtro e
+cartões com a miniatura, quantas **curtidas** (♥) e quantas pessoas **baixaram** (⤓).
 
+- **#**: quem publica põe # no item (até 12, separados por espaço ou vírgula), e quem publicou ou o dono podem mudar
+  depois. A pesquisa olha o nome, o autor, a descrição e os #: quem pesquisa *fnaf* acha o que tem **#fnaf**, mesmo
+  sem "fnaf" no nome; *#fnaf* procura só pelo #. Pesquisar numa categoria sem resultado leva à categoria que tem. O
+  filtro mostra os # mais usados, a ordem (mais curtidos, mais baixados, mais novos, nome) e "só os que eu salvei".
+- **Curtir**: só com conta (sem conta, avisa e oferece entrar; o servidor responde 401). Cada conta curte uma vez;
+  curtir de novo descurte.
+- **Baixaram**: conta quem usou ou baixou o arquivo, uma vez por pessoa (pela conta, ou pelo endereço para quem não
+  tem conta).
+- **Salvar no perfil**: com conta, o item vai para os **salvos** do perfil (aparece para os outros também).
 - **Ver antes de usar**: ao abrir um item, ele aparece em **3D**: a personagem de pé (arraste para girar, a rodinha
-  aproxima), o mundo visto de cima e a animação num boneco.
-- **Usar**: a personagem vira uma das suas (na janela da sala, já fica escolhida), o mundo vai para *Movimento ›
-  Cenário* (e pode ser o cenário de uma sala) e a animação para *Movimento › Pacotes de movimento*. *Baixar o
+  aproxima), o mapa visto de cima e a animação num boneco.
+- **Usar**: a personagem vira uma das suas (na página Sala, já fica escolhida), o mapa vai para *Movimento ›
+  Cenário* (e pode ser o mapa de uma sala) e a animação para *Movimento › Pacotes de movimento*. *Baixar o
   arquivo* guarda o `.vrm`, `.glb`, `.vrma`, `.bvh` ou `.fbx`.
-- **Publicar** (＋ Publicar): uma das suas personagens, um dos seus cenários ou movimentos, ou um arquivo do aparelho
-  (avatares do Unity viram `.vrm`; mapas de qualquer formato viram `.glb`). A miniatura é tirada da prévia. Quem
-  publicou pode apagar o que é seu (neste navegador).
+- **Publicar** (＋ Publicar): uma das suas personagens, um dos seus mapas ou movimentos, ou um arquivo do aparelho
+  (avatares do Unity viram `.vrm`; mapas de qualquer formato viram `.glb`), com os #. A miniatura é tirada da
+  prévia. Com conta, o autor é a conta, e quem publicou pode apagar o que é seu.
 - **O dono da loja** (quem abre no aparelho do servidor, com a ponte) apaga qualquer item, decide se quem entra
   pelo link pode publicar e vê onde fica a pasta: `~/.lnux-apps/loja` (ou `"loja"` em `ponte.json`, ou `--loja`),
   com as subpastas `personagens`, `mundos` e `animacoes`. Arquivos postos à mão nelas também aparecem na loja; as
-  miniaturas que faltam o dono gera sozinho ao abrir a loja.
+  miniaturas que faltam o dono gera sozinho ao abrir a loja. Os #, as curtidas e os downloads ficam em
+  `.social.json`, na mesma pasta.
 - É a única pasta do aparelho que os visitantes alcançam. O formato de cada arquivo é conferido ao publicar.
 
-### Site publicado só com a Companhia
+### Site publicado só com o WEBC
 
-O servidor pode publicar **só a Companhia** (`python3 servidor/lnux_apps.py --so-app companhia`; no LNUX, *🧩 Apps
-Web › 💬 Publicar só a Companhia*, que também liga o túnel):
+O servidor pode publicar **só o WEBC** (`python3 servidor/lnux_apps.py --so-app companhia`; no LNUX, *🧩 Apps
+Web › 💬 Publicar só o WEBC*, que também liga o túnel):
 
-- O endereço abre direto na Companhia; a página inicial dos Apps Web e os outros apps **não existem** nele, e o
+- O endereço abre direto no WEBC; a página inicial dos Apps Web e os outros apps **não existem** nele, e o
   botão dos Apps Web some.
 - De fora (pela rede ou pela internet, pelo túnel) a **ponte não abre, nem com a chave**: só as salas e a loja.
-  Quem chega pelo link vê a lista de salas, entra e cria a sua (se o dono deixar). A chave só vale para quem abre
+  Quem chega pelo link vê o site, entra numa sala e cria a sua (se o dono deixar). A chave só vale para quem abre
   no próprio aparelho do servidor (`127.0.0.1`).
 - O link para as pessoas nunca leva a chave.
 
@@ -199,9 +232,9 @@ O núcleo do Live2D não é preciso para elas.
     personagem* gera um ZIP com as roupas e as texturas, que dá para importar em outro aparelho.
 - **Item de roupa do VRoid Studio (`.vroidcustomitem`):** não é uma personagem. Ele guarda ajustes das roupas que
   só existem dentro do VRoid Studio, então **só abre lá**. Aplique o item na personagem no VRoid Studio e exporte
-  como VRM. Se você importar o pacote do item com uma personagem VRoid aberta, a Companhia explica isso e oferece
+  como VRM. Se você importar o pacote do item com uma personagem VRoid aberta, o WEBC explica isso e oferece
   guardar as texturas PNG do pacote como variações de cor.
-- **Licença:** o `.vrm` traz a licença do autor. Se ela não deixa redistribuir, a Companhia avisa ao importar e ao
+- **Licença:** o `.vrm` traz a licença do autor. Se ela não deixa redistribuir, o WEBC avisa ao importar e ao
   exportar.
 - O pacote do three.js com o three-vrm (`vendor/three-vrm-pacote.min.js`, ~1 MB) só carrega quando uma
   personagem VRoid abre. Para montar de novo: `sh tools/montar_vrm.sh`.
@@ -233,13 +266,13 @@ movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
 - **Balanço**: os ossos soltos de **cabelo, saia, rabo, orelhas e fitas** (pelo nome) ganham balanço, com
   colisores na cabeça, no corpo e nas coxas. Os olhos (ossos `LeftEye`/`RightEye`) seguem a pessoa.
 - Antes de importar, um **resumo** mostra o que foi reconhecido (ossos, expressões, texturas, balanço) e o que não
-  veio. Se o pacote tem mais de um modelo, a Companhia pergunta qual é o avatar.
+  veio. Se o pacote tem mais de um modelo, o WEBC pergunta qual é o avatar.
 - **Não vêm**: os efeitos dos shaders do Unity (lilToon, Poiyomi: contornos, brilhos, matcaps), as físicas do
   VRChat (PhysBones, que ficam no prefab, não no modelo), as animações, os menus e as peças ligadas ou desligadas
   pelo prefab.
 - **Licença**: um pacote do Unity não diz o que o autor deixa fazer, e avatares comprados quase nunca deixam
   redistribuir. O `.vrm` convertido fica marcado como **"não redistribuir"**: a personagem fica só neste aparelho e
-  a Companhia avisa antes de mandá-la para outras pessoas numa sala. Confira os termos de quem fez o avatar.
+  o WEBC avisa antes de mandá-la para outras pessoas numa sala. Confira os termos de quem fez o avatar.
 
 ## Movimento: captura, pacotes de movimento, cenário e esqueleto (personagens VRoid)
 
@@ -290,7 +323,7 @@ lado da personagem, para ver o resultado enquanto você mexe.
 - Cada movimento serve para **qualquer personagem** VRoid (e para todas as roupas dela): ele é guardado como
   rotação de cada osso do VRM a partir da pose em T, e o quadril em "alturas do quadril".
 - Nos `.fbx`, `.bvh` e `.glb`, o esqueleto do arquivo é reconhecido pelos **nomes dos ossos** (Mixamo, Unity/VRM,
-  VRoid, Unreal, Blender, BVH da CMU...). A Companhia corrige sozinha para onde o esqueleto do arquivo olha e se
+  VRoid, Unreal, Blender, BVH da CMU...). O WEBC corrige sozinha para onde o esqueleto do arquivo olha e se
   ele descansa em T ou em A. Se um membro mexer errado, **⋯ › Ossos...** deixa ligar à mão cada osso da
   personagem a um osso do arquivo.
 - **Repetir**, **velocidade** e **parar**; a emoção e a boca continuam funcionando por cima do movimento.
@@ -302,7 +335,7 @@ lado da personagem, para ver o resultado enquanto você mexe.
 
 *Movimento › Cenário (mapa)* abre um modelo 3D como lugar: **`.blend`** (Blender), **`.glb` / `.gltf`** (com Draco
 e Meshopt), **`.fbx`**, **`.obj`**, **`.dae`**, **`.stl`**, **`.ply`**, **`.3ds`**, **`.3mf`**, **`.usdz`**, um **ZIP** com
-o modelo e as texturas, ou um **`.unitypackage`** (a Companhia abre o pacote e lista os modelos de dentro). Tudo
+o modelo e as texturas, ou um **`.unitypackage`** (o WEBC abre o pacote e lista os modelos de dentro). Tudo
 é **convertido para `.glb`** ao abrir (veja "Converter mapas", abaixo). No retrato o cenário aparece atrás da
 personagem; em **Andar pelo cenário** ela anda por ele:
 
@@ -357,7 +390,7 @@ No retrato de conversa (sem cenário) a luz é sempre a de frente.
 
 ### Luzes do mapa
 
-Ao abrir um cenário, a Companhia **acha as luzes dele**, e de cada uma sai luz de verdade:
+Ao abrir um cenário, o WEBC **acha as luzes dele**, e de cada uma sai luz de verdade:
 
 - 💡 as **lâmpadas que vêm no arquivo** (pontuais e spots do glTF, do FBX e do Blender: a conversão para `.glb` agora
   as mantém);
@@ -397,7 +430,7 @@ qualidade *rápida*), leva poucos segundos num computador; no celular e nas qual
 
 ### Converter mapas para `.glb`
 
-O `.glb` (glTF binário, com as texturas dentro) é o formato em que a Companhia guarda e abre os cenários. Qualquer
+O `.glb` (glTF binário, com as texturas dentro) é o formato em que o WEBC guarda e abre os cenários. Qualquer
 mapa aberto em *Cenário › Abrir cenário* é convertido para ele; **Salvar em .glb** entrega o arquivo convertido, e
 *Movimento › Converter mapa para .glb* (ou **Só converter**, no painel) converte e salva sem trocar o cenário.
 
@@ -413,8 +446,8 @@ gravou), então abre arquivos do Blender 2.6 ao 5.x, compactados (gzip ou zstd) 
 posição de cada objeto no mundo (inclusive filhos de outros objetos), o mapa UV, os materiais (cor, rugosidade,
 metal e a imagem ligada à cor do Principled BSDF) e as texturas embutidas no arquivo (ou as que vierem junto, pelo
 nome). **Não tira**: modificadores (espelho, matriz, subdivisão...), curvas, textos, metaballs, instâncias de
-coleção, partículas e animações — para isso, use a conversão pelo Blender (instale o Blender e abra a Companhia
-pelo LNUX) ou, no Blender, *Arquivo › Exportar › glTF 2.0*. A Companhia avisa quando converteu pelo leitor próprio.
+coleção, partículas e animações — para isso, use a conversão pelo Blender (instale o Blender e abra o WEBC
+pelo LNUX) ou, no Blender, *Arquivo › Exportar › glTF 2.0*. O WEBC avisa quando converteu pelo leitor próprio.
 Se as texturas do `.blend` ficam em arquivos separados, escolha as imagens junto com ele (ou embuta no Blender:
 *Arquivo › Dados externos › Empacotar recursos*).
 
@@ -422,7 +455,7 @@ Se as texturas do `.blend` ficam em arquivos separados, escolha as imagens junto
 shaders e scripts num formato do próprio motor, que não abre fora dele (e baixar o mundo de outra pessoa fere os
 termos do VRChat). O que dá para usar aqui são os **arquivos do projeto** do mundo: o `.blend` do Blender, os
 modelos `.fbx`/`.obj`/`.dae` (direto ou de dentro do `.unitypackage`) ou a cena exportada do Unity com o
-[UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB") — a Companhia converte para `.glb`. De um `.unitypackage`, a Companhia
+[UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB") — o WEBC converte para `.glb`. De um `.unitypackage`, o WEBC
 abre **um modelo** como mapa; as peças soltas de uma cena montada no Unity (`.unity`, prefabs) não são
 reposicionadas, e os materiais do Unity (`.mat`, shaders) não são convertidos — as texturas entram quando o
 próprio modelo aponta para elas. Use só mapas que você tem o direito de usar.
@@ -442,7 +475,7 @@ pacotes de movimento e a captura) e fica guardado com ela (e vai junto no ZIP ex
 ### O defeito dos braços para cima (VRM 0.x)
 
 Os modelos **VRM 0.x** (os exportados pelo VRoid Studio "estável") olham para −Z e têm o braço esquerdo em −X; o
-VRM 1.0 olha para +Z com o braço esquerdo em +X. A Companhia girava o modelo inteiro, mas as rotações dos ossos
+VRM 1.0 olha para +Z com o braço esquerdo em +X. O WEBC girava o modelo inteiro, mas as rotações dos ossos
 continuavam espelhadas: nesses modelos os braços iam para **cima** em vez de para baixo, e a cabeça e o tronco
 inclinavam ao contrário. Agora a pose é montada num espaço só (o do VRM 1.0) e convertida no fim, para os dois
 tipos. Nos VRM 0.x do VRoid, a expressão "Surprised" (que vem como expressão própria) também passou a valer
@@ -494,7 +527,7 @@ hora em que chegam.
 - **12 gestos do corpo**: concordar, negar, inclinar, pular, tremer, suspirar, piscar, olhar em volta,
   encolher, aproximar, acenar, desviar o olhar.
 - **Expressões do modelo** (`.exp3.json`): em *Personagem › Emoções*, cada emoção liga as expressões que você
-  marcar (lágrimas, corações, estrelinhas...); a Companhia já sugere pelo nome. Os botões embaixo da
+  marcar (lágrimas, corações, estrelinhas...); o WEBC já sugere pelo nome. Os botões embaixo da
   personagem ligam e desligam à mão, várias ao mesmo tempo, como os atalhos do VTube Studio.
 - Se a IA esquecer as marcas, a emoção é adivinhada pelo texto. Ações escritas como `*sorri*` também viram
   emoção ou gesto.
@@ -525,7 +558,7 @@ deixa ela brava; muito carinho, apaixonada. O afeto muda o jeito dela tratar voc
 | **Voz do navegador** | grátis; a boca mexe no ritmo das palavras |
 | **ElevenLabs** | `eleven_flash_v2_5` (rápido e pela metade do preço), `eleven_multilingual_v2`, `eleven_v3` (entende emoções como `[laughs]`) |
 | **OpenAI TTS** | `gpt-4o-mini-tts` muda o tom conforme a emoção; usa a mesma chave da IA |
-| **VoiceStudio** | o [VoiceStudio](https://github.com/debpalash/VoiceStudio), de debpalash, rodando no aparelho (`http://127.0.0.1:3900`): vozes clonadas e desenhadas, sem internet. A Companhia usa a API dele, compatível com a da OpenAI |
+| **VoiceStudio** | o [VoiceStudio](https://github.com/debpalash/VoiceStudio), de debpalash, rodando no aparelho (`http://127.0.0.1:3900`): vozes clonadas e desenhadas, sem internet. O WEBC usa a API dele, compatível com a da OpenAI |
 | **Outro compatível com OpenAI** | Kokoro-FastAPI, openedai-speech... |
 | **Voz do aparelho (ponte)** | `termux-tts-speak` ou `espeak` |
 
@@ -569,7 +602,7 @@ têm memória de vídeo para isso. Aí a textura não sobe e a personagem aparec
   **4096 px no computador**, nunca acima do que a placa de vídeo aceita. As coordenadas de textura do Live2D vão
   de 0 a 1, então a cópia serve no lugar da original, e na tela quase não muda. A cópia fica guardada no
   navegador, para não refazer a cada vez.
-- **Depois do primeiro desenho**, a Companhia confere se as texturas chegaram à placa de vídeo. Se vierem pretas,
+- **Depois do primeiro desenho**, o WEBC confere se as texturas chegaram à placa de vídeo. Se vierem pretas,
   ela tenta de novo com metade do tamanho, avisa e guarda o tamanho que funcionou.
 - Se a placa de vídeo reiniciar por falta de memória, a personagem é recarregada com texturas menores.
 - Trocar de personagem libera as texturas da anterior na memória de vídeo.
@@ -580,7 +613,7 @@ têm memória de vídeo para isso. Aí a textura não sobe e a personagem aparec
 ## O núcleo do Live2D (importante)
 
 Os modelos Live2D precisam do **Live2D Cubism Core**, que é da Live2D Inc. e tem licença própria. Por isso ele
-**não vem junto** com o LNUX-APPs. A Companhia carrega o núcleo na primeira fonte que der certo:
+**não vem junto** com o LNUX-APPs. O WEBC carrega o núcleo na primeira fonte que der certo:
 
 1. A cópia guardada pela ponte (`~/.lnux-apps/live2d/`). A ponte baixa do site oficial uma vez e depois funciona
    sem internet.
@@ -594,7 +627,7 @@ o `live2dcubismcore.min.js` no aviso da tela. Usar o núcleo significa aceitar a
 ## Os modelos são dos autores deles
 
 Os modelos que você importa ficam **só no seu aparelho**, e nada é enviado. Muitos modelos (como os vendidos no
-BOOTH) proíbem redistribuir. Quando o `.vtube.json` diz "não compartilhar", a Companhia avisa ao importar e ao
+BOOTH) proíbem redistribuir. Quando o `.vtube.json` diz "não compartilhar", o WEBC avisa ao importar e ao
 exportar. O ZIP exportado (com um `companhia.json` com perfil, emoções, áreas e voz) é para levar a personagem
 para outro aparelho seu.
 

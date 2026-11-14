@@ -46,7 +46,7 @@
       throw e;
     }
     if (!modelos.length) {
-      if (nomes.some((n) => /\.moc$/i.test(n) || /(^|\/)model\.json$/i.test(n))) throw new Error("Este parece um modelo do Live2D Cubism 2 (.moc / model.json). A Companhia lê modelos Cubism 3 e 4 (.moc3 / .model3.json), como os do VTube Studio.");
+      if (nomes.some((n) => /\.moc$/i.test(n) || /(^|\/)model\.json$/i.test(n))) throw new Error("Este parece um modelo do Live2D Cubism 2 (.moc / model.json). O WEBC lê modelos Cubism 3 e 4 (.moc3 / .model3.json), como os do VTube Studio.");
       throw new Error("Não achei uma personagem: falta o .model3.json (Live2D, como os do VTube Studio) ou o .vrm (VRoid). Escolha o ZIP, a pasta ou o arquivo .vrm.");
     }
     const modelo = modelos[0];

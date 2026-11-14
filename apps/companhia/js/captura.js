@@ -55,17 +55,16 @@
         try {
           const estado = await ponte.pedir("GET", "mediapipe");
           if (!estado.arquivos[nome]) {
-            aoProgresso(`Baixando ${nome} (${info.mb} MB) pela ponte, só desta vez...`);
+            aoProgresso(C.t("Baixando {nome} ({mb} MB), só desta vez...", { nome, mb: info.mb }));
             await ponte.pedir("POST", "mediapipe", { json: { arquivos: [nome] } });
           }
           return comTipo(await ponte.pedir("GET", "mediapipe/" + nome, { como: "blob" }));
         } catch (e) { console.warn("captura: a ponte não entregou " + nome + "; tentando pela internet", e); }
       }
-      aoProgresso(`Baixando ${nome} (${info.mb} MB), só desta vez...`);
+      aoProgresso(C.t("Baixando {nome} ({mb} MB), só desta vez...", { nome, mb: info.mb }));
       let resposta;
       try { resposta = await fetch(info.url); } catch (e) { resposta = null; }
-      if (!resposta || !resposta.ok) throw new Error(`Não consegui baixar ${nome} (${info.mb} MB), que a captura de movimento precisa. Precisa de internet na primeira vez` +
-        (ponte.disponivel ? "." : "; abrindo a Companhia pelo LNUX (🌐 Apps Web), a ponte guarda os arquivos no aparelho."));
+      if (!resposta || !resposta.ok) throw new Error(C.t("Não consegui baixar {nome} ({mb} MB), que a captura de movimento precisa. Precisa de internet na primeira vez.", { nome, mb: info.mb }));
       const blob = comTipo(await resposta.blob());
       LNUX.guardado.gravar(chaveGuardado(nome), blob).catch(() => {}); // da próxima vez, sem internet
       return blob;
@@ -131,7 +130,7 @@
       if (this.ligada || this.ligando) return;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error(window.isSecureContext === false
-          ? "A câmera só funciona em endereço seguro: abra a Companhia por http://127.0.0.1 (ou localhost) no próprio aparelho, ou por https (o túnel do LNUX)."
+          ? "A câmera só funciona em endereço seguro: abra o WEBC por um endereço https."
           : "Este navegador não dá acesso à câmera.");
       }
       const cfg = this.cfg;
@@ -231,7 +230,7 @@
       this.video = el("video", { playsinline: "", muted: "", autoplay: "" });
       this.video.muted = true;
       this.tela = el("canvas", { width: 320, height: 240 });
-      this.rotulo = el("span", { class: "rotulo" }, "");
+      this.rotulo = el("span", { class: "rotulo", translate: "no" }, ""); // muda a cada quadro: já sai no idioma (C.t), sem passar pelo tradutor da página
       this.caixa = el("div", { class: "captura-previa", title: "Sua câmera (a imagem não sai do aparelho)" }, this.video, this.tela, this.rotulo);
       this.conteiner.append(this.caixa);
       this.aplicarPrevia();
@@ -300,7 +299,7 @@
         if (r.rosto) { this.resolverRosto(r.rosto); this.visto.rosto = agora; }
       }
       this.achados = { rosto: !!r.rosto, corpo: !!r.corpo, maos: (r.maos || []).length };
-      if (this.rotulo) this.rotulo.textContent = `${m.fps || "…"} qps` + (r.rosto ? " · rosto" : "") + (r.corpo ? " · corpo" : "") + (r.maos && r.maos.length ? ` · ${r.maos.length} mão${r.maos.length > 1 ? "s" : ""}` : "");
+      if (this.rotulo) this.rotulo.textContent = C.t("{n} qps", { n: m.fps || "…" }) + (r.rosto ? " · " + C.t("rosto") : "") + (r.corpo ? " · " + C.t("corpo") : "") + (r.maos && r.maos.length ? " · " + C.t(r.maos.length > 1 ? "{n} mãos" : "{n} mão", { n: r.maos.length }) : "");
       this.desenharPrevia(r);
     }
     definir(nome, q, peso) {

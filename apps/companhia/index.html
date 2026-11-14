@@ -3,15 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Companhia · LNUX</title>
-  <meta name="description" content="Converse com personagens Live2D (como os do VTube Studio) ou VRoid (.vrm): chat com IA, voz, expressões, toques, memória no aparelho, captura de movimento pela câmera, pacotes de movimento e cenários para andar.">
+  <title>WEBC</title>
+  <meta name="description" content="WEBC (web chat): salas em 3D com a sua personagem, uma loja de personagens, mapas e animações, perfil e amigos.">
   <link rel="stylesheet" href="../../comum/lnux.css">
+  <link rel="stylesheet" href="temas/vlc-web-temas.css">
   <link rel="stylesheet" href="companhia.css">
+  <meta name="theme-color" content="#000000">
 </head>
 <body>
   <div class="lnux-app">
     <header class="lnux-topo">
-      <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span>Companhia</a>
+      <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span><span class="nome-marca">WEBC</span></a>
       <nav class="lnux-menubar" aria-label="Menus"></nav>
       <div class="lnux-titulo-doc" id="titulo-doc">Sem personagem</div>
       <div class="lnux-topo-acoes"></div>
@@ -42,12 +44,12 @@
         <div class="palco-vazio" id="palco-vazio">
           <div class="cartao">
             <h2>Sua companhia</h2>
-            <p>Importe uma personagem: o <b>ZIP</b> (ou a pasta) de um modelo Live2D do <b>VTube Studio</b> (Cubism 3/4, <code>.model3.json</code>) ou uma personagem do <b>VRoid</b> (<code>.vrm</code>).</p>
+            <p>Importe uma personagem: o ZIP (ou a pasta) de um modelo Live2D do VTube Studio (Cubism 3/4, .model3.json) ou uma personagem do VRoid (.vrm).</p>
             <div class="botoes">
               <button class="lnux-botao primario" type="button" id="vazio-zip">Importar ZIP ou .vrm...</button>
               <button class="lnux-botao" type="button" id="vazio-pasta">Importar pasta...</button>
             </div>
-            <p class="fraco pequeno" id="vazio-dica">Dá para arrastar o ZIP para cá. A personagem fica guardada só neste aparelho.</p>
+            <p class="fraco pequeno" id="vazio-dica">Dá para arrastar o ZIP para cá. A personagem fica guardada só neste navegador.</p>
             <div class="nucleo" id="nucleo-aviso" hidden></div>
           </div>
         </div>
@@ -83,9 +85,13 @@
   <!-- comum -->
   <script src="../../comum/lnux.js"></script>
   <script src="../../comum/zip.js"></script>
+  <!-- WEBC: idiomas (o dicionário antes) e temas -->
+  <script src="js/textos.js"></script>
+  <script src="js/idiomas.js"></script>
+  <script src="js/temas.js"></script>
   <!-- desenho (o pixi-live2d-display e o núcleo do Live2D carregam depois, em C.prepararLive2D) -->
   <script src="vendor/pixi.min.js"></script>
-  <!-- Companhia -->
+  <!-- WEBC -->
   <script src="js/live2d.js"></script>
   <script src="js/mundo.js"></script>
   <script src="js/luzes.js"></script>
@@ -101,6 +107,7 @@
   <script src="js/contas.js"></script>
   <script src="js/salas.js"></script>
   <script src="js/inicio.js"></script>
+  <script src="js/webc.js"></script>
   <script src="js/personagens.js"></script>
   <script src="js/ia.js"></script>
   <script src="js/voz.js"></script>

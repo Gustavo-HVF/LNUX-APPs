@@ -32,7 +32,7 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
   const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
   const consola = [];
   const pessoa = async (nome) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 } });
+    const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     await contexto.route("https://videos.exemplo.com/**", (r) => {
       const faixa = /bytes=(\d+)-(\d*)/.exec(r.request().headers().range || "");
@@ -59,7 +59,7 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
   const dist2 = (a, b) => Math.hypot(a[0] - b[0], a[2] - b[2]);
   try {
     // ── a Ana cria a sala (chão simples) ──
-    await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar`);
+    await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas #sala-criar", { timeout: 30000 });
     await ana.pagina.fill('.salas input[aria-label="Seu nome"]', "Ana");
     await ana.pagina.click("#sala-criar");
@@ -136,7 +136,7 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
     ok(dist2(t3.pos, fixa) < 0.05 && /Parada/.test(await ana.ev(() => document.querySelector('.barra-video [data-acao="modo"]').textContent)), "\"Fica parada\": ela anda e a tela fica no lugar");
 
     // ── a Bia entra e vê a tela da Ana, no mesmo lugar e no mesmo ponto ──
-    await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar`);
+    await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await bia.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
     await bia.pagina.fill('.salas input[aria-label="Seu nome"]', "Bia");
     await bia.pagina.click(`.cartao-sala[data-codigo="${codigo}"] .entrar`);
