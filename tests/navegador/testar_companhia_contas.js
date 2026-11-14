@@ -69,10 +69,15 @@ function png(w, h, [r, g, b]) {
   const smtp = await smtpFalso();
   const foto = path.join(PASTA, "foto-da-ana.png");
   fs.writeFileSync(foto, png(300, 200, [230, 60, 120]));
-  const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  // o banner: metade da esquerda vermelha, metade da direita azul (para conferir o zoom e a posição escolhidos)
+  const banner = path.join(PASTA, "banner-da-ana.png");
+  fs.writeFileSync(banner, require("./companhia_arquivos.js").png(1200, 600, (x) => (x < 600 ? [220, 30, 30] : [30, 60, 220])));
+  // um navegador por pessoa (como no teste das salas): sem placa de vídeo, o jogo 3D de um deixava a página do outro lenta
+  const navegadores = [];
+  const abrir = async () => { const n = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] }); navegadores.push(n); return n; };
   const consola = [];
   const pessoa = async (nome) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1200, height: 820 }, locale: "pt-BR" });
+    const contexto = await (await abrir()).newContext({ viewport: { width: 1200, height: 820 }, locale: "pt-BR" });
     await nomeGuardado(contexto, nome);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
@@ -153,13 +158,48 @@ function png(w, h, [r, g, b]) {
     await ana.pagina.waitForSelector("#perfil-foto");
     const [escolha] = await Promise.all([ana.pagina.waitForEvent("filechooser"), ana.pagina.click("#perfil-foto")]);
     await escolha.setFiles(foto);
+    // a foto abre para arrumar (quadrada, com o círculo por cima); "Usar" manda
+    await ana.pagina.waitForSelector(".recorte-quadro.redonda .recorte-circulo");
+    await ana.pagina.click('.lnux-dialogo:last-of-type footer button:text-is("Usar")');
     await ana.pagina.waitForSelector(".janela-perfil .foto-conta img", { timeout: 30000 });
+    // o banner: o botão não fica mais embaixo da foto; ampliar, arrastar para a esquerda e usar
+    const [escolhaBanner] = await Promise.all([ana.pagina.waitForEvent("filechooser"), ana.pagina.click("#perfil-capa")]);
+    await escolhaBanner.setFiles(banner);
+    await ana.pagina.waitForSelector(".recorte-quadro:not(.redonda)");
+    const proporcao = await ana.ev(() => { const r = document.querySelector(".recorte-quadro").getBoundingClientRect(); return +(r.width / r.height).toFixed(2); });
+    await ana.pagina.click('.recorte-controles button[aria-label="Ampliar"]');
+    await ana.pagina.click('.recorte-controles button[aria-label="Ampliar"]');
+    const q = await ana.pagina.locator(".recorte-quadro").boundingBox();
+    await ana.pagina.mouse.move(q.x + q.width / 2, q.y + q.height / 2);
+    await ana.pagina.mouse.down();
+    await ana.pagina.mouse.move(q.x - q.width / 2, q.y + q.height / 2, { steps: 8 });
+    await ana.pagina.mouse.up();
+    await ana.pagina.click('.lnux-dialogo:last-of-type footer button:text-is("Usar")');
+    await ana.pagina.waitForFunction(() => /url\(/.test(document.querySelector(".janela-perfil .perfil-capa").style.background), null, { timeout: 30000 });
+    const capa = await ana.ev(async () => {
+      const img = await (await fetch(C.contas.imagem(C.contas.eu, "capa"))).blob(), bmp = await createImageBitmap(img);
+      const c = document.createElement("canvas"); c.width = bmp.width; c.height = bmp.height; const x = c.getContext("2d"); x.drawImage(bmp, 0, 0);
+      const cor = (px) => { const d = x.getImageData(px, 160, 1, 1).data; return d[0] > d[2] ? "vermelho" : "azul"; };
+      return { tamanho: [bmp.width, bmp.height], em100: cor(100), em300: cor(300), em700: cor(700) };
+    });
+    // ampliado 1,44× e arrastado até o fim: a imagem (1080 px de largura no quadro) mostra de 330 a 1080 → vermelho só até 210
+    ok(proporcao === 2.31 && capa.tamanho.join("×") === "750×325" && capa.em100 === "vermelho" && capa.em300 === "azul" && capa.em700 === "azul",
+      `o banner abre para arrumar (quadro ${proporcao}:1 = 750 × 325); ampliado e arrastado, sai em ${capa.tamanho.join(" × ")} com o pedaço escolhido (${capa.em100}, ${capa.em300}, ${capa.em700})`);
     await ana.pagina.fill('.janela-perfil textarea[aria-label="Bio"]', "Gosto de dançar e de jogar com os amigos.");
     await ana.pagina.fill('.janela-perfil input[aria-label="Pronomes"]', "ela/dela");
     await ana.pagina.fill('.janela-perfil input[aria-label="Cidade"]', "Recife");
     await ana.pagina.fill('.janela-perfil input[aria-label="Link 1"]', "https://exemplo.com/ana");
     await ana.pagina.click('.lnux-dialogo footer button:text-is("Salvar")');
     await ana.pagina.waitForSelector('.lnux-aviso:has-text("Perfil salvo")');
+    // o tema que a Ana usa vai para o perfil dela
+    await ana.ev(() => C.temas.definir("dracula"));
+    ok(await ana.ev(async () => {
+      for (let i = 0; i < 40; i++) {
+        if ((await (await fetch("/api/contas/eu", { headers: { "X-Conta-Sessao": localStorage.getItem("companhia.conta.sessao") } })).json()).tema === "dracula") return true;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      return false;
+    }), "o tema que a Ana escolhe (Drácula) vai para o perfil dela no servidor");
     const salvo = await ana.ev(async () => { const eu = (await (await fetch("/api/contas/eu", { headers: { "X-Conta-Sessao": localStorage.getItem("companhia.conta.sessao") } })).json());
       const img = await (await fetch(`/api/contas/midia/${eu.id}/foto`)).blob(); const bmp = await createImageBitmap(img); return { ...eu, foto: [bmp.width, bmp.height, img.type] }; });
     ok(salvo.bio === "Gosto de dançar e de jogar com os amigos." && salvo.pronomes === "ela/dela" && salvo.local === "Recife" && salvo.links[0] === "https://exemplo.com/ana" &&
@@ -188,6 +228,15 @@ function png(w, h, [r, g, b]) {
     ok(/Ana Clara/.test(perfil.texto) && /ela\/dela/.test(perfil.texto) && /Gosto de dançar/.test(perfil.texto) && /Recife/.test(perfil.texto) && perfil.foto && /noopener/.test(perfil.link) && !/ana@exemplo/.test(perfil.texto),
       "o dono clica na Ana em Pessoas na sala e abre a página de perfil dela (foto, nome, pronomes, bio, cidade e link; sem o e-mail)");
     ok(perfil.faixa, "fora do jogo, uma faixa lembra a sala e tem \"Voltar à sala\"");
+    // o perfil dela aparece no tema que ela usa (Drácula); o resto do site do dono fica no tema dele
+    const tema = await dono.ev(() => {
+      const pag = document.querySelector('.webc-pagina[data-pagina="perfil"]'), painel = pag.querySelector(".perfil-pagina");
+      const amostra = (skin) => { const a = document.createElement("div"); a.className = "tema-local"; a.dataset.skin = skin; const b = document.createElement("div"); b.className = "webc-painel"; a.append(b); document.body.append(a); const c = getComputedStyle(b).backgroundColor; a.remove(); return c; };
+      return { local: pag.dataset.skin, site: document.documentElement.dataset.skin, painel: getComputedStyle(painel).backgroundColor, dele: amostra("dracula"), dono: amostra(document.documentElement.dataset.skin),
+        banner: !!document.querySelector(".perfil-banner.com-imagem .perfil-banner-imagem"), proporcao: (() => { const r = document.querySelector(".perfil-banner-imagem").getBoundingClientRect(); return +(r.width / r.height).toFixed(2); })() };
+    });
+    ok(tema.local === "dracula" && tema.site !== "dracula" && tema.painel === tema.dele && tema.painel !== tema.dono && tema.banner && tema.proporcao === 2.31,
+      `o perfil da Ana abre no tema dela (${tema.local}: painel ${tema.painel}); o site do dono continua no dele (${tema.site}); o banner aparece em 750 × 325 (${tema.proporcao}:1)`);
     await dono.pagina.screenshot({ path: path.join(PASTA, "companhia-contas-perfil.png") });
     await dono.pagina.click("#webc-voltar-sala");
     await dono.pagina.waitForFunction(() => !C.webc.visivel, null, { timeout: 10000 });
@@ -269,7 +318,7 @@ function png(w, h, [r, g, b]) {
     try { await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-contas-erro-ana.png") }); await dono.pagina.screenshot({ path: path.join(PASTA, "companhia-contas-erro-dono.png") }); } catch (e2) { /* sem tela */ }
   } finally {
     smtp.srv.close();
-    await navegador.close();
+    for (const n of navegadores) await n.close();
   }
   console.log(`\nCompanhia (contas): ${passos} ok, ${erros.length} com problema.`);
   process.exit(erros.length ? 1 : 0);

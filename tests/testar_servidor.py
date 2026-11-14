@@ -18,6 +18,7 @@ import http.client
 import json
 import os
 import secrets
+import shutil
 import struct
 import sys
 import tempfile
@@ -815,13 +816,16 @@ def _():
                                                             "links": ["https://exemplo.com/ana"], "cor": "#ff8800"}, cabecalhos=eu, **visita)[1]
         assert r["nome"] == "Ana Clara" and r["bio"] == "Gosto de dançar\n<b>e de jogar</b>" and r["links"] == ["https://exemplo.com/ana"] and r["cor"] == "#ff8800"
         assert S.json("POST", "/api/contas/perfil", json_corpo={"links": ["javascript:alert(1)"]}, cabecalhos=eu, **visita)[0] == 400
+        # o tema que a pessoa usa (quem abre o perfil vê nele); um nome estranho é descartado
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"tema": "../x"}, cabecalhos=eu, **visita)[1]["tema"] == ""
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"tema": "dracula"}, cabecalhos=eu, **visita)[1]["tema"] == "dracula"
         assert S.json("POST", "/api/contas/perfil", json_corpo={"bio": "x"}, **visita)[0] == 401
         assert S.pedir("PUT", "/api/contas/midia?tipo=foto", corpo=b"<svg/>", cabecalhos=eu, **visita)[0] == 400
         assert S.pedir("PUT", "/api/contas/midia?tipo=foto", corpo=PNG, cabecalhos=eu, **visita)[0] == 200
         assert S.pedir("PUT", "/api/contas/midia?tipo=capa", corpo=PNG, cabecalhos=eu, **visita)[0] == 200
         cid = r["id"]
         publico = S.json("GET", f"/api/contas/perfil/{cid}", **visita)[1]
-        assert publico["nome"] == "Ana Clara" and publico["foto"] and publico["capa"] and "email" not in publico and "idade" not in publico
+        assert publico["nome"] == "Ana Clara" and publico["foto"] and publico["capa"] and publico["tema"] == "dracula" and "email" not in publico and "idade" not in publico
         status, cab, dados = S.pedir("GET", f"/api/contas/midia/{cid}/foto", **visita)
         assert status == 200 and cab["Content-Type"] == "image/png" and dados == PNG
         assert (Path(os.environ["LNUX_APPS_DADOS"]) / "contas" / "midia" / f"{cid}-foto.png").is_file()
@@ -904,6 +908,34 @@ def _():
             arquivo.unlink(missing_ok=True)
         else:
             arquivo.write_text(antes, "utf-8")
+
+
+@caso("Mapas specular/glossiness (exportações antigas do Sketchfab): o .glb ganha a versão padrão (as texturas aparecem em qualquer programa)")
+def _():
+    import struct as st
+    pasta = Path(tempfile.mkdtemp(prefix="lnux-especular-"))
+    try:
+        E = "KHR_materials_pbrSpecularGlossiness"
+        gltf, binario, png = gltf_de_teste(com_textura=True)
+        gltf["materials"] = [{"name": "folhas", "alphaMode": "MASK", "extensions": {E: {"diffuseFactor": [1, 1, 1, 1], "diffuseTexture": {"index": 0}, "glossinessFactor": 0.4}}},
+                             {"name": "pedra", "extensions": {E: {"diffuseTexture": {"index": 0}, "glossinessFactor": 1, "specularGlossinessTexture": {"index": 0}}}}]
+        gltf["meshes"][0]["primitives"][0]["material"] = 0
+        gltf["extensionsUsed"] = [E]
+        gltf["extensionsRequired"] = [E]
+        arq = pasta / "mapa.glb"
+        arq.write_bytes(glb_de(gltf, binario))
+        assert lnux_apps.glb_sem_especular(arq) is True
+        dados = arq.read_bytes()
+        n = st.unpack_from("<I", dados, 12)[0]
+        novo = json.loads(dados[20:20 + n])
+        m0, m1 = novo["materials"]
+        assert st.unpack_from("<I", dados, 8)[0] == len(dados) and "extensionsRequired" not in novo and novo["extensionsUsed"] == [E]
+        assert m0["pbrMetallicRoughness"] == {"metallicFactor": 0, "roughnessFactor": 0.6, "baseColorFactor": [1, 1, 1, 1], "baseColorTexture": {"index": 0}} and E in m0["extensions"]
+        assert m1["pbrMetallicRoughness"]["roughnessFactor"] == 0.8, m1  # com a textura de brilho (que não cabe na versão padrão): rugosidade média
+        assert dados.endswith(glb_de(gltf, binario)[-len(binario):])  # o BIN (malha e texturas) fica igual
+        assert lnux_apps.glb_sem_especular(arq) is False  # a segunda vez não muda nada
+    finally:
+        shutil.rmtree(pasta, ignore_errors=True)
 
 
 def gltf_de_teste(com_textura=False):

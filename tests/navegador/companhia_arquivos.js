@@ -56,6 +56,32 @@ function mapaAnimado() {
   json.animations = [{ name: "Girar", channels: [{ sampler: 0, target: { node: 1, path: "rotation" } }], samplers: [{ input: at, output: at + 1, interpolation: "LINEAR" }] }];
   return glb(json, tudo);
 }
+/**
+ * Cenário com o material "specular/glossiness" (KHR_materials_pbrSpecularGlossiness), como nas exportações antigas do
+ * Sketchfab: o piso com a textura de cor verde (40, 160, 60) e a de brilho com alfa 51 (brilho 0,2 → rugosidade 0,8).
+ */
+function mapaEspecular() {
+  const E = "KHR_materials_pbrSpecularGlossiness", m = caixas([[-12, 0.5, -12, 12, 1, 12]]);
+  const { json, bin } = gltfDeMalha(m, { scene: 0, scenes: [{ nodes: [0] }], nodes: [{ name: "Floresta", mesh: 0 }] });
+  const uv = new Float32Array((m.posicoes.length / 3) * 2);
+  for (let i = 0; i < m.posicoes.length / 3; i++) { uv[i * 2] = (m.posicoes[i * 3] + 12) / 24; uv[i * 2 + 1] = (m.posicoes[i * 3 + 2] + 12) / 24; }
+  const alinhar = (b) => Buffer.concat([b, Buffer.alloc((4 - (b.length % 4)) % 4)]);
+  const partes = [alinhar(bin), Buffer.from(uv.buffer), alinhar(png(8, 8, () => [40, 160, 60])), alinhar(png(8, 8, () => [5, 5, 5, 51], true))];
+  let off = 0;
+  const vistas = partes.map((p) => { const v = { buffer: 0, byteOffset: off, byteLength: p.length }; off += p.length; return v; });
+  const tudo = Buffer.concat(partes);
+  json.buffers[0].byteLength = tudo.length;
+  const n = json.bufferViews.length;
+  json.bufferViews.push(vistas[1], vistas[2], vistas[3]);
+  json.accessors.push({ bufferView: n, componentType: 5126, count: uv.length / 2, type: "VEC2" });
+  json.meshes[0].primitives[0].attributes.TEXCOORD_0 = json.accessors.length - 1;
+  json.images = [{ bufferView: n + 1, mimeType: "image/png" }, { bufferView: n + 2, mimeType: "image/png" }];
+  json.textures = [{ source: 0 }, { source: 1 }];
+  json.materials = [{ name: "folhas", extensions: { [E]: { diffuseFactor: [1, 1, 1, 1], diffuseTexture: { index: 0 }, specularFactor: [0.02, 0.02, 0.02], glossinessFactor: 1, specularGlossinessTexture: { index: 1 } } } }];
+  json.extensionsUsed = [E];
+  json.extensionsRequired = [E];
+  return glb(json, tudo);
+}
 /** Cenário fechado: uma casa de 12 × 12 m com piso (topo em y = 0,2), quatro paredes sem porta e telhado (topo em y = 3,4). */
 function casaDeTeste() {
   const { json, bin } = gltfDeMalha(caixas([[-6, 0, -6, 6, 0.2, 6], [-6, 0.2, -6, 6, 3.2, -5.8], [-6, 0.2, 5.8, 6, 3.2, 6], [-6, 0.2, -5.8, -5.8, 3.2, 5.8], [5.8, 0.2, -5.8, 6, 3.2, 5.8],
@@ -167,13 +193,13 @@ function unityPackage(caminho, dados) {
 // ── Avatar do Unity (para o conversor de avatares) ──────────────────────
 
 /** PNG simples: pixel(x, y) → [r, g, b]. */
-function png(w, h, pixel) {
+function png(w, h, pixel, alfa = false) {
   const crc = (buf) => { let c = ~0; for (const x of buf) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return ~c >>> 0; };
   const bloco = (tipo, dados) => { const t = Buffer.from(tipo), len = Buffer.alloc(4), c = Buffer.alloc(4); len.writeUInt32BE(dados.length); c.writeUInt32BE(crc(Buffer.concat([t, dados]))); return Buffer.concat([len, t, dados, c]); };
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
-  const linhas = Buffer.alloc((w * 3 + 1) * h);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) linhas.set(pixel(x, y), y * (w * 3 + 1) + 1 + x * 3);
+  const ihdr = Buffer.alloc(13), n = alfa ? 4 : 3; // alfa: pixel(x, y) → [r, g, b, a]
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = alfa ? 6 : 2;
+  const linhas = Buffer.alloc((w * n + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) linhas.set(pixel(x, y), y * (w * n + 1) + 1 + x * n);
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), bloco("IHDR", ihdr), bloco("IDAT", zlib.deflateSync(linhas)), bloco("IEND", Buffer.alloc(0))]);
 }
 /** TGA de 32 bits (BGRA), começando por baixo como é o comum; rle = compactado. pixel(x, y) → [r, g, b, a], com y = 0 em cima. */
@@ -382,4 +408,4 @@ function zip(arquivos) {
   return Buffer.concat([...partes, cd, fim]);
 }
 
-module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, mapaAnimado, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
+module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, mapaAnimado, mapaEspecular, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };

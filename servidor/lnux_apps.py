@@ -362,6 +362,56 @@ def gltf_zip_para_glb(caminho_zip: Path, maximo: int = SKETCHFAB_MAXIMO) -> byte
         return saida
 
 
+def glb_sem_especular(caminho: Path) -> bool:
+    """Materiais KHR_materials_pbrSpecularGlossiness (exportações antigas do Sketchfab): escreve no .glb a alternativa
+    padrão (pbrMetallicRoughness, com a textura difusa como cor), que todo programa abre; a extensão fica para quem a
+    entende. Só reescreve o JSON (o resto do arquivo é copiado igual). Devolve se mudou."""
+    especular = "KHR_materials_pbrSpecularGlossiness"
+    with open(caminho, "rb") as f:
+        cabeca = f.read(20)
+        if len(cabeca) < 20 or cabeca[:4] != b"glTF" or cabeca[16:20] != b"JSON":
+            return False
+        n = struct.unpack_from("<I", cabeca, 12)[0]
+        if n > 64 * 1024 * 1024:
+            return False
+        try:
+            gltf = json.loads(f.read(n).decode("utf-8"))
+        except ValueError:
+            return False
+        if especular not in (gltf.get("extensionsUsed") or []):
+            return False
+        mudou = especular in (gltf.get("extensionsRequired") or [])
+        for m in gltf.get("materials") or []:
+            ext = (m.get("extensions") or {}).get(especular)
+            if not isinstance(ext, dict) or "pbrMetallicRoughness" in m:
+                continue
+            mudou = True
+            # o brilho de cada pixel (a textura specular/glossiness) não cabe na alternativa: com ela, uma rugosidade média
+            rugosidade = 1 - float(ext.get("glossinessFactor", 1))
+            pbr = {"metallicFactor": 0, "roughnessFactor": round(max(rugosidade, 0.8) if ext.get("specularGlossinessTexture") else rugosidade, 4)}
+            if isinstance(ext.get("diffuseFactor"), list):
+                pbr["baseColorFactor"] = ext["diffuseFactor"]
+            if isinstance(ext.get("diffuseTexture"), dict):
+                pbr["baseColorTexture"] = ext["diffuseTexture"]
+            m["pbrMetallicRoughness"] = pbr
+        if not mudou:
+            return False
+        exigidas = [e for e in (gltf.get("extensionsRequired") or []) if e != especular]
+        if exigidas:
+            gltf["extensionsRequired"] = exigidas
+        else:
+            gltf.pop("extensionsRequired", None)
+        js = json.dumps(gltf, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        js += b" " * (-len(js) % 4)
+        resto = os.path.getsize(caminho) - 20 - n
+        temporario = caminho.with_name(caminho.name + ".padrao")
+        with open(temporario, "wb") as g:
+            g.write(b"glTF" + struct.pack("<II", 2, 20 + len(js) + resto) + struct.pack("<I", len(js)) + b"JSON" + js)
+            shutil.copyfileobj(f, g, 1024 * 1024)
+    os.replace(temporario, caminho)
+    return True
+
+
 def resumo_sketchfab(m: dict) -> dict:
     """Um modelo do Sketchfab, do jeito que a tela precisa (a licença diz se pode ir para a loja)."""
     lic = m.get("license") or {}
@@ -571,7 +621,7 @@ class Contas:
     def perfil_publico(self, c: dict) -> dict:
         p = c.get("perfil", {})
         return {"id": c["id"], "nome": c["nome"], "bio": p.get("bio", ""), "pronomes": p.get("pronomes", ""), "local": p.get("local", ""),
-                "links": p.get("links", []), "cor": p.get("cor", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0),
+                "links": p.get("links", []), "cor": p.get("cor", ""), "tema": p.get("tema", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0),
                 "salvos": list(c.get("salvos", [])), "amigos": self.amigos_de(c)[:200]}
 
     def perfil_proprio(self, c: dict) -> dict:
@@ -2374,6 +2424,7 @@ class Manipulador(BaseHTTPRequestHandler):
                     os.replace(bruto, pasta / nome_arq)
                 if not formato_confere(pasta / nome_arq, ".glb"):
                     raise ErroPonte(502, "O que veio do Sketchfab não é um glTF de verdade.")
+                glb_sem_especular(pasta / nome_arq)  # specular/glossiness antigo: as texturas aparecem em qualquer programa
                 if r["miniatura"]:
                     try:
                         baixar_de_fora(r["miniatura"], pasta / ".miniatura", 8 * 1024 * 1024, 30)
@@ -2648,6 +2699,9 @@ class Manipulador(BaseHTTPRequestHandler):
                 if "cor" in b:
                     cor = str(b.get("cor") or "")
                     perfil["cor"] = cor if re.fullmatch(r"#[0-9a-fA-F]{6}", cor) else ""
+                if "tema" in b:  # o tema do site que a pessoa usa: quem abre o perfil dela o vê nesse tema
+                    tema = str(b.get("tema") or "")
+                    perfil["tema"] = tema if re.fullmatch(r"[a-z0-9-]{1,24}", tema) else ""
                 if "links" in b:
                     links = [str(x).strip()[:200] for x in (b.get("links") or []) if str(x).strip()][:3]
                     if any(not re.match(r"https?://[^\s]+$", x) for x in links):

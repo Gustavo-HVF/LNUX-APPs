@@ -11,7 +11,7 @@
 const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
-const { bonecoVRM0, caixas, gltfDeMalha, mapaAnimado } = require("./companhia_arquivos.js");
+const { bonecoVRM0, caixas, gltfDeMalha, mapaAnimado, mapaEspecular } = require("./companhia_arquivos.js");
 
 const PASTA = process.env.LNUX_TESTE_SAIDA || __dirname;
 const TOKEN = process.env.LNUX_TESTE_TOKEN || fs.readFileSync(path.join(PASTA, "token.txt"), "utf8").trim();
@@ -161,6 +161,27 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     salvo = fs.readFileSync(await baixado.path());
     ok(baixado.suggestedFilename() === "piramide.glb" && salvo.readUInt32LE(0) === 0x46546c67 && (await ev(async () => (await C.mapas.lista()).length)) === 1,
       `"Só converter" salva o .glb (${salvo.length} bytes) sem trocar o cenário`);
+    // ── material specular/glossiness (exportações antigas do Sketchfab): as texturas aparecem no jogo ──
+    const esp = await ev(async (b64) => {
+      const T = window.THREE, V = window.CompanhiaVRM, dados = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      const material = async (carregador) => { const u = URL.createObjectURL(new Blob([dados])); try { let mt; (await carregador.loadAsync(u)).scene.traverse((o) => { if (o.isMesh) mt = o.material; }); return mt; } finally { URL.revokeObjectURL(u); } };
+      const cru = await material(new V.GLTFLoader()); // o three.js sozinho: sem a textura e todo metálico
+      const carregador = C.carregadorGLTF(), mt = await material(carregador);
+      carregador.soltar();
+      let rug = null;
+      if (mt.roughnessMap && mt.roughnessMap.image) { const c = mt.roughnessMap.image.getContext("2d"); rug = c.getImageData(0, 0, 1, 1).data[1]; }
+      // no jogo: abrir como cenário
+      const m = window.Companhia.palco.mundo;
+      await m.abrirMapa(new Map([["floresta.glb", new Blob([dados])]]), { nome: "Floresta" });
+      let noJogo = null;
+      m.mapa.traverse((o) => { if (o.isMesh && o.material.map) noJogo = [o.material.map.image.width, o.material.metalness, !!o.material.roughnessMap]; });
+      return { cru: [!!cru.map, cru.metalness], cor: mt.map ? mt.map.image.width : 0, srgb: mt.map && mt.map.colorSpace === T.SRGBColorSpace, metal: mt.metalness, rug, rugosidade: mt.roughness, noJogo };
+    }, mapaEspecular().toString("base64"));
+    ok(!esp.cru[0] && esp.cru[1] === 1 && esp.cor === 8 && esp.srgb && esp.metal === 0 && esp.rug === 204 && esp.rugosidade === 1 && JSON.stringify(esp.noJogo) === "[8,0,true]",
+      `specular/glossiness: o three.js sozinho perde a textura (metal ${esp.cru[1]}); com o carregador do WEBC a cor aparece (${esp.cor} px, sRGB), sem metal, e o brilho vira rugosidade (${esp.rug} = 0,8); no jogo também: ${JSON.stringify(esp.noJogo)}`);
+    // e o .glb salvo ganha a versão padrão (abre em qualquer programa: a textura de cor vem até sem o plugin)
+    r = await converter({ "floresta.glb": mapaEspecular() }, "floresta.glb");
+    ok(r.glTF && r.texturas === 1 && r.avisos.some((a) => /specular\/glossiness/.test(a)), `o .glb specular/glossiness ganha a versão padrão ao converter (${r.texturas} textura sem o plugin; aviso: ${r.avisos.join(" | ").slice(0, 80)})`);
     await pagina.screenshot({ path: path.join(PASTA, "companhia-mapas-1.png") });
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {

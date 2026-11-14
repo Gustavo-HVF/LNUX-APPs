@@ -55,14 +55,23 @@
       const antes = JSON.stringify(this.eu || null);
       if (!this.sessao()) this.eu = null;
       else {
-        try { this.eu = await pedir("GET", "eu"); }
+        try { this.eu = await pedir("GET", "eu"); this.sincronizarTema(); }
         catch (e) { if (e.status === 401) this.guardarSessao(""); this.eu = null; }
       }
       // só avisa se mudou: quem ouve (a página do perfil) carrega de novo, e avisar sempre faria um laço sem fim
       if (JSON.stringify(this.eu || null) !== antes) this.avisar();
       return this.eu;
     },
-    entrou(r) { this.guardarSessao(r.sessao); this.eu = r.conta; this.avisar(); return r.conta; },
+    entrou(r) { this.guardarSessao(r.sessao); this.eu = r.conta; this.sincronizarTema(); this.avisar(); return r.conta; },
+    /** O tema do perfil: a conta sem tema recebe o deste navegador; o navegador que nunca escolheu um usa o da conta. */
+    sincronizarTema() {
+      const eu = this.eu;
+      if (!eu || !C.temas) return;
+      let escolhido = null;
+      try { escolhido = localStorage.getItem("webc.tema"); } catch (e) { /* sem armazenamento */ }
+      if (!eu.tema) { eu.tema = C.temas.atual; pedir("POST", "perfil", { json: { tema: eu.tema } }).catch(() => {}); }
+      else if (!escolhido && eu.tema !== C.temas.atual && C.temas.TEMAS.some((t) => t.id === eu.tema)) C.temas.definir(eu.tema);
+    },
     cadastrar: (d) => pedir("POST", "cadastro", { json: { ...d, idioma: C.idioma || "pt" } }),
     async verificar(email, codigo) { return C.contas.entrou(await pedir("POST", "verificar", { json: { email, codigo } })); },
     reenviar: (email) => pedir("POST", "reenviar", { json: { email } }),
@@ -103,17 +112,126 @@
   const entrada = (attrs) => el("input", { class: "lnux-entrada", ...attrs });
   const mensagem = (texto, erro = true) => el("p", { class: "conta-msg" + (erro ? " erro" : ""), role: erro ? "alert" : "status" }, texto);
 
-  /** Uma imagem escolhida pela pessoa, recortada no meio e reduzida (foto: quadrada; capa: 3×1), em WebP. */
-  async function recortar(blob, largura, altura) {
-    const bmp = await createImageBitmap(blob);
-    const escala = Math.max(largura / bmp.width, altura / bmp.height), w = largura / escala, h = altura / escala;
-    const tela = document.createElement("canvas");
-    tela.width = largura; tela.height = altura;
-    tela.getContext("2d").drawImage(bmp, (bmp.width - w) / 2, (bmp.height - h) / 2, w, h, 0, 0, largura, altura);
+  /** Os tamanhos das imagens do perfil: a foto (quadrada, mostrada redonda) e o banner (a capa), 750 × 325. */
+  C.TAMANHOS_DO_PERFIL = { foto: [512, 512], capa: [750, 325] };
+
+  /**
+   * Arrumar uma imagem antes de usar: a pessoa arrasta para posicionar e amplia ou reduz (o controle, os botões − e +,
+   * a rodinha do mouse ou dois dedos). Sai do tamanho pedido (largura × altura), em WebP (ou JPEG). Resolve com o
+   * Blob, ou null se cancelar. redonda: mostra o círculo da foto do perfil por cima.
+   */
+  C.ajustarImagem = async function (blob, { largura, altura, redonda = false, titulo = "Ajustar a imagem" } = {}) {
+    let bmp;
+    try { bmp = await createImageBitmap(blob); } catch (e) { throw new Error(C.t("Não consegui abrir essa imagem (use PNG, JPEG, WebP ou GIF).")); }
+    const iw = bmp.width, ih = bmp.height;
+    const cobrir = Math.max(largura / iw, altura / ih), caber = Math.min(largura / iw, altura / ih);
+    const zMin = Math.min(1, caber / cobrir), zMax = 6;
+    let z = 1, cx = largura / 2, cy = altura / 2; // o centro da imagem, nas medidas da saída
+    // a cor do fundo (quando a imagem fica menor que o quadro): a média da própria imagem
+    const media = (() => { const c = document.createElement("canvas"); c.width = c.height = 1; const x = c.getContext("2d"); x.drawImage(bmp, 0, 0, 1, 1); const d = x.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]},${d[1]},${d[2]})`; })();
+    const tela = el("canvas", { class: "recorte-tela" });
+    const quadro = el("div", { class: "recorte-quadro" + (redonda ? " redonda" : ""), tabindex: 0, role: "img", "aria-label": C.t("Arraste para posicionar a imagem"), style: { aspectRatio: `${largura} / ${altura}` } },
+      tela, redonda ? el("div", { class: "recorte-circulo", "aria-hidden": "true" }) : null);
+    const zoom = el("input", { type: "range", class: "recorte-zoom", min: 0, max: 1000, step: 1, "aria-label": C.t("Zoom") });
+    const escala = () => cobrir * z;
+    /** Mantém a imagem cobrindo o quadro (ou, menor que ele, dentro dele). */
+    function prender() {
+      const s = escala(), mx = (iw * s) / 2, my = (ih * s) / 2;
+      cx = Math.min(Math.max(cx, Math.min(mx, largura - mx)), Math.max(mx, largura - mx));
+      cy = Math.min(Math.max(cy, Math.min(my, altura - my)), Math.max(my, altura - my));
+    }
+    function pintar(ctx, k) {
+      const s = escala() * k;
+      ctx.fillStyle = media;
+      ctx.fillRect(0, 0, largura * k, altura * k);
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, cx * k - (iw * s) / 2, cy * k - (ih * s) / 2, iw * s, ih * s);
+    }
+    // o zoom no controle é logarítmico (o meio do controle fica perto do tamanho que cobre o quadro)
+    const zParaControle = (v) => Math.round((Math.log(v / zMin) / Math.log(zMax / zMin)) * 1000);
+    const controleParaZ = (n) => zMin * Math.pow(zMax / zMin, n / 1000);
+    function desenhar() {
+      const r = quadro.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+      const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+      if (tela.width !== w || tela.height !== h) { tela.width = w; tela.height = h; }
+      pintar(tela.getContext("2d"), w / largura);
+      zoom.value = zParaControle(z);
+    }
+    /** Amplia (ou reduz) em volta de um ponto do quadro (px, py, nas medidas da saída). */
+    function ampliar(novo, px = largura / 2, py = altura / 2) {
+      novo = Math.min(zMax, Math.max(zMin, novo));
+      cx = px - ((px - cx) * novo) / z;
+      cy = py - ((py - cy) * novo) / z;
+      z = novo;
+      prender();
+      desenhar();
+    }
+    const paraSaida = (e) => { const r = quadro.getBoundingClientRect(); return [((e.clientX - r.left) / r.width) * largura, ((e.clientY - r.top) / r.height) * altura]; };
+    // arrastar (um dedo ou o mouse) e a pinça (dois dedos)
+    const toques = new Map();
+    let pinca = null;
+    quadro.addEventListener("pointerdown", (e) => {
+      quadro.setPointerCapture(e.pointerId);
+      toques.set(e.pointerId, [e.clientX, e.clientY]);
+      quadro.classList.add("arrastando");
+      if (toques.size === 2) { const [a, b] = [...toques.values()]; pinca = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), z }; }
+    });
+    quadro.addEventListener("pointermove", (e) => {
+      if (!toques.has(e.pointerId)) return;
+      const antes = toques.get(e.pointerId), r = quadro.getBoundingClientRect();
+      toques.set(e.pointerId, [e.clientX, e.clientY]);
+      if (toques.size >= 2 && pinca) {
+        const [a, b] = [...toques.values()];
+        const meio = paraSaida({ clientX: (a[0] + b[0]) / 2, clientY: (a[1] + b[1]) / 2 });
+        ampliar(pinca.z * (Math.hypot(a[0] - b[0], a[1] - b[1]) / (pinca.d || 1)), meio[0], meio[1]);
+        return;
+      }
+      cx += ((e.clientX - antes[0]) / r.width) * largura;
+      cy += ((e.clientY - antes[1]) / r.height) * altura;
+      prender();
+      desenhar();
+    });
+    const soltar = (e) => { toques.delete(e.pointerId); if (toques.size < 2) pinca = null; if (!toques.size) quadro.classList.remove("arrastando"); };
+    quadro.addEventListener("pointerup", soltar);
+    quadro.addEventListener("pointercancel", soltar);
+    quadro.addEventListener("wheel", (e) => { e.preventDefault(); const [px, py] = paraSaida(e); ampliar(z * Math.exp(-e.deltaY * 0.0015), px, py); }, { passive: false });
+    quadro.addEventListener("keydown", (e) => {
+      const passo = e.shiftKey ? 40 : 10, mover = { ArrowLeft: [passo, 0], ArrowRight: [-passo, 0], ArrowUp: [0, passo], ArrowDown: [0, -passo] }[e.key];
+      if (mover) { cx += mover[0]; cy += mover[1]; prender(); desenhar(); e.preventDefault(); }
+      else if (e.key === "+" || e.key === "=") { ampliar(z * 1.15); e.preventDefault(); }
+      else if (e.key === "-") { ampliar(z / 1.15); e.preventDefault(); }
+    });
+    zoom.addEventListener("input", () => ampliar(controleParaZ(+zoom.value)));
+    const botao = (rotulo, aria, acao) => el("button", { type: "button", class: "lnux-botao plano recorte-botao", "aria-label": C.t(aria), onclick: acao }, rotulo);
+    const corpo = el("div", { class: "recorte" }, quadro,
+      el("div", { class: "recorte-controles" }, botao("−", "Reduzir", () => ampliar(z / 1.2)), zoom, botao("+", "Ampliar", () => ampliar(z * 1.2)),
+        el("button", { type: "button", class: "lnux-botao plano pequeno", id: "recorte-inteira", onclick: () => { z = zMin; cx = largura / 2; cy = altura / 2; desenhar(); } }, C.t("Imagem inteira")),
+        el("button", { type: "button", class: "lnux-botao plano pequeno", id: "recorte-centralizar", onclick: () => { z = 1; cx = largura / 2; cy = altura / 2; desenhar(); } }, C.t("Preencher"))),
+      el("p", { class: "fraco pequeno recorte-dica" }, C.t("Arraste para posicionar. Use o controle, a rodinha do mouse ou dois dedos para ampliar e reduzir. Fica com {l} × {a} pixels.", { l: largura, a: altura })));
+    const observar = new ResizeObserver(() => desenhar());
+    observar.observe(quadro);
+    const r = await LNUX.dialogo({ titulo: C.t(titulo), largo: true, corpo, botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Usar", primario: true, valor: "usar" }] });
+    observar.disconnect();
+    if (r !== "usar") { bmp.close(); return null; }
+    const saida = document.createElement("canvas");
+    saida.width = largura; saida.height = altura;
+    pintar(saida.getContext("2d"), 1);
     bmp.close();
-    const webp = await new Promise((ok) => tela.toBlob(ok, "image/webp", 0.88));
-    return webp && webp.type === "image/webp" ? webp : new Promise((ok) => tela.toBlob(ok, "image/jpeg", 0.88));
-  }
+    const webp = await new Promise((ok) => saida.toBlob(ok, "image/webp", 0.9));
+    return webp && webp.type === "image/webp" ? webp : new Promise((ok) => saida.toBlob(ok, "image/jpeg", 0.9));
+  };
+
+  /** Trocar a foto ou o banner do perfil: escolher a imagem, arrumar (zoom e posição) e mandar. Resolve com a conta, ou null. */
+  C.trocarImagemDoPerfil = async function (tipo) {
+    const [a] = await LNUX.arquivos.abrir({ titulo: tipo === "foto" ? C.t("Foto do perfil") : C.t("Banner do perfil"), aceitar: ".png,.jpg,.jpeg,.webp,.gif,.bmp,image/*" });
+    if (!a) return null;
+    try {
+      const [largura, altura] = C.TAMANHOS_DO_PERFIL[tipo];
+      const blob = await C.ajustarImagem(await a.blob(), { largura, altura, redonda: tipo === "foto", titulo: tipo === "foto" ? "Ajustar a foto" : "Ajustar o banner" });
+      if (!blob) return null;
+      return await C.contas.mandarImagem(tipo, blob);
+    } catch (e) { LNUX.erro(e); return null; }
+  };
 
   // ── Entrar, criar conta, código, esqueci a senha ─────────────────────
 
@@ -238,6 +356,7 @@
       p.bio ? el("p", { class: "perfil-bio" }, p.bio) : el("p", { class: "fraco" }, "Sem bio."),
       el("div", { class: "fraco pequeno" }, [p.local ? "📍 " + p.local : "", "conta desde " + new Date(p.desde * 1000).toLocaleDateString("pt-BR")].filter(Boolean).join(" · ")),
       p.links && p.links.length ? el("div", { class: "perfil-links" }, p.links.map((l) => el("a", { href: l, target: "_blank", rel: "noopener noreferrer nofollow" }, l.replace(/^https?:\/\//, "")))) : null);
+    if (p.tema && C.temas) C.temas.local(corpo, p.tema); // no tema que a pessoa usa
     return LNUX.dialogo({ titulo: "Perfil", corpo, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
   };
 
@@ -256,20 +375,15 @@
       const capa = C.contas.imagem(eu, "capa");
       topo.replaceChildren(
         el("div", { class: "perfil-capa", style: { background: capa ? `center / cover no-repeat url("${capa}")` : cor.value } },
-          el("button", { type: "button", class: "lnux-botao", id: "perfil-capa", onclick: () => trocar("capa") }, "Trocar a capa"),
-          eu.capa ? el("button", { type: "button", class: "lnux-botao plano", onclick: () => tirar("capa") }, "Tirar") : null),
+          el("button", { type: "button", class: "lnux-botao", id: "perfil-capa", onclick: () => trocar("capa") }, "Trocar o banner"),
+          eu.capa ? el("button", { type: "button", class: "lnux-botao", id: "perfil-tirar-capa", onclick: () => tirar("capa") }, "Tirar") : null),
         el("div", { class: "perfil-cabeca" }, C.fotoDaConta(eu, 84),
           el("div", { class: "linha" }, el("button", { type: "button", class: "lnux-botao", id: "perfil-foto", onclick: () => trocar("foto") }, "Trocar a foto"),
             eu.foto ? el("button", { type: "button", class: "lnux-botao plano", onclick: () => tirar("foto") }, "Tirar a foto") : null)));
     };
     async function trocar(tipo) {
-      const [a] = await LNUX.arquivos.abrir({ titulo: tipo === "foto" ? "Foto do perfil" : "Capa do perfil", aceitar: ".png,.jpg,.jpeg,.webp,.gif,.bmp" });
-      if (!a) return;
-      try {
-        const blob = tipo === "foto" ? await recortar(await a.blob(), 512, 512) : await recortar(await a.blob(), 1200, 400);
-        eu = await C.contas.mandarImagem(tipo, blob);
-        desenharTopo();
-      } catch (e) { LNUX.erro(e); }
+      const novo = await C.trocarImagemDoPerfil(tipo);
+      if (novo) { eu = novo; desenharTopo(); }
     }
     async function tirar(tipo) { try { eu = await C.contas.tirarImagem(tipo); desenharTopo(); } catch (e) { LNUX.erro(e); } }
     cor.addEventListener("input", desenharTopo);

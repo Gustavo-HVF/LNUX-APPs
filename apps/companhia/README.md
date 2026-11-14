@@ -187,9 +187,15 @@ de salas (ou no menu *Conta*):
   minuto. A idade mínima é 13 anos (o dono do servidor pode mudar).
 - **Entrar** com o e-mail e a senha; **Esqueci a senha** manda um código para criar uma senha nova. Com a conta, o
   nome no jogo é o dela.
-- **Meu perfil**: foto (recortada em quadrado) e capa, nome, bio, pronomes, cidade, até 3 links e uma cor; também
-  trocar a senha, sair e apagar a conta. Em *Sala › Pessoas na sala*, quem tem conta aparece com a foto, e um clique
-  abre o perfil (sem o e-mail e a idade, que só a própria pessoa e o dono veem).
+- **Meu perfil**: foto e banner (a capa), nome, bio, pronomes, cidade, até 3 links e uma cor; também trocar a senha,
+  sair e apagar a conta. Em *Sala › Pessoas na sala*, quem tem conta aparece com a foto, e um clique abre o perfil
+  (sem o e-mail e a idade, que só a própria pessoa e o dono veem).
+- **Foto e banner, do seu jeito**: ao escolher a imagem, ela abre para arrumar: arraste para posicionar e amplie ou
+  reduza (o controle, os botões − e +, a rodinha do mouse ou dois dedos; *Imagem inteira* mostra tudo, *Preencher*
+  cobre o quadro). A foto sai em 512 × 512 (com o círculo por cima, como vai aparecer) e o **banner em 750 × 325**. No
+  seu perfil, os botões de trocar ficam no próprio banner e na foto (e também em *Editar perfil*).
+- **O tema de cada um**: com conta, o tema que você escolhe (◐) vai para o seu perfil, e quem abre o seu perfil o vê
+  nesse tema; o resto do site continua no tema de quem está vendo.
 - **Onde fica**: tudo no aparelho de quem tem o servidor, em `~/.lnux-apps/contas/` (`contas.json`, permissão 600, e
   as fotos em `midia/`). A senha, os códigos e as sessões ficam só como hash (a senha com PBKDF2-SHA256). Este
   navegador guarda só a sessão.
@@ -412,7 +418,10 @@ lado da personagem, para ver o resultado enquanto você mexe.
 *Movimento › Cenário (mapa)* abre um modelo 3D como lugar: **`.blend`** (Blender), **`.glb` / `.gltf`** (com Draco
 e Meshopt), **`.fbx`**, **`.obj`**, **`.dae`**, **`.stl`**, **`.ply`**, **`.3ds`**, **`.3mf`**, **`.usdz`**, um **ZIP** com
 o modelo e as texturas, ou um **`.unitypackage`** (o WEBC abre o pacote e lista os modelos de dentro). Tudo
-é **convertido para `.glb`** ao abrir (veja "Converter mapas", abaixo). No retrato o cenário aparece atrás da
+é **convertido para `.glb`** ao abrir (veja "Converter mapas", abaixo). Mapas com o material **specular/glossiness**
+(`KHR_materials_pbrSpecularGlossiness`, das exportações antigas do Sketchfab e do 3ds Max), que o three.js deixou de
+abrir (vinham cinzas, sem textura), abrem com as texturas; ao salvar ou publicar, o `.glb` ganha também a versão padrão
+do material, para abrir em qualquer programa. No retrato o cenário aparece atrás da
 personagem; em **Andar pelo cenário** ela anda por ele:
 
 | | |
@@ -715,6 +724,7 @@ js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (de
                    ajuste do esqueleto), expressões, toques, peças e texturas
 js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
 js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram movimentos que servem em qualquer personagem
+js/gltf.js         o carregador de glTF dos mapas (Draco, Meshopt e o material specular/glossiness das exportações antigas)
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
 js/luzes.js        as luzes do mapa (do arquivo, as que brilham, pelo nome, as suas), as mais perto acesas e a luz calculada por raios
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb

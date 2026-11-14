@@ -591,16 +591,12 @@
       const tipo = principal.split(".").pop().toLowerCase();
       try {
         if (tipo === "glb" || tipo === "gltf") {
-          const carregador = new V.GLTFLoader(gerente);
-          const draco = new V.DRACOLoader(gerente);
-          draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
-          carregador.setDRACOLoader(draco);
-          carregador.setMeshoptDecoder(V.MeshoptDecoder);
+          const carregador = C.carregadorGLTF(gerente); // com o specular/glossiness das exportações antigas do Sketchfab
           const u = URL.createObjectURL(arquivos.get(principal));
           urls.push(u);
           try { const gltf = await carregador.loadAsync(u); objeto = gltf.scene; objeto.animations = gltf.animations || []; }
           catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o cenário: " + e.message); }
-          finally { draco.dispose(); }
+          finally { carregador.soltar(); }
         } else if (tipo === "fbx") {
           objeto = new V.FBXLoader(gerente).parse(await arquivos.get(principal).arrayBuffer(), "");
         } else {
