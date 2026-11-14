@@ -116,7 +116,9 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     r = await converter({ "pasta/cena.gltf": JSON.stringify(json), "pasta/dados.bin": bin }, "pasta/cena.gltf");
     ok(r.glTF && r.triangulos === 12 && JSON.stringify(r.caixa) === "[-2,0,-2,2,1,2]", ".gltf + .bin soltos → um .glb só, com tudo dentro");
     // mapa com movimento: a animação passa pela conversão (e o aviso diz que ela toca no jogo)
-    r = await converter({ "moinho.glb": mapaAnimado() }, "moinho.glb");
+    const glbAnimado = mapaAnimado(), nJson = glbAnimado.readUInt32LE(12), jsonAnimado = JSON.parse(glbAnimado.slice(20, 20 + nJson).toString("utf8").trim());
+    jsonAnimado.buffers[0].uri = "moinho.bin";
+    r = await converter({ "moinho/moinho.gltf": JSON.stringify(jsonAnimado), "moinho/moinho.bin": glbAnimado.slice(20 + nJson + 8) }, "moinho/moinho.gltf");
     ok(r.glTF && r.animacoes.length === 1 && r.animacoes[0][0] === "Girar" && r.animacoes[0][1] === "Pa.quaternion" && r.animacoes[0][2] === 4 && r.avisos.some((a) => /1 animação/.test(a)),
       `a animação do mapa passa pela conversão para .glb (${JSON.stringify(r.animacoes)}; aviso: ${r.avisos.join(" | ")})`);
     const erro = await ev(async () => { try { await C.conversor.paraGLB(new Map([["vazio.obj", new Blob(["# nada\n"])]]), "vazio.obj"); return ""; } catch (e) { return e.message; } });
