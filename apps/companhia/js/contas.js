@@ -314,6 +314,17 @@
   // ── Do dono do servidor: o e-mail dos códigos, a idade mínima, exigir conta e a lista ─────
 
   const PROVEDORES = { gmail: ["smtp.gmail.com", 465, "ssl"], outlook: ["smtp-mail.outlook.com", 587, "starttls"], yahoo: ["smtp.mail.yahoo.com", 465, "ssl"] };
+  // o domínio da conta → o provedor (para preencher o SMTP certo)
+  const DOMINIOS = { "gmail.com": "gmail", "googlemail.com": "gmail", "outlook.com": "outlook", "hotmail.com": "outlook", "live.com": "outlook", "yahoo.com": "yahoo", "yahoo.com.br": "yahoo" };
+  const PORTAS_DE_RECEBER = { 993: "IMAP", 143: "IMAP", 995: "POP", 110: "POP" };
+  /** O provedor de um e-mail ou de um servidor (imap.gmail.com → gmail), ou "". */
+  const provedorDe = (...textos) => {
+    for (const t of textos) {
+      const d = String(t || "").trim().toLowerCase().split("@").pop();
+      for (const [dom, p] of Object.entries(DOMINIOS)) if (d === dom || d.endsWith("." + dom)) return p;
+    }
+    return "";
+  };
   C.janelaContasDono = async function () {
     let a;
     try { a = await C.contas.ajustes(); } catch (e) { LNUX.erro(e); return; }
@@ -328,7 +339,26 @@
     const senha = entrada({ type: "password", "aria-label": "Senha do e-mail", autocomplete: "new-password", placeholder: e.tem_senha ? "(guardada; escreva para trocar)" : "Senha de app" });
     const remetente = entrada({ type: "email", value: e.remetente || "", "aria-label": "Remetente", placeholder: "voce@gmail.com" });
     const nomeRem = entrada({ value: e.nome || "", "aria-label": "Nome do remetente", placeholder: "WEBC" });
-    provedor.addEventListener("change", () => { const p = PROVEDORES[provedor.value]; if (p) { servidor.value = p[0]; porta.value = p[1]; seguranca.value = p[2]; } });
+    const preencher = (nome) => { const p = PROVEDORES[nome]; if (p) { servidor.value = p[0]; porta.value = p[1]; seguranca.value = p[2]; } conferir(); };
+    provedor.addEventListener("change", () => preencher(provedor.value));
+    provedor.value = Object.keys(PROVEDORES).find((k) => PROVEDORES[k][0] === (e.servidor || "").trim().toLowerCase()) || "";
+    // o engano mais comum: o servidor de RECEBER (IMAP/POP, como o app de e-mail do celular mostra) no lugar do de mandar
+    const avisoServidor = el("div", { class: "conta-msg erro contas-aviso-smtp", role: "alert", hidden: true });
+    function conferir() {
+      const host = servidor.value.trim().toLowerCase(), tipo = PORTAS_DE_RECEBER[+porta.value] || (/^imap\./.test(host) ? "IMAP" : /^pop3?\./.test(host) ? "POP" : "");
+      if (!tipo) { avisoServidor.hidden = true; return; }
+      const prov = provedorDe(usuario.value, remetente.value, host), certo = PROVEDORES[prov] || [host.replace(/^(imap|pop3?|mail)\./, "smtp.") || "smtp.seu-provedor.com", 465, "ssl"];
+      avisoServidor.replaceChildren(el("span", {}, C.t("Esse é o servidor de receber e-mails ({tipo}), não o de mandar. Para mandar os códigos, use o SMTP: {smtp}.",
+        { tipo, smtp: `${certo[0]}, ${C.t("porta")} ${certo[1]} (${certo[2] === "ssl" ? "SSL/TLS" : "STARTTLS"})` })), " ",
+        el("button", { type: "button", class: "lnux-botao pequeno", id: "contas-corrigir-smtp", onclick: () => { servidor.value = certo[0]; porta.value = certo[1]; seguranca.value = certo[2]; provedor.value = prov; conferir(); } }, C.t("Corrigir")));
+      avisoServidor.hidden = false;
+    }
+    servidor.addEventListener("input", conferir);
+    porta.addEventListener("input", () => { if (+porta.value === 465) seguranca.value = "ssl"; else if (+porta.value === 587) seguranca.value = "starttls"; conferir(); });
+    seguranca.addEventListener("change", () => { if (["", "465", "587"].includes(porta.value.trim())) porta.value = seguranca.value === "ssl" ? 465 : seguranca.value === "starttls" ? 587 : porta.value; conferir(); });
+    // a conta é do Gmail (ou outro conhecido) e o servidor está vazio: já preenche
+    for (const c of [usuario, remetente]) c.addEventListener("change", () => { const p = provedorDe(c.value); if (p && !servidor.value.trim()) { provedor.value = p; preencher(p); } conferir(); });
+    conferir();
     const idade = entrada({ type: "number", min: 0, max: 99, value: a.idade_minima, "aria-label": "Idade mínima" });
     const exigir = el("input", { type: "checkbox", checked: a.exigir_conta, "aria-label": "Só joga quem tem conta" });
     const lista = el("div", { class: "contas-lista" });
@@ -360,9 +390,12 @@
     const corpo = el("div", { class: "ajustes janela-contas-dono" },
       el("p", { class: "fraco pequeno", style: { margin: 0 } }, C.t("{n} contas confirmadas.", { n: a.contas })),
       el("div", { class: "lnux-rotulo" }, "E-mail que manda os códigos"),
-      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Use uma conta de e-mail sua. No Gmail, crie uma \"senha de app\" (Conta Google › Segurança › Senhas de app) e use aqui, não a senha normal. A senha fica guardada só no servidor e não volta para a tela."),
+      el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Use uma conta de e-mail sua. Quem manda os códigos é este servidor: não precisa configurar nada no app de e-mail do celular. A senha fica guardada só no servidor e não volta para a tela."),
+      el("p", { class: "fraco pequeno contas-gmail", style: { margin: 0 } }, C.t("No Gmail: ligue a verificação em duas etapas e crie uma senha de app (16 letras) em"), " ",
+        el("a", { href: "https://myaccount.google.com/apppasswords", target: "_blank", rel: "noopener noreferrer", translate: "no" }, "myaccount.google.com/apppasswords"),
+        C.t(". Use essa senha aqui, não a senha normal da conta. O servidor é smtp.gmail.com, porta 465 (SSL/TLS).")),
       campo("Provedor", provedor),
-      el("div", { class: "grade" }, campo("Servidor SMTP", servidor), campo("Porta", porta)),
+      el("div", { class: "grade" }, campo("Servidor SMTP (de mandar)", servidor), campo("Porta", porta)), avisoServidor,
       el("div", { class: "grade" }, campo("Segurança", seguranca), campo("Usuário", usuario)),
       el("div", { class: "grade" }, campo("Senha", senha), campo("Remetente (e-mail)", remetente)),
       campo("Nome do remetente", nomeRem), testar,

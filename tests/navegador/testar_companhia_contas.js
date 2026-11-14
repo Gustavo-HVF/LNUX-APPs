@@ -90,6 +90,14 @@ function png(w, h, [r, g, b]) {
     await dono.pagina.waitForSelector(".salas #contas-dono", { timeout: 30000 });
     await dono.pagina.click("#contas-dono");
     await dono.pagina.waitForSelector('.lnux-dialogo input[aria-label="Servidor SMTP"]');
+    // o engano comum: o servidor de receber (IMAP, como o app de e-mail do celular mostra) → avisa e corrige
+    await dono.pagina.fill('.lnux-dialogo input[aria-label="Servidor SMTP"]', "imap.gmail.com");
+    await dono.pagina.fill('.lnux-dialogo input[aria-label="Porta"]', "993");
+    const avisoImap = await dono.pagina.textContent(".contas-aviso-smtp");
+    await dono.pagina.click("#contas-corrigir-smtp");
+    const corrigido = await dono.ev(() => [...document.querySelectorAll('.lnux-dialogo input[aria-label="Servidor SMTP"], .lnux-dialogo input[aria-label="Porta"], .lnux-dialogo select[aria-label="Segurança"]')].map((x) => x.value).join() + "|" + document.querySelector(".contas-aviso-smtp").hidden);
+    ok(/receber e-mails \(IMAP\)/.test(avisoImap) && /smtp\.gmail\.com/.test(avisoImap) && corrigido === "smtp.gmail.com,465,ssl|true",
+      `com o servidor de receber (imap.gmail.com, 993), o formulário avisa e "Corrigir" põe o de mandar (${corrigido}): ${avisoImap.slice(0, 90)}`);
     await dono.pagina.selectOption('.lnux-dialogo select[aria-label="Provedor de e-mail"]', "gmail");
     ok(await dono.ev(() => document.querySelector('.lnux-dialogo input[aria-label="Servidor SMTP"]').value === "smtp.gmail.com"), "o dono escolhe o provedor (Gmail) e o servidor e a porta se preenchem");
     await dono.pagina.fill('.lnux-dialogo input[aria-label="Servidor SMTP"]', "127.0.0.1");

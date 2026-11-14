@@ -694,7 +694,7 @@ def _():
 class SMTPFalso:
     """Um servidor de e-mail de mentira (só o necessário do SMTP): guarda o que chega para o teste ler o código."""
 
-    def __init__(self):
+    def __init__(self, saudacao="220 falso ESMTP", recusar_senha=False):
         import socketserver
         caixa = self.mensagens = []
         autenticacoes = self.autenticacoes = []
@@ -702,7 +702,11 @@ class SMTPFalso:
         class Manipulador(socketserver.StreamRequestHandler):
             def handle(self):
                 escrever = lambda t: self.wfile.write((t + "\r\n").encode())
-                escrever("220 falso ESMTP")
+                escrever(saudacao)
+                if not saudacao.startswith("220"):  # um servidor de receber (IMAP/POP): não fala SMTP
+                    self.rfile.readline()
+                    escrever("* BAD comando desconhecido")
+                    return
                 while True:
                     linha = self.rfile.readline()
                     if not linha:
@@ -714,7 +718,9 @@ class SMTPFalso:
                         escrever("250 AUTH PLAIN LOGIN")
                     elif up.startswith("AUTH"):
                         autenticacoes.append(cmd)
-                        escrever("235 ok")
+                        escrever("535-5.7.8 Username and Password not accepted." if recusar_senha else "235 ok")
+                        if recusar_senha:
+                            escrever("535 5.7.8 https://support.google.com/mail/?p=BadCredentials")
                     elif up == "DATA":
                         escrever("354 manda")
                         linhas = []
@@ -867,6 +873,37 @@ def _():
     finally:
         smtp.parar()
         lnux_apps.TENTATIVAS.clear()
+
+
+@caso("E-mail do servidor: o de receber (IMAP/POP) é recusado com o SMTP certo; os erros do envio vêm explicados (senha de app do Gmail)")
+def _():
+    arquivo = Path(os.environ["LNUX_APPS_DADOS"]) / "email.json"
+    antes = arquivo.read_text("utf-8") if arquivo.exists() else None
+    imap, recusa = SMTPFalso(saudacao="* OK Gimap ready for requests from 127.0.0.1"), SMTPFalso(recusar_senha=True)
+    try:
+        base = {"seguranca": "ssl", "usuario": "dono@gmail.com", "senha": "abcd efgh ijkl mnop", "remetente": "dono@gmail.com"}
+        # copiado do app de e-mail do celular: o IMAP do Gmail (e o POP)
+        status, r, _ = S.json("POST", "/api/contas/ajustes", json_corpo={"email": {**base, "servidor": "imap.gmail.com", "porta": 993}})
+        assert status == 400 and "receber e-mails (IMAP)" in r["erro"] and "smtp.gmail.com, porta 465 (SSL/TLS)" in r["erro"], r
+        status, r, _ = S.json("POST", "/api/contas/ajustes", json_corpo={"email": {**base, "servidor": "smtp.gmail.com", "porta": 995}})
+        assert status == 400 and "(POP)" in r["erro"], r
+        # um servidor que responde como IMAP (o "Gimap ready" que o Gmail manda) também é explicado ao mandar
+        assert S.json("POST", "/api/contas/ajustes", json_corpo={"email": {**base, "servidor": "127.0.0.1", "porta": imap.porta, "seguranca": "nenhuma"}})[0] == 200
+        status, r, _ = S.json("POST", "/api/contas/email-teste", json_corpo={"para": "dono@gmail.com"})
+        assert status == 502 and "receber e-mails (IMAP)" in r["erro"] and "smtp.gmail.com" in r["erro"] and "127.0.0.1" not in r["erro"], r
+        # a senha recusada (no Gmail, a senha normal no lugar da senha de app)
+        assert S.json("POST", "/api/contas/ajustes", json_corpo={"email": {**base, "servidor": "127.0.0.1", "porta": recusa.porta, "seguranca": "nenhuma"}})[0] == 200
+        status, r, _ = S.json("POST", "/api/contas/email-teste", json_corpo={"para": "dono@gmail.com"})
+        assert status == 502 and "senha de app" in r["erro"] and "apppasswords" in r["erro"] and recusa.autenticacoes, r
+        # a 465 é SSL/TLS e a 587 é STARTTLS, mesmo se vierem trocadas
+        assert lnux_apps.seguranca_da_porta(465, "starttls") == "ssl" and lnux_apps.seguranca_da_porta(587, "ssl") == "starttls" and lnux_apps.seguranca_da_porta(2525, "nenhuma") == "nenhuma"
+    finally:
+        imap.parar()
+        recusa.parar()
+        if antes is None:
+            arquivo.unlink(missing_ok=True)
+        else:
+            arquivo.write_text(antes, "utf-8")
 
 
 def gltf_de_teste(com_textura=False):
