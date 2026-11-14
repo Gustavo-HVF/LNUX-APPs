@@ -56,6 +56,7 @@ import sys
 import tarfile
 import threading
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -550,6 +551,32 @@ def contar_tentativa(chave: str, limite: int, janela: float) -> None:
     TENTATIVAS[chave] = lista
 
 
+def nome_normalizado(nome: str) -> str:
+    """O nome para comparar: sem acentos, sem diferença de maiúsculas e com os espaços juntos ("Ána  Clara" = "ana clara")."""
+    sem_acento = "".join(ch for ch in unicodedata.normalize("NFKD", str(nome or "")) if not unicodedata.combining(ch))
+    return " ".join(sem_acento.casefold().split())
+
+
+TITULO_MAXIMO = 4  # títulos por conta (Admin, Criador, Moderador, VIP...)
+CARGOS = ("dono", "admin")  # quem pode dar títulos: o dono (também dá o cargo de admin) e os admins
+
+
+def titulos_de(lista) -> list:
+    """Os títulos como vieram (do dono ou de um admin), conferidos: até 4, cada um com até 20 letras e uma cor #rrggbb."""
+    saida, vistos = [], set()
+    for x in lista if isinstance(lista, list) else []:
+        bruto = re.sub(r"<[^>]*>", "", str((x or {}).get("nome") if isinstance(x, dict) else x or ""))  # sem tags
+        nome = re.sub(r"[\x00-\x1f\x7f<>]+", "", bruto).strip()[:20]
+        cor = str((x or {}).get("cor") or "") if isinstance(x, dict) else ""
+        if not nome or nome_normalizado(nome) in vistos:
+            continue
+        vistos.add(nome_normalizado(nome))
+        saida.append({"nome": nome, "cor": cor if re.fullmatch(r"#[0-9a-fA-F]{6}", cor) else "#6b7280"})
+        if len(saida) >= TITULO_MAXIMO:
+            break
+    return saida
+
+
 class Contas:
     """O cadastro das pessoas (contas.json): contas, códigos pendentes e sessões."""
 
@@ -591,6 +618,12 @@ class Contas:
     def por_email(self, email: str) -> dict | None:
         return next((c for c in self.ler()["contas"].values() if c["email"] == email), None)
 
+    def nome_em_uso(self, nome: str, exceto: str | None = None, so_verificadas: bool = False) -> dict | None:
+        """A conta que já tem esse nome (sem diferença de acentos e maiúsculas), tirando a "exceto"; ou None."""
+        alvo = nome_normalizado(nome)
+        return next((c for c in self.ler()["contas"].values() if c["id"] != exceto and nome_normalizado(c.get("nome", "")) == alvo
+                     and (c.get("verificada") or not so_verificadas)), None)
+
     def nova_sessao(self, conta: dict) -> str:
         token = secrets.token_urlsafe(32)
         self.ler()["sessoes"][resumo_hash(token)] = {"conta": conta["id"], "criada": int(time.time()), "vista": int(time.time())}
@@ -612,7 +645,7 @@ class Contas:
     def resumo(c: dict) -> dict:
         """O mínimo para mostrar alguém numa lista (amigos, pedidos): o nome, a foto e a cor."""
         p = c.get("perfil", {})
-        return {"id": c["id"], "nome": c.get("nome", ""), "foto": p.get("foto", 0), "cor": p.get("cor", "")}
+        return {"id": c["id"], "nome": c.get("nome", ""), "foto": p.get("foto", 0), "cor": p.get("cor", ""), "titulos": c.get("titulos", [])}
 
     def amigos_de(self, c: dict) -> list:
         contas = self.ler()["contas"]
@@ -622,12 +655,13 @@ class Contas:
         p = c.get("perfil", {})
         return {"id": c["id"], "nome": c["nome"], "bio": p.get("bio", ""), "pronomes": p.get("pronomes", ""), "local": p.get("local", ""),
                 "links": p.get("links", []), "cor": p.get("cor", ""), "tema": p.get("tema", ""), "foto": p.get("foto", 0), "capa": p.get("capa", 0), "desde": c.get("criada", 0),
-                "salvos": list(c.get("salvos", [])), "amigos": self.amigos_de(c)[:200]}
+                "salvos": list(c.get("salvos", [])), "amigos": self.amigos_de(c)[:200], "titulos": c.get("titulos", [])}
 
     def perfil_proprio(self, c: dict) -> dict:
         contas = self.ler()["contas"]
         enviados = [self.resumo(o) for o in contas.values() if c["id"] in o.get("pedidos", [])]
         return {**self.perfil_publico(c), "email": c["email"], "idade": c.get("idade"), "verificada": bool(c.get("verificada")), "idioma": c.get("idioma", "pt"),
+                "cargo": c.get("cargo", ""),
                 "pedidos": [self.resumo(contas[i]) for i in c.get("pedidos", []) if i in contas], "enviados": enviados}
 
 
@@ -926,10 +960,11 @@ def ia_host_permitido(url: str, extras: list) -> bool:
 class ErroPonte(Exception):
     """Erro com o código HTTP e uma mensagem em português para mostrar no app."""
 
-    def __init__(self, status: int, mensagem: str):
+    def __init__(self, status: int, mensagem: str, **extras):
         super().__init__(mensagem)
         self.status = status
         self.mensagem = mensagem
+        self.extras = extras  # vão junto na resposta (ex.: campo="nome", para a tela marcar o campo certo)
 
 
 # ── Configuração (chave e pastas liberadas) ─────────────────────────────
@@ -1394,10 +1429,10 @@ class Manipulador(BaseHTTPRequestHandler):
         if self.command != "HEAD":
             self.wfile.write(corpo)
 
-    def erro(self, status: int, mensagem: str):
+    def erro(self, status: int, mensagem: str, extras: dict | None = None):
         # Fecha a conexão: um pedido recusado pode ter deixado o corpo sem ler, e ele embaralharia o próximo
         self.close_connection = True
-        self.responder_json({"erro": mensagem}, status, {"Connection": "close"})
+        self.responder_json({**(extras or {}), "erro": mensagem}, status, {"Connection": "close"})
 
     def enviar_arquivo(self, caminho: Path, tipo: str, cache: str = "no-cache", cabecalhos: dict | None = None):
         """Manda um arquivo, com suporte a Range (os players de vídeo pedem pedaços)."""
@@ -1525,7 +1560,7 @@ class Manipulador(BaseHTTPRequestHandler):
             else:
                 self.erro(405, "Método não permitido aqui.")
         except ErroPonte as e:
-            self.erro(e.status, e.mensagem)
+            self.erro(e.status, e.mensagem, e.extras)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except subprocess.TimeoutExpired:
@@ -2043,6 +2078,11 @@ class Manipulador(BaseHTTPRequestHandler):
             if not conta and self.ponte.exigir_conta() and not self.autorizado(False):
                 raise ErroPonte(401, "Este servidor pede uma conta: entre ou crie a sua para jogar.")
             nome = (conta["nome"] if conta else "") or sala_texto(d.get("nome"), 24) or "Visitante"
+            if not conta and self.ponte.ligada and not self.autorizado(False):
+                with CONTAS_TRAVA:
+                    de_conta = contas_de(DADOS).nome_em_uso(nome, so_verificadas=True)
+                if de_conta:  # ninguém se passa por quem tem conta (e pelos títulos dela)
+                    raise ErroPonte(409, "Esse nome é de uma conta deste servidor. Entre na conta ou escolha outro nome.", campo="nome")
             chave = self.headers.get("X-Sala-Chave", "")
             de_quem_criou = bool(chave and hmac.compare_digest(chave.encode(), sala.chave.encode()))
             if not de_quem_criou and not sala.senha_confere(d.get("senha")):
@@ -2054,7 +2094,8 @@ class Manipulador(BaseHTTPRequestHandler):
                     raise ErroPonte(429, f"A sala está cheia ({sala.max} pessoas).")
                 pid = secrets.token_hex(4)
                 sala.pessoas[pid] = {"nome": nome, "segredo": secrets.token_urlsafe(12), "visto": agora, "estado": {}, "avatar": 0, "aparencia": 0,
-                                     "conta": conta["id"] if conta else None, "dono": de_quem_criou, "video": None}
+                                     "conta": conta["id"] if conta else None, "dono": de_quem_criou, "video": None,
+                                     "titulos": list(conta.get("titulos", [])) if conta else []}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
@@ -2172,7 +2213,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 if not texto:
                     raise ErroPonte(400, "Faltou o texto.")
                 sala.n += 1
-                sala.mensagens.append({"n": sala.n, "de": str(d["id"]), "nome": j["nome"], "texto": texto})
+                sala.mensagens.append({"n": sala.n, "de": str(d["id"]), "nome": j["nome"], "texto": texto, **({"titulo": j["titulos"][0]} if j.get("titulos") else {})})
                 del sala.mensagens[:-200]
                 return self.responder_json({"n": sala.n})
             if isinstance(d.get("estado"), dict):
@@ -2184,7 +2225,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 desde = 0
             return self.responder_json({
                 "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"],
-                             "video": (x.get("video") or {}).get("n", 0)}
+                             "video": (x.get("video") or {}).get("n", 0), "titulos": x.get("titulos", [])}
                             for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
                 "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo, "videos": sala.videos,
@@ -2216,7 +2257,7 @@ class Manipulador(BaseHTTPRequestHandler):
                                       "autor": str(dados.get("autor") or ""), "conta": str(dados.get("conta") or ""), "arquivo": arq.name, "tamanho": arq.stat().st_size,
                                       "criado": int(dados.get("criado") or arq.stat().st_mtime), "miniatura": int(mini.stat().st_mtime) if mini else 0,
                                       "solto": False, "_arq": arq, "_mini": mini, "_pasta": f, "_segredo": str(dados.get("segredo") or ""),
-                                      **{k: dados[k] for k in ("origem", "licenca", "animacoes") if k in dados}})
+                                      **{k: dados[k] for k in ("origem", "licenca", "animacoes", "trouxe") if k in dados}})
                     elif f.is_file() and f.suffix.lower() in exts and ".enviando-" not in f.name:
                         ident = "a" + hashlib.sha1(f"{sub}/{f.name}".encode("utf-8", "surrogateescape")).hexdigest()[:11]
                         # a miniatura de um arquivo posto à mão fica numa pasta escondida ao lado (.miniaturas/<id>.png)
@@ -2246,6 +2287,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 social = self.loja_social()
                 itens = [self.loja_com_social(publico(i), social, conta) for i in self.loja_itens()]
             return self.responder_json({"itens": itens, "publicar": self.ponte.loja_publicar(), "dono": dono, "conta": bool(conta),
+                                        "sketchfab": bool(chave_sketchfab()) and (dono or self.ponte.loja_publicar()),
                                         **({"pasta": str(self.ponte.loja)} if dono else {})})
         if partes == ["config"] and m == "POST":
             if not dono:
@@ -2361,12 +2403,29 @@ class Manipulador(BaseHTTPRequestHandler):
         raise ErroPonte(404, f"A loja não conhece /{acao} ({m}).")
 
     def loja_sketchfab(self, m: str, partes: list, p: dict, dono: bool):
-        """O Sketchfab na loja (só o dono): GET /api/loja/sketchfab (se há chave), PUT (guardar a chave), GET .../buscar
-        (q, cursor, animado) e POST .../importar {uid, tags} (baixa o modelo, vira .glb e entra na loja como mapa)."""
-        if not dono:
-            raise ErroPonte(403, "Só o dono do servidor traz mapas do Sketchfab.")
+        """O Sketchfab na loja: GET /api/loja/sketchfab (o que dá para fazer), PUT (guardar a chave: só o dono), GET .../buscar
+        (q, cursor, animado) e POST .../importar {uid, tags} (baixa o modelo, vira .glb e entra na loja como mapa).
+
+        A chave é do dono e fica só no servidor: ninguém mais a vê nem a troca. Buscar e trazer valem para todos que podem
+        publicar na loja (o dono decide, em "quem entra pelo link pode publicar"): o servidor usa a chave por eles. Para
+        quem não é o dono há um limite de pedidos por endereço (a cota da chave e o disco são do dono)."""
+        tem_chave = bool(chave_sketchfab())
+        pode_trazer = dono or self.ponte.loja_publicar()
         if not partes and m == "GET":
-            return self.responder_json({"chave": bool(chave_sketchfab()), "licencas": {k: v[0] for k, v in SKETCHFAB_LICENCAS.items()}})
+            return self.responder_json({"chave": tem_chave, "pode_trazer": bool(tem_chave and pode_trazer), "dono": dono,
+                                        "licencas": {k: v[0] for k, v in SKETCHFAB_LICENCAS.items()}})
+        if not partes and m == "PUT" and not dono:
+            raise ErroPonte(403, "Só o dono do servidor guarda ou troca a chave do Sketchfab.")
+        if not dono:
+            if not tem_chave:
+                raise ErroPonte(503, "O dono do servidor ainda não guardou a chave do Sketchfab.")
+            if not pode_trazer:
+                raise ErroPonte(403, "O dono desta loja não está aceitando publicações agora.")
+            origem = self.origem_do_pedido()
+            if partes == ["buscar"]:
+                contar_tentativa("sketchfab-busca:" + origem, 40, 60)
+            elif partes == ["importar"]:
+                contar_tentativa("sketchfab-trazer:" + origem, 10, 3600)
         if not partes and m == "PUT":
             d = self.ler_json()
             token = str(d.get("token") or "").strip()
@@ -2434,8 +2493,13 @@ class Manipulador(BaseHTTPRequestHandler):
                     except ErroPonte:
                         (pasta / ".miniatura").unlink(missing_ok=True)
                 slug = r["licenca"]
+                # quem trouxe (como quem publica): a conta, ou o segredo que fica no navegador de quem não tem conta
+                conta = self.conta_da_sessao()
+                segredo = secrets.token_urlsafe(18) if not dono else ""
                 dados = {"nome": sala_texto(d.get("nome"), 60) or r["nome"] or "Mapa do Sketchfab", "descricao": sala_texto(str(info.get("description") or ""), 600),
-                         "autor": r["autor"], "conta": "", "arquivo": nome_arq, "criado": int(time.time()), "segredo": "",
+                         "autor": r["autor"], "conta": conta["id"] if conta and not dono else "", "arquivo": nome_arq, "criado": int(time.time()),
+                         "segredo": hashlib.sha256(segredo.encode()).hexdigest() if segredo else "",
+                         "trouxe": (conta["nome"] if conta else sala_texto(d.get("quem"), 40)) if not dono else "",
                          "origem": {"site": "Sketchfab", "uid": uid, "url": r["url"], "autor": r["autor"], "autor_url": r["autor_url"]},
                          "licenca": {"slug": slug, "nome": SKETCHFAB_LICENCAS[slug][0], "url": SKETCHFAB_LICENCAS[slug][1]},
                          "animacoes": r["animacoes"]}
@@ -2453,7 +2517,7 @@ class Manipulador(BaseHTTPRequestHandler):
             item = next(i for i in self.loja_itens() if i["id"] == ident)
             with LOJA_TRAVA:
                 publico = self.loja_com_social({k: v for k, v in item.items() if not k.startswith("_")}, self.loja_social(), self.conta_da_sessao())
-            return self.responder_json({"item": publico}, 201)
+            return self.responder_json({"item": publico, **({"segredo": segredo} if segredo else {})}, 201)
         raise ErroPonte(404, f"A loja não conhece /sketchfab/{'/'.join(partes)} ({m}).")
 
     def loja_publicar(self, tipo: str, p: dict, dono: bool):
@@ -2613,6 +2677,34 @@ class Manipulador(BaseHTTPRequestHandler):
 
             if acao == "config" and m == "GET":
                 return self.responder_json({"email": email_configurado(), "idade_minima": self.ponte.idade_minima(), "exigir_conta": self.ponte.exigir_conta()})
+            if acao == "nome" and m == "GET":  # o nome está livre? (o cadastro e quem joga sem conta conferem antes)
+                nome = sala_texto(self.parametros().get("nome"), 30)
+                outra = cadastro.nome_em_uso(nome, exceto=eu["id"] if eu else None) if len(nome) >= 2 else None
+                return self.responder_json({"livre": not outra})
+            # títulos (Admin, Criador, VIP...): quem dá é o aparelho do servidor, a conta do dono e os admins
+            if acao == "titulos" and m == "POST":
+                b = corpo()
+                alvo = d["contas"].get(str(b.get("id") or ""))
+                if not alvo or not alvo.get("verificada"):
+                    raise ErroPonte(404, "Essa conta não existe.")
+                meu_cargo = "servidor" if dono else (eu or {}).get("cargo", "")
+                if meu_cargo not in ("servidor", "dono", "admin"):
+                    raise ErroPonte(403, "Só o dono do servidor e os administradores dão títulos.")
+                if meu_cargo == "admin" and alvo.get("cargo") == "dono":
+                    raise ErroPonte(403, "Um administrador não muda os títulos do dono.")
+                if "titulos" in b:
+                    alvo["titulos"] = titulos_de(b.get("titulos"))
+                if "cargo" in b:
+                    cargo = str(b.get("cargo") or "")
+                    if cargo not in ("",) + CARGOS:
+                        raise ErroPonte(400, "Cargo: dono, admin ou nenhum.")
+                    if meu_cargo == "admin":
+                        raise ErroPonte(403, "Só o dono dá ou tira o cargo de administrador.")
+                    if (cargo == "dono" or alvo.get("cargo") == "dono") and meu_cargo != "servidor":
+                        raise ErroPonte(403, "O cargo de dono só muda no aparelho do servidor.")
+                    alvo["cargo"] = cargo
+                cadastro.gravar()
+                return self.responder_json({**cadastro.perfil_publico(alvo), "cargo": alvo.get("cargo", "")})
             if acao == "cadastro" and m == "POST":
                 contar_tentativa("cadastro:" + origem, 10, 3600)
                 b = corpo()
@@ -2633,6 +2725,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 conta = cadastro.por_email(email)
                 if conta and conta.get("verificada"):
                     raise ErroPonte(409, "Já existe uma conta com esse e-mail. Entre nela (ou use \"Esqueci a senha\").")
+                if cadastro.nome_em_uso(nome, exceto=conta["id"] if conta else None):
+                    raise ErroPonte(409, "Esse nome já é de outra conta. Escolha outro.", campo="nome")
                 if not conta:
                     conta = {"id": secrets.token_hex(6), "email": email, "criada": int(time.time()), "verificada": False, "perfil": {}}
                     d["contas"][conta["id"]] = conta
@@ -2646,6 +2740,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 conta = cadastro.por_email(email)
                 if not conta:
                     raise ErroPonte(404, "Não achei um cadastro com esse e-mail.")
+                if cadastro.nome_em_uso(conta.get("nome", ""), exceto=conta["id"], so_verificadas=True):  # outra pessoa confirmou o mesmo nome antes
+                    raise ErroPonte(409, "Enquanto você confirmava, outra pessoa ficou com esse nome. Crie a conta de novo com outro nome.", campo="nome")
                 self.conferir_codigo(cadastro, email, "cadastro", b.get("codigo"))
                 conta["verificada"] = True
                 token = cadastro.nova_sessao(conta)
@@ -2692,6 +2788,8 @@ class Manipulador(BaseHTTPRequestHandler):
                     nome = sala_texto(b.get("nome"), 30)
                     if len(nome) < 2:
                         raise ErroPonte(400, "O nome precisa ter pelo menos 2 letras.")
+                    if cadastro.nome_em_uso(nome, exceto=c["id"]):
+                        raise ErroPonte(409, "Esse nome já é de outra conta. Escolha outro.", campo="nome")
                     c["nome"] = nome
                 for campo, limite in (("bio", 300), ("pronomes", 30), ("local", 60)):
                     if campo in b:
@@ -2889,7 +2987,8 @@ class Manipulador(BaseHTTPRequestHandler):
                     mandar_email(para, "Teste da Companhia", "Este é um e-mail de teste do servidor da Companhia: o envio dos códigos está funcionando.\n")
                     return self.responder_json({"ok": True})
                 if acao == "lista" and m == "GET":
-                    lista = [{"id": c["id"], "nome": c["nome"], "email": c["email"], "idade": c.get("idade"), "criada": c.get("criada"), "verificada": bool(c.get("verificada"))}
+                    lista = [{"id": c["id"], "nome": c["nome"], "email": c["email"], "idade": c.get("idade"), "criada": c.get("criada"), "verificada": bool(c.get("verificada")),
+                              "titulos": c.get("titulos", []), "cargo": c.get("cargo", "")}
                              for c in d["contas"].values()]
                     return self.responder_json({"contas": sorted(lista, key=lambda x: -(x["criada"] or 0))})
                 if acao == "conta" and len(partes) == 2 and m == "DELETE":

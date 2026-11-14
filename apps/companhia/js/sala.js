@@ -45,18 +45,20 @@
     try { r = await fetch(base + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo }); }
     catch (e) { throw new Error("O servidor da sala não respondeu. O link ainda vale? (quem criou a sala precisa estar com ela aberta)"); }
     if (!r.ok) {
-      let msg = "A sala respondeu " + r.status;
-      try { const j = await r.json(); if (j.erro) msg = j.erro; } catch (e) { /* sem corpo */ }
+      let msg = "A sala respondeu " + r.status, campo = "";
+      try { const j = await r.json(); if (j.erro) msg = j.erro; campo = j.campo || ""; } catch (e) { /* sem corpo */ }
       const erro = new Error(msg);
       erro.status = r.status;
+      erro.campo = campo; // "nome": o nome é de uma conta (quem joga sem conta escolhe outro)
       throw erro;
     }
     return como === "blob" ? r.blob() : r.json();
   }
 
   /** Uma placa de texto que sempre olha para a câmera (o nome em cima da cabeça, o balão da fala). */
-  function placa(texto, { fundo = "rgba(20,24,36,.78)", cor = "#fff", tamanho = 30, largura = 420 } = {}) {
+  function placa(texto, { fundo = "rgba(20,24,36,.78)", cor = "#fff", tamanho = 30, largura = 420, titulo = null } = {}) {
     const T = window.THREE, tela = document.createElement("canvas"), g = tela.getContext("2d");
+    if (titulo && titulo.nome) return placaComTitulo(texto, titulo, { fundo, cor, tamanho });
     g.font = `600 ${tamanho}px system-ui, sans-serif`;
     // quebra em linhas
     const palavras = String(texto).split(/\s+/), linhas = [];
@@ -74,6 +76,31 @@
     g.fillStyle = cor;
     g.textBaseline = "top";
     linhas.forEach((l, i) => g.fillText(l, 14, 10 + i * (tamanho + 8), largura));
+    const tex = new T.CanvasTexture(tela);
+    tex.colorSpace = T.SRGBColorSpace;
+    const s = new T.Sprite(new T.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
+    s.renderOrder = 20;
+    s.scale.set(tela.width / 300, tela.height / 300, 1);
+    s.userData.alto = tela.height / 300;
+    return s;
+  }
+  /** A placa do nome com o título em cima (um selo na cor dele, como "Admin" ou "Criador"). */
+  function placaComTitulo(texto, titulo, { fundo, cor, tamanho }) {
+    const T = window.THREE, tela = document.createElement("canvas"), g = tela.getContext("2d");
+    const fonteNome = `600 ${tamanho}px system-ui, sans-serif`, fonteTitulo = `800 ${Math.round(tamanho * 0.72)}px system-ui, sans-serif`;
+    const nome = String(texto).slice(0, 40), rotulo = String(titulo.nome).slice(0, 20).toUpperCase();
+    g.font = fonteNome; const wn = g.measureText(nome).width;
+    g.font = fonteTitulo; const wt = g.measureText(rotulo).width;
+    const hTitulo = Math.round(tamanho * 0.72) + 12, hNome = tamanho + 18;
+    tela.width = Math.ceil(Math.max(wn + 28, wt + 24));
+    tela.height = hTitulo + 6 + hNome;
+    const caixa = (x, y, w, h, r, c) => { g.fillStyle = c; g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); g.fill(); };
+    caixa((tela.width - (wt + 24)) / 2, 0, wt + 24, hTitulo, hTitulo / 2, /^#[0-9a-f]{6}$/i.test(titulo.cor || "") ? titulo.cor : "#6b7280");
+    g.font = fonteTitulo; g.fillStyle = "#fff"; g.textBaseline = "middle"; g.textAlign = "center";
+    g.fillText(rotulo, tela.width / 2, hTitulo / 2 + 1);
+    caixa(0, hTitulo + 6, tela.width, hNome, 14, fundo);
+    g.font = fonteNome; g.fillStyle = cor;
+    g.fillText(nome, tela.width / 2, hTitulo + 6 + hNome / 2 + 1);
     const tex = new T.CanvasTexture(tela);
     tex.colorSpace = T.SRGBColorSpace;
     const s = new T.Sprite(new T.SpriteMaterial({ map: tex, depthTest: false, transparent: true }));
@@ -200,7 +227,13 @@
     /** O que o servidor disse dela agora. */
     receber(j) {
       const T = window.THREE, e = j.estado || {};
-      if (j.nome !== this.nome) { this.nome = j.nome; soltarPlaca(this.rotulo); this.rotulo = placa(j.nome); this.grupo.add(this.rotulo); this.posicionarPlacas(); }
+      // a placa com o nome (e o primeiro título, como "Admin", na cor dele)
+      const titulo = (j.titulos || [])[0] || null, chaveTitulo = titulo ? titulo.nome + titulo.cor : "";
+      this.titulos = j.titulos || [];
+      if (j.nome !== this.nome || chaveTitulo !== this.chaveTitulo) {
+        this.nome = j.nome; this.chaveTitulo = chaveTitulo;
+        soltarPlaca(this.rotulo); this.rotulo = placa(j.nome, { titulo }); this.grupo.add(this.rotulo); this.posicionarPlacas();
+      }
       if (Array.isArray(e.p)) this.alvo.set(e.p[0], e.p[1], e.p[2]);
       if (this.primeiro) { this.grupo.position.copy(this.alvo); this.rumo = e.r || 0; this.primeiro = false; }
       this.rumoAlvo = e.r || 0;
@@ -317,6 +350,13 @@
       }
       for (const [n, q] of av.ajusteQ) if (pose[n]) pose[n].premultiply(q); // as correções dos ossos que ela fez
       gravarPose(av, pose, this.quadril);
+      // os pés dela no chão do nosso cenário (IK das pernas), como os nossos
+      const mundo = this.sala.palco && this.sala.palco.mundo;
+      if (C.ikDosPes && mundo) {
+        this._frente = (this._frente || new T.Vector3()).set(Math.sin(this.rumo), 0, Math.cos(this.rumo));
+        this.ik = C.ikDosPes(av.vrm, { colisor: mundo.colisor, base: g.position, frente: this._frente, dt, estado: (this.estadoIk = this.estadoIk || {}),
+          ativo: mundo.cfg.ik !== false && this.estado !== "pulando" && this.estado !== "voando" && !(this.poseRecebida && this.poseRecebida.leftUpperLeg) });
+      }
       // rosto: a emoção, a captura dela e o piscar
       const em = av.vrm.expressionManager;
       if (em) {
@@ -530,7 +570,7 @@
           this.visto = Math.max(this.visto, m.n);
           const meu = m.de === this.eu.id, rem = this.remotos.get(m.de);
           if (rem) rem.falar(m.texto);
-          this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu });
+          this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu, titulo: m.titulo || null });
         }
         if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => console.warn(e)); }
         // quem criou mudou o nome ou o bate-papo: todos veem

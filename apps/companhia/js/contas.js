@@ -85,6 +85,16 @@
     async redefinir(email, codigo, senha) { return C.contas.entrou(await pedir("POST", "redefinir", { json: { email, codigo, senha } })); },
     async apagar(senha) { await pedir("POST", "apagar", { json: { senha } }); this.guardarSessao(""); this.eu = null; this.avisar(); },
     perfil: (id) => pedir("GET", "perfil/" + encodeURIComponent(id)),
+    /** O nome está livre? (nenhuma outra conta tem esse nome, sem diferença de acentos e maiúsculas). Sem servidor: livre. */
+    async nomeLivre(nome) {
+      if (!(await this.disponivel())) return true;
+      try { return !!(await pedir("GET", "nome", { parametros: { nome } })).livre; } catch (e) { return true; }
+    },
+    /** O dono do servidor (no aparelho dele, com a chave) ou uma conta com cargo de dono ou admin: pode dar títulos. */
+    souDonoDoServidor: () => !!(LNUX.ponte && LNUX.ponte.disponivel),
+    podeDarTitulos() { const c = (this.eu || {}).cargo; return this.souDonoDoServidor() || c === "dono" || c === "admin"; },
+    /** Dá títulos a uma conta ({titulos: [{nome, cor}], cargo}). Devolve o perfil dela. */
+    darTitulos: (id, d) => pedir("POST", "titulos", { json: { id, ...d } }),
     /** Amizade: acao = pedir | aceitar | recusar | desfazer. Devolve {relacao, amigos, pedidos, enviados}. */
     async amizade(acao, id) { const r = await pedir("POST", "amigos", { json: { acao, id } }); if (this.eu) Object.assign(this.eu, { amigos: r.amigos, pedidos: r.pedidos, enviados: r.enviados }); this.avisar(); return r; },
     /** Guarda (ou tira) um item da loja no perfil. */
@@ -262,6 +272,7 @@
       try { await acao(); }
       catch (e) {
         if (e.pendente && modo !== "codigo") { email = email || e.email; desenhar("codigo", mensagem(e.message, false)); return; }
+        if (e.campo === "nome") { const n = corpo.querySelector('input[aria-label="Nome"]'); if (n) { n.setAttribute("aria-invalid", "true"); n.focus(); } }
         corpo.querySelector(".conta-acoes").before(mensagem(e.message));
       } finally { botao.disabled = false; botao.textContent = antes; }
     }
@@ -285,6 +296,15 @@
         const i = entrada({ type: "number", min: 1, max: 120, inputmode: "numeric", "aria-label": "Idade" });
         const aceito = el("input", { type: "checkbox", "aria-label": "Concordo em guardar os dados" });
         const ir = el("button", { type: "button", class: "lnux-botao primario", id: "conta-criar" }, "Criar conta");
+        const nomeAviso = el("small", { class: "conta-nome-aviso", role: "alert", hidden: true }, C.t("Esse nome já é de outra conta. Escolha outro."));
+        n.addEventListener("change", async () => {
+          const v = n.value.trim();
+          const livre = v.length < 2 || (await C.contas.nomeLivre(v));
+          if (n.value.trim() !== v) return;
+          nomeAviso.hidden = livre;
+          if (livre) n.removeAttribute("aria-invalid"); else n.setAttribute("aria-invalid", "true");
+        });
+        n.addEventListener("input", () => { nomeAviso.hidden = true; n.removeAttribute("aria-invalid"); });
         ir.addEventListener("click", () => tentar(ir, async () => {
           if (s.value !== s2.value) throw new Error("As duas senhas não são iguais.");
           if (!aceito.checked) throw new Error("Marque que concorda em guardar os seus dados neste servidor.");
@@ -295,7 +315,7 @@
         if (pub.contas_email === false) return [el("h3", {}, "Criar conta"), mensagem("O dono deste servidor ainda não configurou o envio de e-mails, então ainda não dá para criar contas aqui."),
           acoes(link("Voltar", () => desenhar("entrar")))];
         return [el("h3", {}, "Criar uma conta"),
-          el("div", { class: "grade" }, campo("Nome", n, "Como os outros vão te ver"), campo("Idade", i, pub.idade_minima ? `A partir de ${pub.idade_minima} anos` : "")),
+          el("div", { class: "grade" }, el("div", { class: "conta-nome" }, campo("Nome", n, "Como os outros vão te ver"), nomeAviso), campo("Idade", i, pub.idade_minima ? `A partir de ${pub.idade_minima} anos` : "")),
           campo("E-mail", e, "Para o código de confirmação e para recuperar a senha"),
           el("div", { class: "grade" }, campo("Senha", s, "Pelo menos 8 caracteres"), campo("Repita a senha", s2)),
           el("label", { class: "lnux-alternar" }, aceito, el("span", {}, "Concordo que o meu nome, e-mail, idade e perfil fiquem guardados no WEBC.")),
@@ -342,6 +362,73 @@
     return d.then(() => { f.parar(); return resultado; });
   };
 
+  // ── Títulos (Admin, Criador, Moderador, VIP...) ──────────────────────
+
+  /** Os títulos que dá para escolher com um toque (e a cor de cada um); dá também para escrever outro. */
+  C.TITULOS_PRONTOS = [["Admin", "#e53935"], ["Moderador", "#1e88e5"], ["Criador", "#8e24aa"], ["VIP", "#d81b60"], ["Apoiador", "#43a047"],
+    ["Dev", "#00897b"], ["Artista", "#fb8c00"], ["Ajudante", "#5e35b1"], ["Veterano", "#6d4c41"]];
+  /** Os selos dos títulos de alguém (ou null se não tem). */
+  C.selosDeTitulos = function (titulos, pequeno = false) {
+    if (!titulos || !titulos.length) return null;
+    return el("span", { class: "selos-titulos" + (pequeno ? " pequenos" : ""), translate: "no" },
+      titulos.map((x) => el("span", { class: "selo-titulo", style: { "--selo": x.cor || "#6b7280" } }, x.nome)));
+  };
+  /**
+   * Dar títulos a uma conta: os prontos com um toque, um escrito à mão (com a cor) e, para o dono, o cargo (admin dá
+   * títulos também). Resolve com o perfil atualizado, ou null.
+   */
+  C.janelaTitulos = async function (conta) {
+    let lista = (conta.titulos || []).map((x) => ({ ...x }));
+    const servidor = C.contas.souDonoDoServidor(), meuCargo = servidor ? "servidor" : (C.contas.eu || {}).cargo || "";
+    const atuais = el("div", { class: "titulos-atuais" });
+    const prontos = el("div", { class: "titulos-prontos" });
+    const novoNome = entrada({ maxlength: 20, placeholder: C.t("Outro título"), "aria-label": C.t("Outro título") });
+    const novaCor = el("input", { type: "color", value: "#6b7280", "aria-label": C.t("Cor do título") });
+    const aviso = el("p", { class: "conta-msg erro", role: "alert", hidden: true });
+    const tem = (nome) => lista.some((x) => x.nome.toLowerCase() === nome.toLowerCase());
+    function colocar(nome, cor) {
+      nome = String(nome || "").trim().slice(0, 20);
+      if (!nome || tem(nome)) return;
+      if (lista.length >= 4) { aviso.textContent = C.t("Até 4 títulos por pessoa."); aviso.hidden = false; return; }
+      aviso.hidden = true;
+      lista.push({ nome, cor });
+      desenhar();
+    }
+    function desenhar() {
+      atuais.replaceChildren(...(lista.length ? lista.map((x, i) => el("span", { class: "selo-titulo removivel", style: { "--selo": x.cor }, translate: "no" }, x.nome,
+        el("button", { type: "button", class: "selo-tirar", "aria-label": C.t("Tirar {nome}", { nome: x.nome }), onclick: () => { lista.splice(i, 1); desenhar(); } }, "×")))
+        : [el("span", { class: "fraco pequeno" }, C.t("Sem títulos."))]));
+      prontos.replaceChildren(...C.TITULOS_PRONTOS.map(([n, c]) => el("button", { type: "button", class: "selo-titulo opcao" + (tem(n) ? " ativo" : ""), style: { "--selo": c }, "aria-pressed": String(tem(n)), "data-titulo": n,
+        onclick: () => { if (tem(n)) lista = lista.filter((x) => x.nome.toLowerCase() !== n.toLowerCase()); else colocar(n, c); desenhar(); } }, C.t(n))));
+    }
+    desenhar();
+    // o cargo: o dono dá e tira o de administrador; o de dono só muda no aparelho do servidor
+    let cargo = null;
+    const opcoesCargo = [["", C.t("Nenhum")], ["admin", C.t("Administrador (também dá títulos)")]].concat(servidor ? [["dono", C.t("Dono do servidor")]] : []);
+    if ((meuCargo === "servidor" || meuCargo === "dono") && (servidor || conta.cargo !== "dono")) {
+      cargo = el("select", { class: "lnux-selecao", "aria-label": C.t("Cargo") }, opcoesCargo.map(([v, r]) => el("option", { value: v, selected: (conta.cargo || "") === v }, r)));
+      cargo.addEventListener("change", () => { if (cargo.value === "admin" && !tem("Admin")) colocar("Admin", "#e53935"); });
+    }
+    const corpo = el("div", { class: "ajustes janela-titulos" },
+      el("p", { style: { margin: 0 } }, el("b", { translate: "no" }, conta.nome)),
+      el("div", { class: "lnux-rotulo" }, C.t("Títulos")), atuais,
+      el("div", { class: "lnux-rotulo" }, C.t("Escolher")), prontos,
+      el("div", { class: "linha" }, novoNome, novaCor, el("button", { type: "button", class: "lnux-botao", id: "titulo-por", onclick: () => { colocar(novoNome.value, novaCor.value); novoNome.value = ""; } }, C.t("Pôr"))),
+      aviso,
+      cargo ? campo(C.t("Cargo"), cargo, C.t("Quem é administrador também dá títulos, pelo perfil das pessoas (até pelo celular).")) : null);
+    novoNome.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); colocar(novoNome.value, novaCor.value); novoNome.value = ""; } });
+    const r = await LNUX.dialogo({ titulo: C.t("Títulos"), corpo, botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: "ok" }] });
+    if (r !== "ok") return null;
+    try {
+      const d = { titulos: lista };
+      if (cargo && cargo.value !== (conta.cargo || "")) d.cargo = cargo.value;
+      const novo = await C.contas.darTitulos(conta.id, d);
+      if (C.contas.eu && C.contas.eu.id === conta.id) { C.contas.eu = { ...C.contas.eu, titulos: novo.titulos, cargo: novo.cargo }; C.contas.avisar(); }
+      LNUX.aviso(C.t("Títulos salvos."), "ok");
+      return novo;
+    } catch (e) { LNUX.erro(e); return null; }
+  };
+
   // ── Perfil ───────────────────────────────────────────────────────────
 
   /** O perfil de alguém (como os outros veem): capa, foto, nome, pronomes, bio, cidade, links e desde quando. */
@@ -352,12 +439,16 @@
     const corpo = el("div", { class: "perfil-cartao" },
       el("div", { class: "perfil-capa", style: { background: capa ? `center / cover no-repeat url("${capa}")` : (p.cor || "var(--destaque)") } }),
       el("div", { class: "perfil-cabeca" }, C.fotoDaConta(p, 84),
-        el("div", {}, el("h2", {}, p.nome), p.pronomes ? el("span", { class: "fraco" }, p.pronomes) : null)),
+        el("div", {}, el("h2", {}, p.nome), C.selosDeTitulos(p.titulos), p.pronomes ? el("span", { class: "fraco" }, p.pronomes) : null)),
       p.bio ? el("p", { class: "perfil-bio" }, p.bio) : el("p", { class: "fraco" }, "Sem bio."),
       el("div", { class: "fraco pequeno" }, [p.local ? "📍 " + p.local : "", "conta desde " + new Date(p.desde * 1000).toLocaleDateString("pt-BR")].filter(Boolean).join(" · ")),
       p.links && p.links.length ? el("div", { class: "perfil-links" }, p.links.map((l) => el("a", { href: l, target: "_blank", rel: "noopener noreferrer nofollow" }, l.replace(/^https?:\/\//, "")))) : null);
     if (p.tema && C.temas) C.temas.local(corpo, p.tema); // no tema que a pessoa usa
-    return LNUX.dialogo({ titulo: "Perfil", corpo, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
+    const botoes = [{ rotulo: "Fechar", primario: true, valor: null }];
+    if (C.contas.podeDarTitulos()) botoes.unshift({ rotulo: "Dar títulos...", valor: "titulos" });
+    const r = await LNUX.dialogo({ titulo: "Perfil", corpo, botoes });
+    if (r === "titulos" && await C.janelaTitulos(p)) return C.mostrarPerfil(id);
+    return r;
   };
 
   /** Editar o meu perfil: foto, capa, nome, bio, pronomes, cidade, links, cor; e a conta (senha, sair, apagar). */
@@ -480,7 +571,9 @@
       try {
         const l = (await C.contas.lista()).contas;
         lista.replaceChildren(l.length ? el("table", {}, el("tbody", {}, l.map((c) => el("tr", {},
-          el("td", {}, c.nome), el("td", { class: "fraco" }, c.email), el("td", {}, c.idade + " anos"), el("td", { class: "fraco pequeno" }, c.verificada ? "confirmada" : "falta o código"),
+          el("td", {}, el("span", { translate: "no" }, c.nome), " ", C.selosDeTitulos(c.titulos, true), c.cargo ? el("span", { class: "fraco pequeno" }, " · " + C.t(c.cargo === "dono" ? "dono" : "administrador")) : null),
+          el("td", { class: "fraco" }, c.email), el("td", {}, c.idade + " anos"), el("td", { class: "fraco pequeno" }, c.verificada ? "confirmada" : "falta o código"),
+          el("td", {}, c.verificada ? el("button", { type: "button", class: "lnux-botao plano", "data-titulos": c.id, onclick: async () => { if (await C.janelaTitulos(c)) desenharLista(); } }, "Títulos") : null),
           el("td", {}, el("button", { type: "button", class: "lnux-botao plano perigo", onclick: async () => {
             if (!(await LNUX.confirmar("Apagar conta", `Apagar a conta de ${c.nome} (${c.email}) deste servidor?`, { rotulo: "Apagar", perigo: true }))) return;
             try { await C.contas.apagarConta(c.id); desenharLista(); } catch (err) { LNUX.erro(err); } } }, "Apagar")))))) : el("p", { class: "fraco", style: { margin: 0 } }, "Nenhuma conta ainda."));

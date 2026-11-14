@@ -235,17 +235,19 @@
     if (!meu && p.tema && p.tema !== C.temas.atual) C.temas.local(pag, p.tema);
     const capa = C.contas.imagem(p, "capa");
     const acoes = el("div", { class: "perfil-acoes" });
+    // o dono do servidor e os administradores dão títulos (Admin, Criador...) pelo perfil da pessoa, até pelo celular
+    const botaoTitulos = () => C.contas.podeDarTitulos() ? el("button", { type: "button", class: "lnux-botao", id: "perfil-titulos", onclick: async () => { if (await C.janelaTitulos(p)) ir("perfil", { id: p.id, semTransicao: true }); } }, t("Dar títulos...")) : null;
     const desenharAcoes = (relacao) => {
       if (meu) {
-        acoes.replaceChildren(el("button", { type: "button", class: "lnux-botao primario", id: "perfil-editar", onclick: () => C.janelaPerfil().then(() => ir("perfil", { semTransicao: true })).catch(LNUX.erro) }, t("Editar perfil")),
-          el("button", { type: "button", class: "lnux-botao", onclick: () => C.contas.sair() }, t("Sair da conta")));
+        acoes.replaceChildren(...LNUX.filhos(el("button", { type: "button", class: "lnux-botao primario", id: "perfil-editar", onclick: () => C.janelaPerfil().then(() => ir("perfil", { semTransicao: true })).catch(LNUX.erro) }, t("Editar perfil")),
+          el("button", { type: "button", class: "lnux-botao", onclick: () => C.contas.sair() }, t("Sair da conta")), botaoTitulos()));
         return;
       }
-      if (!eu) { acoes.replaceChildren(); return; }
+      if (!eu) { acoes.replaceChildren(...LNUX.filhos(botaoTitulos())); return; }
       const amizade = async (acao) => { try { const r = await C.contas.amizade(acao, p.id); desenharAcoes(r.relacao); } catch (e) { LNUX.erro(e); } };
       const b = (rotulo, acao, classe = "") => el("button", { type: "button", class: "lnux-botao " + classe, id: "perfil-amizade", "data-relacao": relacao || "", onclick: () => amizade(acao) }, rotulo);
-      acoes.replaceChildren(relacao === "amigo" ? b(t("✓ Amigos (desfazer)"), "desfazer") : relacao === "enviado" ? b(t("Pedido enviado (cancelar)"), "desfazer")
-        : relacao === "recebido" ? b(t("Aceitar o pedido de amizade"), "aceitar", "primario") : b(t("Adicionar amigo"), "pedir", "primario"));
+      acoes.replaceChildren(...LNUX.filhos(relacao === "amigo" ? b(t("✓ Amigos (desfazer)"), "desfazer") : relacao === "enviado" ? b(t("Pedido enviado (cancelar)"), "desfazer")
+        : relacao === "recebido" ? b(t("Aceitar o pedido de amizade"), "aceitar", "primario") : b(t("Adicionar amigo"), "pedir", "primario"), botaoTitulos()));
     };
     desenharAcoes(p.relacao);
     const secao = (titulo, ...filhos) => el("section", { class: "perfil-secao" }, el("h2", {}, titulo), ...filhos);
@@ -260,6 +262,7 @@
       el("div", { class: "perfil-foto-grande" }, C.fotoDaConta(p, 150),
         meu ? el("button", { type: "button", class: "perfil-foto-trocar", id: "perfil-trocar-foto", title: t("Trocar a foto"), "aria-label": t("Trocar a foto"), onclick: () => trocarImagem("foto") }, C.iconeWebc("foto")) : null),
       el("h1", { class: "perfil-nome", translate: "no" }, p.nome),
+      C.selosDeTitulos(p.titulos),
       p.pronomes ? el("p", { class: "perfil-pronomes fraco", translate: "no" }, p.pronomes) : null,
       acoes,
       el("div", { class: "perfil-secoes" },

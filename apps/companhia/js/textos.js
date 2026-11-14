@@ -827,3 +827,34 @@
     "Os materiais specular/glossiness (exportações antigas do Sketchfab) ganharam a versão padrão: as texturas aparecem em qualquer programa.": ["The specular/glossiness materials (older Sketchfab exports) got the standard version: the textures show up in any program.", "スペキュラー／グロシネスのマテリアル（Sketchfab の古いエクスポート）に標準版を追加しました。どのソフトでもテクスチャが表示されます。"],
   });
 })();
+
+// O Sketchfab para todos (a chave fica com o dono), nomes únicos, títulos das contas e a IK das pernas
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "O dono do servidor ainda não guardou a chave do Sketchfab.": ["The server owner hasn't saved the Sketchfab token yet.", "サーバーの管理者がまだ Sketchfab のトークンを保存していません。"],
+    "trazido por {nome}": ["brought by {nome}", "{nome} が取り込み"],
+    "Só o dono do servidor guarda ou troca a chave do Sketchfab.": ["Only the server owner saves or changes the Sketchfab token.", "Sketchfab のトークンを保存・変更できるのはサーバーの管理者だけです。"],
+    // títulos
+    "Títulos": ["Titles", "称号"], "Dar títulos...": ["Give titles...", "称号を付ける..."], "Escolher": ["Choose", "選ぶ"], "Pôr": ["Add", "追加"],
+    "Outro título": ["Another title", "ほかの称号"], "Cor do título": ["Title color", "称号の色"], "Até 4 títulos por pessoa.": ["Up to 4 titles per person.", "称号は 1 人 4 つまでです。"],
+    "Tirar {nome}": ["Remove {nome}", "{nome} を外す"], "Sem títulos.": ["No titles.", "称号なし。"], "Títulos salvos.": ["Titles saved.", "称号を保存しました。"],
+    "Admin": ["Admin", "管理者"], "Moderador": ["Moderator", "モデレーター"], "Criador": ["Creator", "クリエイター"], "VIP": ["VIP", "VIP"], "Apoiador": ["Supporter", "サポーター"],
+    "Dev": ["Dev", "開発者"], "Artista": ["Artist", "アーティスト"], "Ajudante": ["Helper", "ヘルパー"], "Veterano": ["Veteran", "ベテラン"],
+    "Cargo": ["Role", "役割"], "Nenhum": ["None", "なし"], "Administrador (também dá títulos)": ["Administrator (also gives titles)", "管理者（称号も付けられる）"], "Dono do servidor": ["Server owner", "サーバーの所有者"],
+    "dono": ["owner", "所有者"], "administrador": ["administrator", "管理者"],
+    "Quem é administrador também dá títulos, pelo perfil das pessoas (até pelo celular).": ["Administrators also give titles, from people's profiles (even on a phone).", "管理者も、相手のプロフィールから称号を付けられます（スマホからでも）。"],
+    "Só o dono do servidor e os administradores dão títulos.": ["Only the server owner and administrators give titles.", "称号を付けられるのはサーバーの所有者と管理者だけです。"],
+    "Um administrador não muda os títulos do dono.": ["An administrator can't change the owner's titles.", "管理者は所有者の称号を変更できません。"],
+    "Cargo: dono, admin ou nenhum.": ["Role: owner, admin or none.", "役割: 所有者、管理者、またはなし。"],
+    "Só o dono dá ou tira o cargo de administrador.": ["Only the owner gives or removes the administrator role.", "管理者の役割を付け外しできるのは所有者だけです。"],
+    "O cargo de dono só muda no aparelho do servidor.": ["The owner role can only be changed on the server device.", "所有者の役割はサーバーの端末でのみ変更できます。"],
+    // nomes únicos
+    "Esse nome já é de outra conta. Escolha outro.": ["That name already belongs to another account. Choose another one.", "その名前はすでに別のアカウントが使っています。別の名前を選んでください。"],
+    "Esse nome é de uma conta deste servidor. Entre na conta ou escolha outro nome.": ["That name belongs to an account on this server. Sign in to it or choose another name.", "その名前はこのサーバーのアカウントのものです。そのアカウントでログインするか、別の名前を選んでください。"],
+    "Enquanto você confirmava, outra pessoa ficou com esse nome. Crie a conta de novo com outro nome.": ["While you were confirming, someone else took that name. Create the account again with another name.", "確認している間に、別の人がその名前を使いました。別の名前でアカウントを作り直してください。"],
+    // IK
+    "Pés no chão (IK): as pernas se ajustam a degraus e rampas": ["Feet on the ground (IK): legs adapt to steps and slopes", "足を地面に（IK）：段差や坂に脚が合わせます"],
+  });
+})();

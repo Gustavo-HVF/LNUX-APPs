@@ -60,9 +60,13 @@
         if (form) { form.parar(); form = null; }
         const nome = C.campoDoNome(C.nomeDoJogo.ler());
         const aviso = el("p", { class: "conta-msg erro", role: "alert", hidden: true });
-        const jogar = () => {
+        const jogar = async () => {
           const n = nome.ler();
           if (!C.nomeDoJogo.valido(n)) { aviso.textContent = t("Diga o seu nome (pelo menos 2 letras)."); aviso.hidden = false; nome.campo.focus(); return; }
+          // o nome de uma conta deste servidor não serve para quem joga sem conta
+          if (!C.contas.souDonoDoServidor() && !(await C.contas.nomeLivre(n))) {
+            aviso.textContent = t("Esse nome é de uma conta deste servidor. Entre na conta ou escolha outro nome."); aviso.hidden = false; nome.campo.focus(); return;
+          }
           C.nomeDoJogo.gravar(n);
           acabar("jogar");
         };
@@ -98,13 +102,19 @@
   };
 
   /** Trocar o nome de quem joga sem conta (no menu da conta do site). Resolve com o nome novo, ou null. */
-  C.trocarNomeDoJogo = async function () {
+  C.trocarNomeDoJogo = async function ({ aviso = "" } = {}) {
     const nome = C.campoDoNome(C.nomeDoJogo.ler());
-    const r = await LNUX.dialogo({ titulo: t("Seu nome"), corpo: el("div", { class: "ajustes" }, nome.corpo, el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Como os outros vão te ver"))),
-      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: () => nome.ler() }] });
-    if (r === null || r === undefined) return null;
-    if (!C.nomeDoJogo.valido(r)) { LNUX.aviso(t("Diga o seu nome (pelo menos 2 letras)."), "alerta"); return null; }
-    C.nomeDoJogo.gravar(r);
-    return r;
+    let erro = aviso;
+    for (let vez = 0; vez < 5; vez++) {
+      const r = await LNUX.dialogo({ titulo: t("Seu nome"), corpo: el("div", { class: "ajustes" }, erro ? el("p", { class: "conta-msg erro", role: "alert" }, t(erro)) : null, nome.corpo,
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Como os outros vão te ver"))),
+        botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Salvar", primario: true, valor: () => nome.ler() }] });
+      if (r === null || r === undefined) return null;
+      if (!C.nomeDoJogo.valido(r)) { erro = "Diga o seu nome (pelo menos 2 letras)."; continue; }
+      if (!C.contas.souDonoDoServidor() && !(await C.contas.nomeLivre(r))) { erro = "Esse nome é de uma conta deste servidor. Entre na conta ou escolha outro nome."; nome.campo.value = r; continue; }
+      C.nomeDoJogo.gravar(r);
+      return r;
+    }
+    return null;
   };
 })();

@@ -278,6 +278,8 @@ function lerEmail(bruto) {
     console.log("  ✖ " + (e && e.stack || e));
     try { await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-webc-erro.png") }); } catch (e2) { /* sem tela */ }
   } finally {
+    // as contas do teste saem do servidor: os nomes "Ana" e "Bia" voltam a servir para quem joga sem conta nos outros testes
+    for (const p of [ana, bia]) await p.ev(async () => { await C.contas.carregar(); if (C.contas.eu) await C.contas.apagar("segredo123"); }).catch(() => {});
     await navegador.close();
     smtp.srv.close();
   }

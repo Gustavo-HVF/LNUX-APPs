@@ -238,7 +238,8 @@
           m ? grupo(t("Câmera e andar"),
             faixa("Sensibilidade da câmera", 0.3, 2.5, 0.1, m.cfg.sensibilidade || 1, (v) => { m.cfg.sensibilidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×"),
             chave("Inverter a câmera (para cima e para baixo)", m.cfg.inverterY, (v) => { m.cfg.inverterY = v; m.salvarCfg(); }),
-            faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade || 1, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×")) : grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar."))),
+            faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade || 1, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×"),
+            chave("Pés no chão (IK): as pernas se ajustam a degraus e rampas", m.cfg.ik !== false, (v) => { m.cfg.ik = v; m.salvarCfg(); })) : grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar."))),
           grupo("", el("p", { class: "jogo-nota" }, t("No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima."))),
         ];
       }

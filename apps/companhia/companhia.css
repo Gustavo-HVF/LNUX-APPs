@@ -945,3 +945,24 @@
 .sketchfab-info .linha { gap: 6px; flex-wrap: wrap; }
 .loja-credito { margin: 0; font-size: .9em; color: var(--texto-2); }
 .loja-credito a { color: inherit; text-decoration: underline; }
+
+/* ── títulos das contas (Admin, Criador, VIP...): selos na cor de cada um ── */
+.selos-titulos { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; vertical-align: middle; }
+.selos-titulos.pequenos { gap: 4px; margin-inline-start: 6px; }
+.selo-titulo { --selo: #6b7280; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; background: var(--selo); color: #fff;
+  font-size: .78rem; font-weight: 800; letter-spacing: .03em; text-transform: uppercase; line-height: 1.3; white-space: nowrap; border: 0; font-family: inherit; }
+.selos-titulos.pequenos .selo-titulo { padding: 1px 7px; font-size: .66rem; }
+.perfil-pagina > .selos-titulos { margin: 8px 0 0; }
+.perfil-cartao .perfil-cabeca .selos-titulos { justify-content: flex-start; margin: 4px 0; }
+.msg .selos-titulos.pequenos { margin: 0 4px 0 0; }
+.janela-titulos { min-width: min(440px, 84vw); }
+.titulos-atuais, .titulos-prontos { display: flex; flex-wrap: wrap; gap: 8px; }
+.selo-titulo.opcao { cursor: pointer; opacity: .55; outline-offset: 2px; }
+.selo-titulo.opcao.ativo { opacity: 1; box-shadow: 0 0 0 2px var(--panel, #fff), 0 0 0 4px var(--selo); }
+.selo-titulo.opcao:focus-visible { outline: 3px solid var(--destaque); }
+.selo-tirar { border: 0; background: rgba(0, 0, 0, .25); color: #fff; width: 18px; height: 18px; border-radius: 50%; padding: 0; font-size: 13px; line-height: 1; cursor: pointer; }
+.janela-titulos .linha input[type="color"] { width: 44px; height: 38px; padding: 0; border: 0; background: none; }
+/* o nome já é de outra conta (no cadastro) */
+.conta-nome { display: grid; gap: 4px; }
+.conta-nome-aviso { color: var(--perigo); font-weight: 600; }
+.lnux-entrada[aria-invalid="true"] { border-color: var(--perigo) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--perigo) 30%, transparent); }
