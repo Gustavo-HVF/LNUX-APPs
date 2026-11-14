@@ -199,6 +199,19 @@ de salas (ou no menu *Conta*):
   (`~/.lnux-apps/email.json`, permissão 600) e nunca volta para a tela. Há um botão de e-mail de teste. Também: a
   idade mínima, **só entra nas salas quem tem conta**, e a lista das contas (com a opção de apagar uma).
 - Sem o e-mail configurado, dá para jogar e entrar, mas não para criar contas.
+- **Configurar o Gmail** (quem manda os códigos é o próprio servidor: não precisa configurar nada no app de e-mail do
+  celular):
+
+  | Campo | O que pôr |
+  |---|---|
+  | Servidor SMTP | `smtp.gmail.com` (o **de mandar**; `imap.gmail.com` é o de receber e não serve) |
+  | Porta / Segurança | `465` com SSL/TLS (ou `587` com STARTTLS) |
+  | Usuário e Remetente | o seu e-mail inteiro do Gmail |
+  | Senha | uma **senha de app** de 16 letras: ligue a verificação em duas etapas e crie em [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) |
+
+  Se o servidor posto for o de receber (IMAP/POP, portas 993, 143, 995 ou 110), o formulário avisa e o botão
+  **Corrigir** troca pelo de mandar; o servidor também recusa salvar assim. Os erros do envio vêm explicados (senha
+  recusada, porta bloqueada, segurança que não combina com a porta).
 
 ### Loja: mapas, personagens e animações
 

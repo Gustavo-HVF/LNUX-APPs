@@ -103,7 +103,8 @@ function lerEmail(bruto) {
     await visita.pagina.goto(`${BASE}/apps/companhia/`);
     await visita.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
     const abertura = await visita.ev(() => ({ ...window.__abertura, depois: document.documentElement.hasAttribute("data-carregando") }));
-    ok(abertura.carregando && abertura.app === "hidden" && abertura.logo && !abertura.depois, "ao abrir, só o logo do WEBC aparece até a tela de entrar ficar pronta (o layout do chat bot não pisca)");
+    const abriuCerto = abertura.carregando && abertura.app === "hidden" && abertura.logo && !abertura.depois;
+    ok(abriuCerto, "ao abrir, só o logo do WEBC aparece até a tela de entrar ficar pronta (o layout do chat bot não pisca)" + (abriuCerto ? "" : " " + JSON.stringify(abertura)));
     const ingles = await visita.ev(() => ({ lang: document.documentElement.lang, entrar: document.querySelector("#conta-entrar").textContent, sem: document.querySelector("#inicio-sem-conta").textContent,
       email: document.querySelector('.tela-inicio input[type="email"]').getAttribute("aria-label"), ativo: document.querySelector(".webc-login-idiomas .ativo").dataset.idioma }));
     ok(ingles.lang === "en" && ingles.entrar === "Log in" && ingles.sem === "Play without an account" && ingles.ativo === "en", `o navegador em inglês já abre em inglês ("${ingles.entrar}", "${ingles.sem}")`);

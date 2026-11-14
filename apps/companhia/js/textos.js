@@ -784,3 +784,29 @@
     [/^O arquivo passa de (\d+) MB\.$/, "The file is over $1 MB.", "ファイルが $1 MB を超えています。"],
   );
 })();
+
+// O e-mail do servidor: o servidor de receber (IMAP/POP) no lugar do de mandar, a senha de app do Gmail e os erros do envio
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Esse é o servidor de receber e-mails ({tipo}), não o de mandar. Para mandar os códigos, use o SMTP: {smtp}.": ["That's the server for receiving email ({tipo}), not for sending. To send the codes, use the SMTP server: {smtp}.", "それはメールを受信するサーバー（{tipo}）で、送信用ではありません。コードを送るには SMTP サーバーを使ってください: {smtp}。"],
+    "porta": ["port", "ポート"], "Corrigir": ["Fix it", "修正"], "Servidor SMTP (de mandar)": ["SMTP server (for sending)", "SMTP サーバー（送信用）"],
+    "Use uma conta de e-mail sua. Quem manda os códigos é este servidor: não precisa configurar nada no app de e-mail do celular. A senha fica guardada só no servidor e não volta para a tela.": ["Use an email account of your own. This server sends the codes: you don't need to set up anything in your phone's email app. The password is stored only on the server and never comes back to the screen.", "ご自分のメールアカウントを使ってください。コードを送るのはこのサーバーなので、スマホのメールアプリで設定する必要はありません。パスワードはサーバーだけに保存され、画面には戻りません。"],
+    "No Gmail: ligue a verificação em duas etapas e crie uma senha de app (16 letras) em": ["On Gmail: turn on 2-Step Verification and create an app password (16 letters) at", "Gmail の場合: 2 段階認証プロセスをオンにして、アプリ パスワード（16 文字）を次の場所で作成します:"],
+    ". Use essa senha aqui, não a senha normal da conta. O servidor é smtp.gmail.com, porta 465 (SSL/TLS).": [". Use that password here, not your normal account password. The server is smtp.gmail.com, port 465 (SSL/TLS).", "。ここではそのパスワードを使い、通常のアカウントのパスワードは使わないでください。サーバーは smtp.gmail.com、ポート 465（SSL/TLS）です。"],
+    // o que o servidor responde
+    "O Gmail recusou o usuário ou a senha. Use uma senha de app (16 letras, criada em myaccount.google.com/apppasswords, com a verificação em duas etapas ligada), não a senha normal da conta; o usuário é o e-mail inteiro.": ["Gmail rejected the username or password. Use an app password (16 letters, created at myaccount.google.com/apppasswords with 2-Step Verification on), not your normal account password; the username is the full email address.", "Gmail がユーザー名またはパスワードを拒否しました。通常のアカウントのパスワードではなく、アプリ パスワード（2 段階認証プロセスをオンにして myaccount.google.com/apppasswords で作成する 16 文字）を使ってください。ユーザー名はメールアドレス全体です。"],
+    "O servidor de e-mail pede usuário e senha: preencha os dois.": ["The email server requires a username and password: fill in both.", "メールサーバーはユーザー名とパスワードを必要としています。両方入力してください。"],
+    "Esse servidor só aceita a senha numa conexão segura: escolha SSL/TLS (porta 465) ou STARTTLS (porta 587).": ["That server only accepts the password over a secure connection: choose SSL/TLS (port 465) or STARTTLS (port 587).", "このサーバーは安全な接続でのみパスワードを受け付けます。SSL/TLS（ポート 465）か STARTTLS（ポート 587）を選んでください。"],
+    "O servidor de e-mail recusou o endereço para onde mandar.": ["The email server rejected the destination address.", "メールサーバーが送信先のアドレスを拒否しました。"],
+    "A segurança não combina com a porta: SSL/TLS é a 465 e STARTTLS é a 587.": ["The security doesn't match the port: SSL/TLS is 465 and STARTTLS is 587.", "セキュリティとポートが合っていません。SSL/TLS は 465、STARTTLS は 587 です。"],
+  });
+  C.PADROES.push(
+    [/^Esse é o servidor de receber e-mails \((IMAP|POP)\), não o de mandar\. Para mandar os códigos, use o SMTP: (.+), porta (\d+) \((SSL\/TLS|STARTTLS)\)\.$/, "That's the server for receiving email ($1), not for sending. To send the codes, use the SMTP server: $2, port $3 ($4).", "それはメールを受信するサーバー（$1）で、送信用ではありません。コードを送るには SMTP サーバーを使ってください: $2、ポート $3（$4）。"],
+    [/^O servidor de e-mail recusou o usuário ou a senha \((\d+)\)\. Confira os dois \(alguns provedores pedem uma senha de app\)\.$/, "The email server rejected the username or password ($1). Check both (some providers require an app password).", "メールサーバーがユーザー名またはパスワードを拒否しました（$1）。両方を確認してください（アプリ パスワードが必要なプロバイダーもあります）。"],
+    [/^Não achei o servidor de e-mail “(.+)”: confira o nome \(ou se o aparelho tem internet\)\.$/, "Couldn't find the email server “$1”: check the name (or whether the device has internet).", "メールサーバー「$1」が見つかりません。名前を確認してください（またはインターネットにつながっているか）。"],
+    [/^O servidor de e-mail \((.+), porta (\d+)\) não respondeu\. A rede pode estar bloqueando essa porta: tente a outra \(465 com SSL\/TLS ou 587 com STARTTLS\)\.$/, "The email server ($1, port $2) didn't respond. The network may be blocking that port: try the other one (465 with SSL/TLS or 587 with STARTTLS).", "メールサーバー（$1、ポート $2）が応答しません。ネットワークがそのポートをブロックしている可能性があります。もう一方を試してください（SSL/TLS なら 465、STARTTLS なら 587）。"],
+    [/^O servidor de e-mail \((.+)\) recusou a conexão na porta (\d+): confira a porta\.$/, "The email server ($1) refused the connection on port $2: check the port.", "メールサーバー（$1）がポート $2 での接続を拒否しました。ポートを確認してください。"],
+  );
+})();

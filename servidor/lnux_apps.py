@@ -603,6 +603,85 @@ def email_configurado(cfg: dict | None = None) -> bool:
     return bool(cfg.get("servidor") and cfg.get("remetente"))
 
 
+# O SMTP (o servidor de MANDAR) de cada provedor: domínio → (servidor, porta, segurança)
+EMAIL_PROVEDORES = {
+    "gmail.com": ("smtp.gmail.com", 465, "ssl"), "googlemail.com": ("smtp.gmail.com", 465, "ssl"),
+    "outlook.com": ("smtp-mail.outlook.com", 587, "starttls"), "hotmail.com": ("smtp-mail.outlook.com", 587, "starttls"),
+    "live.com": ("smtp-mail.outlook.com", 587, "starttls"), "office365.com": ("smtp.office365.com", 587, "starttls"),
+    "yahoo.com": ("smtp.mail.yahoo.com", 465, "ssl"), "yahoo.com.br": ("smtp.mail.yahoo.com", 465, "ssl"),
+}
+# portas dos servidores de RECEBER e-mails (o engano mais comum: copiar o IMAP do app de e-mail do celular)
+PORTAS_DE_RECEBER = {993: "IMAP", 143: "IMAP", 995: "POP", 110: "POP"}
+
+
+def smtp_sugerido(cfg: dict) -> tuple:
+    """O SMTP que combina com a conta, pelo domínio do usuário, do remetente ou do próprio servidor."""
+    for texto in (cfg.get("usuario"), cfg.get("remetente"), cfg.get("servidor")):
+        dominio = str(texto or "").strip().lower().rsplit("@", 1)[-1]
+        for d, smtp in EMAIL_PROVEDORES.items():
+            if dominio == d or dominio.endswith("." + d):
+                return smtp
+    base = re.sub(r"^(imap|pop3?|mail)\.", "", str(cfg.get("servidor") or "").strip(), flags=re.I)
+    return ("smtp." + base if base else "smtp.seu-provedor.com", 465, "ssl")
+
+
+def descrever_smtp(smtp: tuple) -> str:
+    return f"{smtp[0]}, porta {smtp[1]} ({'SSL/TLS' if smtp[2] == 'ssl' else 'STARTTLS'})"
+
+
+def erro_de_receber(cfg: dict, tipo: str | None = None) -> str | None:
+    """Se o servidor configurado é o de receber e-mails (IMAP/POP), a explicação do que pôr; senão, None."""
+    host = str(cfg.get("servidor") or "").strip().lower()
+    try:
+        porta = int(cfg.get("porta") or 0)
+    except (TypeError, ValueError):
+        porta = 0
+    tipo = tipo or PORTAS_DE_RECEBER.get(porta) or ("IMAP" if host.startswith("imap.") else "POP" if re.match(r"pop3?\.", host) else None)
+    if not tipo:
+        return None
+    return (f"Esse é o servidor de receber e-mails ({tipo}), não o de mandar. Para mandar os códigos, use o SMTP: "
+            f"{descrever_smtp(smtp_sugerido(cfg))}.")
+
+
+def seguranca_da_porta(porta: int, seguranca: str) -> str:
+    """A 465 é sempre SSL/TLS e a 587 é sempre STARTTLS: com as duas trocadas, a conexão nem começa."""
+    if porta == 465 and seguranca == "starttls":
+        return "ssl"
+    if porta == 587 and seguranca == "ssl":
+        return "starttls"
+    return seguranca
+
+
+def explicar_erro_email(e: Exception, cfg: dict, porta: int) -> str:
+    """O erro do envio, em palavras: o que provavelmente está errado na configuração do e-mail."""
+    import smtplib
+    import ssl
+    texto, host = str(e), str(cfg.get("servidor") or "")
+    gmail = "gmail" in host.lower() or str(cfg.get("usuario") or "").lower().endswith(("@gmail.com", "@googlemail.com"))
+    if isinstance(e, (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected)) and re.search(r"Gimap|IMAP|\* OK|\+OK|POP3", texto, re.I):
+        return erro_de_receber(cfg, "POP" if re.search(r"\+OK|POP3", texto, re.I) else "IMAP")
+    if isinstance(e, smtplib.SMTPAuthenticationError):
+        if gmail:
+            return ("O Gmail recusou o usuário ou a senha. Use uma senha de app (16 letras, criada em myaccount.google.com/apppasswords, "
+                    "com a verificação em duas etapas ligada), não a senha normal da conta; o usuário é o e-mail inteiro.")
+        return f"O servidor de e-mail recusou o usuário ou a senha ({e.smtp_code}). Confira os dois (alguns provedores pedem uma senha de app)."
+    if isinstance(e, smtplib.SMTPResponseException) and (e.smtp_code == 530 or "authentication required" in texto.lower()):
+        return "O servidor de e-mail pede usuário e senha: preencha os dois."
+    if isinstance(e, smtplib.SMTPNotSupportedError) and "auth" in texto.lower():
+        return "Esse servidor só aceita a senha numa conexão segura: escolha SSL/TLS (porta 465) ou STARTTLS (porta 587)."
+    if isinstance(e, smtplib.SMTPRecipientsRefused):
+        return "O servidor de e-mail recusou o endereço para onde mandar."
+    if isinstance(e, ssl.SSLError):
+        return "A segurança não combina com a porta: SSL/TLS é a 465 e STARTTLS é a 587."
+    if isinstance(e, socket.gaierror):
+        return f"Não achei o servidor de e-mail “{host}”: confira o nome (ou se o aparelho tem internet)."
+    if isinstance(e, (socket.timeout, TimeoutError)):
+        return f"O servidor de e-mail ({host}, porta {porta}) não respondeu. A rede pode estar bloqueando essa porta: tente a outra (465 com SSL/TLS ou 587 com STARTTLS)."
+    if isinstance(e, ConnectionRefusedError):
+        return f"O servidor de e-mail ({host}) recusou a conexão na porta {porta}: confira a porta."
+    return f"Não consegui mandar o e-mail ({type(e).__name__}: {texto[:200]}). Confira o e-mail do servidor (Conta › Contas e e-mail do servidor)."
+
+
 def mandar_email(para: str, assunto: str, texto: str) -> None:
     """Manda um e-mail pela conta de e-mail que o dono configurou (SMTP)."""
     import smtplib
@@ -618,6 +697,10 @@ def mandar_email(para: str, assunto: str, texto: str) -> None:
     msg["To"] = para
     msg.set_content(texto)
     seguranca, porta = cfg.get("seguranca", "starttls"), int(cfg.get("porta") or (465 if cfg.get("seguranca") == "ssl" else 587))
+    seguranca = seguranca_da_porta(porta, seguranca)
+    receber = erro_de_receber(cfg)
+    if receber:
+        raise ErroPonte(502, receber)
     try:
         if seguranca == "ssl":
             conexao = smtplib.SMTP_SSL(cfg["servidor"], porta, context=ssl.create_default_context(), timeout=25)
@@ -630,7 +713,7 @@ def mandar_email(para: str, assunto: str, texto: str) -> None:
                 conexao.login(cfg["usuario"], cfg.get("senha", ""))
             conexao.send_message(msg)
     except (OSError, smtplib.SMTPException) as e:
-        raise ErroPonte(502, f"Não consegui mandar o e-mail ({type(e).__name__}: {e}). Confira o e-mail do servidor (Conta › Contas e e-mail do servidor).")
+        raise ErroPonte(502, explicar_erro_email(e, cfg, porta))
 
 
 def cabe_no_disco(pasta: Path, tamanho: int) -> None:
@@ -2731,6 +2814,8 @@ class Manipulador(BaseHTTPRequestHandler):
                             cfg["senha"] = str(e["senha"])[:500]
                         if cfg.get("remetente") and not EMAIL_RE.fullmatch(cfg["remetente"]):
                             raise ErroPonte(400, "O remetente precisa ser um e-mail.")
+                        if cfg.get("servidor") and erro_de_receber(cfg):
+                            raise ErroPonte(400, erro_de_receber(cfg))
                         arquivo = DADOS / "email.json"
                         temporario = arquivo.with_suffix(".tmp")
                         temporario.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), "utf-8")
