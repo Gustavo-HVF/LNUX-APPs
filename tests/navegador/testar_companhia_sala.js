@@ -9,6 +9,7 @@
 // bate-papo com balão, o aceno, as opções mudadas depois (sala privada some da lista), entrar pelo link, sair e
 // fechar a sala — e que o link da sala não dá acesso à ponte.
 const { chromium } = require("playwright");
+const { menus, nomeGuardado } = require("./companhia_menus.js");
 const fs = require("fs");
 const path = require("path");
 const { mapaDeTeste } = require("./companhia_arquivos.js");
@@ -21,15 +22,22 @@ let passos = 0;
 const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { erros.push(m); console.log("  ✖ " + m); } };
 
 (async () => {
-  const navegador = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] });
+  // um navegador para cada pessoa, como na vida real (cada uma no seu aparelho): sem placa de vídeo, num navegador só, o
+  // desenho de uma trava o da outra (o processo de vídeo é um só) e o servidor tira da sala quem some por 45 s
+  const navegadores = [];
+  const abrir = async () => { const n = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required"] }); navegadores.push(n); return n; };
   const consola = [];
   const pessoa = async (nome) => {
-    const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
+    const contexto = await (await abrir()).newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|voz do navegador/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
     pagina.on("pageerror", (e) => consola.push(`[${nome}] [pageerror] ${e.message}`));
-    return { pagina, ev: (f, a) => pagina.evaluate(f, a), menus: () => pagina.locator(".lnux-menubar > button").allTextContents() };
+    if (nome === "Bia") await nomeGuardado(contexto, nome); // a Bia já passou pela tela de entrar antes (chega pelo link)
+    // a luz realista fica desligada aqui: sem placa de vídeo, os shaders dela travam a página por dezenas de segundos (e o
+    // servidor tira da sala quem some por 45 s). A luz tem o teste dela (companhia_luzes).
+    await contexto.addInitScript(() => { try { localStorage.setItem("companhia.luz", JSON.stringify({ realista: false, sombras: false })); } catch (e) { /* sem armazenamento */ } });
+    return { pagina, ev: (f, a) => pagina.evaluate(f, a), ...menus(pagina), menus: () => pagina.locator(".lnux-menubar > button").allTextContents() };
   };
   const ana = await pessoa("Ana"), bia = await pessoa("Bia");
   try {
@@ -51,55 +59,68 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(!(await ana.ev(() => !!document.querySelector(".lnux-dialogo"))), "\"Criar uma conta\" abre no próprio cartão (sem janela por cima)");
     await ana.pagina.click('.tela-inicio .conta-link:text-is("Voltar"), .tela-inicio .conta-link:text-is("Entrar")');
 
-    // ── jogar sem conta: o início do site (três cartões) ──
+    // ── jogar sem conta: o nome no próprio cartão; depois, o início do site ──
     await ana.pagina.click("#inicio-sem-conta");
+    await ana.pagina.waitForSelector("#inicio-nome");
+    await ana.pagina.click("#inicio-jogar");
+    await ana.pagina.waitForSelector('.tela-inicio .conta-msg.erro:has-text("pelo menos 2 letras")');
+    ok(await ana.ev(() => !!document.querySelector(".tela-inicio") && !document.querySelector(".lnux-dialogo")), "\"Jogar sem conta\" pede o nome no próprio cartão, e sem nome não entra");
+    await ana.pagina.fill("#inicio-nome", "Ana");
+    await ana.pagina.click("#inicio-jogar");
     await ana.pagina.waitForFunction(() => !document.querySelector(".tela-inicio"));
     await ana.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     const site = await ana.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.dataset.ir).join(), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.dataset.ir).join(),
       paleta: !!document.querySelector("#webc-tema svg"), idioma: !!document.querySelector("#webc-idioma"), eu: !!document.querySelector("#webc-eu") }));
     ok(site.cartoes === "loja,sala,perfil" && site.nav === "loja,sala,perfil" && site.paleta && site.idioma && site.eu, "jogar sem conta abre o início: os cartões Loja, Sala e Perfil, e no alto a paleta de temas, o idioma e a conta");
+    ok(await ana.ev(() => [...document.querySelectorAll(".webc-quadrado")].map((q) => q.dataset.quadrado).join() === "chatbot,novidades,widgets" && /Ana/.test(document.querySelector("#webc-eu").textContent)),
+      "embaixo dos cartões, os quadrados menores: Chat bot, Novidades e Widgets; no alto, o nome dito na tela de entrar");
 
     // ── conversar com a personagem: pelo menu da conta ──
-    await ana.pagina.click("#webc-eu");
-    await ana.pagina.click('.webc-menu [data-acao="conversar"]');
+    await ana.pagina.click('.webc-quadrado[data-quadrado="chatbot"]');
     await ana.pagina.waitForFunction(() => window.Companhia && window.Companhia.live2d !== undefined, null, { timeout: 20000 });
     let m = await ana.menus();
     ok(["Conversa", "IA", "Voz"].every((x) => m.includes(x)) && !m.includes("Sala") && (await ana.ev(() => window.Companhia.modo === "conversa" && document.documentElement.dataset.modo === "conversa" && document.querySelector("#chip-sala").hidden)),
-      "escolhendo conversar: o chat bot de sempre (menus Conversa, IA e Voz; sem o menu Sala)");
+      "o quadrado Chat bot abre o chat bot de sempre (menus Conversa, IA e Voz; sem o menu Sala)");
     await ana.pagina.click('.lnux-menubar > button:text-is("Ajuda")');
     await ana.pagina.click('.lnux-menu button:has(.rotulo:text-is("Trocar de modo (jogar com outras pessoas)..."))');
     await ana.pagina.waitForSelector(".tela-inicio #inicio-sem-conta");
     ok(true, "Ajuda › Trocar de modo volta à tela de entrar");
+    await ana.pagina.click("#inicio-sem-conta");
+    ok((await ana.pagina.inputValue("#inicio-nome")) === "Ana", "o nome fica guardado para a próxima vez");
 
     // ── jogar: sem as funções de IA; a página Sala lista as salas ──
-    await ana.pagina.click("#inicio-sem-conta");
+    await ana.pagina.click("#inicio-jogar");
     await ana.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     await ana.pagina.click('.webc-cartao[data-ir="sala"]');
     await ana.pagina.waitForSelector(".salas #sala-criar");
     ok(await ana.ev(() => document.querySelector(".webc-painel-titulo").textContent === "SALA" && !!document.querySelector(".salas .webc-busca-campo") && !!document.querySelector(".salas .webc-filtro")),
       "a página Sala: o título SALA, a pesquisa e o filtro (no molde da loja)");
-    m = await ana.menus();
+    ok(await ana.ev(() => !document.querySelector('.salas input[aria-label="Seu nome"]') && !document.querySelector("#sala-loja-personagem") && !!document.querySelector('.salas select[aria-label="Sua personagem"]')),
+      "na página Sala não há mais o nome nem \"Personagens da loja\": só a personagem com que se entra");
+    await ana.ev(() => C.webc.esconder());
+    m = await ana.topo();
+    await ana.ev(() => C.webc.ir("sala"));
     const semIA = await ana.ev(() => {
       const some = (s) => { const e = document.querySelector(s); return !e || getComputedStyle(e).display === "none"; };
       return { modo: window.Companhia.modo, selo: some("#selo-ia"), gasto: some("#gasto"), mic: some("#botao-mic"), rodape: some(".conversa-rodape"), afeto: some("#chip-afeto"), nucleo: some("#nucleo-aviso"), chip: !document.querySelector("#chip-sala").hidden };
     });
-    ok(!m.includes("IA") && !m.includes("Conversa") && !m.includes("Voz") && m.includes("Sala") && m.includes("Movimento"), `jogar: os menus são ${m.join(", ")} (sem IA, Conversa nem Voz)`);
+    ok(m.join() === "personagem,sala,ajuda,acessibilidade,grafico,controle" && (await ana.ev(() => getComputedStyle(document.querySelector(".lnux-menubar")).display === "none")),
+      `jogar: no lugar dos menus, o ☰ abre a janela Opções (${m.join(", ")}); sem IA, Conversa nem Voz`);
     ok(semIA.modo === "jogar" && semIA.selo && semIA.gasto && semIA.mic && semIA.rodape && semIA.afeto && semIA.nucleo && semIA.chip, "jogar: somem o selo da IA, os tokens, o microfone, \"Falar\", o afeto e o aviso do Live2D; aparece o botão da sala");
     await ana.pagina.waitForSelector(".salas .loja-vazio:not([hidden])");
     ok(await ana.ev(() => /Nenhuma sala pública aberta/.test(document.querySelector(".salas .loja-vazio").textContent) && !document.querySelector(".salas .loja-dono").hidden),
       "jogar: a página Sala lista as salas deste servidor (vazia), com \"Criar sala\"; o dono do servidor vê a opção de deixar os outros criarem");
     await ana.ev(() => C.webc.esconder());
-    await ana.pagina.click('.lnux-menubar > button:text-is("Personagem")');
-    const itens = await ana.pagina.locator(".lnux-menu .rotulo").allTextContents();
-    await ana.pagina.keyboard.press("Escape");
-    ok(!itens.some((i) => /Perfil e personalidade|Voz desta personagem|Áreas de toque/.test(i)) && itens.some((i) => /Roupas/.test(i)), "jogar: o menu Personagem não tem perfil, voz nem áreas de toque (coisas do chat bot)");
+    await ana.pagina.click("#jogo-menu");
+    await ana.pagina.click('.jogo-opcoes [data-secao="personagem"]');
+    const itens = await ana.pagina.locator(".jogo-opcoes-lista .rotulo").allTextContents();
+    await ana.fecharOpcoes();
+    ok(!itens.some((i) => /Perfil e personalidade|Voz desta personagem|Áreas de toque|^Loja/.test(i)) && itens.some((i) => /Roupas/.test(i)) && itens.some((i) => /Captura de movimento/.test(i)),
+      "jogar: Opções › Personagem tem roupas e captura de movimento, mas não perfil, voz, áreas de toque (coisas do chat bot) nem a loja");
 
     // ── a Ana cria a sala, com as opções e um cenário ──
     await ana.ev(async (b64) => { await C.mapas.guardar("Praça", new Map([["praca.glb", new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))])]]), "praca.glb"); window.Companhia.janelaSala(); }, mapaDeTeste().toString("base64"));
     await ana.pagina.waitForSelector(".salas #sala-criar");
-    await ana.pagina.click("#sala-criar");
-    await ana.pagina.waitForSelector('.lnux-aviso:has-text("Diga o seu nome")');
-    await ana.pagina.fill('.salas input[aria-label="Seu nome"]', "Ana");
     await ana.pagina.click("#sala-criar");
     await ana.pagina.waitForSelector('.lnux-dialogo input[aria-label="Nome da sala"]');
     ok(await ana.ev(() => document.querySelector('.lnux-dialogo input[aria-label="Nome da sala"]').value === "Sala de Ana" && document.querySelector('.form-sala [data-publica="true"]').classList.contains("ativa")),
@@ -134,7 +155,6 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(/Praça da Ana/.test(naLista.texto) && /Venha passear/.test(naLista.texto) && /1\/4/.test(naLista.texto) && /por Ana/.test(naLista.texto) && naLista.cadeado && naLista.img,
       "a Bia vê a sala na lista: nome, descrição, quem criou, 1/4 pessoas, o cadeado da senha e a miniatura do cenário");
     ok(naLista.criar && !naLista.ponte && !naLista.dono, "mesmo sem a ponte, quem chega pode criar a sua sala (o dono deixou); só não vê a opção do dono");
-    await bia.pagina.fill('.salas input[aria-label="Seu nome"]', "Bia");
     await bia.pagina.click(`.cartao-sala[data-codigo="${codigo}"] .entrar`);
     await bia.pagina.waitForSelector('.lnux-dialogo input[aria-label="Senha"]', { timeout: 30000 });
     await bia.pagina.fill('.lnux-dialogo input[aria-label="Senha"]', "errada");
@@ -170,7 +190,11 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     const dist = Math.hypot(...pos[0].map((v, i) => v - pos[1].p[i]));
     ok(pos[1].p[2] > antes[2] + 0.5 && dist < 0.4 && pos[1].estado === "parado", `a Ana anda (W) e a Bia vê a personagem dela andar e parar no mesmo lugar (diferença de ${dist.toFixed(2)} m)`);
 
-    // ── bate-papo e gestos ──
+    // ── bate-papo e expressões ──
+    ok(await bia.ev(() => getComputedStyle(document.querySelector("#conversa")).display === "none" && !!document.querySelector(".jogo-canto #jogo-chat") && !!document.querySelector(".jogo-canto #botao-video")),
+      "no jogo, o bate-papo fica fechado; no canto, os botões do bate-papo e do vídeo");
+    await bia.pagina.click("#jogo-chat");
+    await bia.pagina.waitForSelector("#texto:visible");
     await bia.pagina.fill("#texto", "oi, Ana! <b>tudo bem?</b>");
     await bia.pagina.press("#texto", "Enter");
     await ana.pagina.waitForFunction(() => /oi, Ana!/.test(document.querySelector("#mensagens").textContent), null, { timeout: 20000 });
@@ -178,12 +202,22 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     const papo = await Promise.all([ana.ev(() => { const msg = [...document.querySelectorAll("#mensagens .msg.ela")].pop(), r = [...window.Companhia.sala.remotos.values()][0]; return { texto: msg.textContent, html: msg.querySelector(".t").innerHTML, balao: !!r.balao }; }),
       bia.ev(() => { const msg = [...document.querySelectorAll("#mensagens .msg.eu")].pop(); return { meu: !!msg && /oi, Ana!/.test(msg.textContent), campo: document.querySelector("#texto").value, ia: window.Companhia.ia.gasto.pedidos + window.Companhia.ia.gasto.locais }; })]);
     ok(/^Bia: oi, Ana!/.test(papo[0].texto) && papo[0].balao && papo[1].meu && papo[1].campo === "", "o que a Bia escreve chega para a Ana com o nome dela e um balão em cima da personagem");
+    ok(await ana.ev(() => { const n = document.querySelector("#jogo-chat .jogo-nao-lidas"); return !n.hidden && +n.textContent >= 1; }), "com o bate-papo fechado, a Ana vê o número de mensagens novas no botão");
+    await ana.pagina.click("#jogo-chat");
+    ok(await ana.ev(() => document.querySelector("#jogo-chat .jogo-nao-lidas").hidden && getComputedStyle(document.querySelector("#conversa")).display !== "none"), "abrindo o bate-papo, o número some");
+    await ana.pagina.click("#jogo-chat");
+    await bia.pagina.click("#jogo-chat"); // fecha o bate-papo da Bia
     ok(/&lt;b&gt;/.test(papo[0].html) && papo[1].ia === 0 && (await bia.ev(() => document.querySelectorAll("#mensagens .msg.ela").length)) === 0, "a mensagem é só texto (nada de HTML) e nenhum chat bot responde: quem fala são as pessoas");
     await ana.pagina.click('#gestos button[aria-label="Acenar"]');
     await bia.pagina.waitForFunction(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return r.acenar > 0; }, null, { timeout: 15000 });
     await ana.pagina.click('#gestos button[aria-label="Feliz"]');
     await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].emocao === "feliz", null, { timeout: 15000 });
-    ok(true, "o aceno e a expressão (feliz) da Ana aparecem para a Bia");
+    ok(await ana.ev(() => document.querySelectorAll("#gestos.jogo-expressoes [data-expressao]").length === 9),
+      "o aceno e a expressão (feliz) da Ana aparecem para a Bia; a barra tem as 9 expressões");
+    await ana.pagina.mouse.click(300, 300);
+    await ana.pagina.keyboard.press("9");
+    await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].emocao === "pensativa", null, { timeout: 15000 });
+    ok(true, "a tecla 9 liga a expressão 9 (pensativa), e a Bia vê");
 
     // ── a aparência vai junto: tamanho, proporções, braços, peças escondidas e texturas trocadas ──
     const antesDoAjuste = await bia.ev(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return { escala: r.avatar.vrm.scene.scale.x, altura: r.altura }; });
@@ -223,8 +257,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(acesso.pastas === 401 && acesso.estado === 401 && acesso.fechar === 403 && acesso.mapa === 403, "com o link, a Bia não lê as pastas do aparelho, não troca o cenário nem fecha a sala da Ana");
 
     // ── a Ana muda as opções: privada, sem senha e sem bate-papo ──
-    await ana.pagina.click('.lnux-menubar > button:text-is("Sala")');
-    await ana.pagina.click('.lnux-menu button:has(.rotulo:text-is("Opções da sala (pública, senha, pessoas, bate-papo)..."))');
+    await ana.menu("Sala", "Opções da sala (pública, senha, pessoas, bate-papo)...");
     await ana.pagina.waitForSelector('.form-sala [data-publica="false"]');
     await ana.pagina.click('.form-sala [data-publica="false"]');
     await ana.pagina.check('.form-sala input[aria-label="Tirar a senha"]');
@@ -236,27 +269,28 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
       "a Ana deixa a sala privada (some da lista), tira a senha e desliga o bate-papo (a caixa de texto da Bia trava)");
 
     // ── sair e fechar ──
-    await bia.pagina.click('.lnux-menubar > button:text-is("Sala")');
-    await bia.pagina.click('.lnux-menu button:has(.rotulo:text-is("Sair da sala"))');
-    await ana.pagina.waitForFunction(() => window.Companhia.sala.remotos.size === 0 && /Bia saiu/.test(document.querySelector("#mensagens").textContent), null, { timeout: 20000 });
+    await bia.menu("Sala", "Sair da sala");
+    // (sem placa de vídeo, como aqui nos testes, o quadro depois que um avatar sai da cena pode levar dezenas de segundos)
+    await ana.pagina.waitForFunction(() => window.Companhia.sala.remotos.size === 0 && /Bia saiu/.test(document.querySelector("#mensagens").textContent), null, { timeout: 120000 });
     ok(await bia.ev(() => !window.Companhia.sala.dentro && location.hash === "#modo=jogar"), "a Bia sai da sala e a Ana é avisada (\"Bia saiu.\")");
     // pelo link (a sala agora é privada): ela aparece em destaque em cima da lista
     await bia.ev((c) => { window.Companhia.janelaSala(c); }, codigo); // (sem esperar a lista fechar)
     await bia.pagina.waitForSelector(`.salas-convite .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
     ok(await bia.ev((c) => !document.querySelector(`#salas-lista .cartao-sala[data-codigo="${c}"]`), codigo), "pelo link, a sala privada aparece em destaque (\"A sala do seu link\"), fora da lista pública");
     await bia.pagina.click(`.salas-convite .cartao-sala[data-codigo="${codigo}"] .entrar`);
-    await bia.pagina.waitForFunction(() => window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 60000 });
-    await ana.pagina.click('.lnux-menubar > button:text-is("Sala")');
-    await ana.pagina.click('.lnux-menu button:has(.rotulo:text-is("Fechar a sala para todos"))');
-    await bia.pagina.waitForFunction(() => !window.Companhia.sala.dentro && /A sala foi fechada/.test(document.querySelector("#mensagens").textContent), null, { timeout: 30000 });
+    await bia.pagina.waitForFunction(() => window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 120000 });
+    await ana.menu("Sala", "Fechar a sala para todos");
+    await bia.pagina.waitForFunction(() => !window.Companhia.sala.dentro && /A sala foi fechada/.test(document.querySelector("#mensagens").textContent), null, { timeout: 120000 });
     ok((await bia.ev(async (c) => (await fetch("/api/sala/" + c)).status, codigo)) === 404, "a Ana fecha a sala: a Bia é avisada e o link deixa de valer");
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {
     erros.push("exceção: " + e.message);
     console.log(e);
+    for (const [n, x] of [["Ana", ana], ["Bia", bia]]) console.log(`  [${n}]`, await x.ev(() => ({ dentro: !!(window.Companhia.sala && window.Companhia.sala.dentro), ocupado: window.Companhia.sala && window.Companhia.sala.ocupado, falhas: window.Companhia.sala && window.Companhia.sala.falhas, hash: location.hash, msgs: document.querySelector("#mensagens").textContent.slice(-300), avisos: [...document.querySelectorAll(".lnux-aviso")].map((x) => x.textContent).join(" | "), dialogo: !!document.querySelector(".lnux-dialogo"), carregando: !!document.querySelector(".webc-carregando"), webc: C.webc.visivel })).catch((er) => er.message));
+    console.log("  console:", consola.slice(0, 5));
     try { await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-sala-erro-ana.png") }); await bia.pagina.screenshot({ path: path.join(PASTA, "companhia-sala-erro-bia.png") }); } catch (x) { /* nada */ }
   } finally {
-    await navegador.close();
+    for (const n of navegadores) await n.close();
   }
   console.log(`\nCompanhia (salas): ${passos} ok, ${erros.length} com problema.`);
   if (erros.length) { console.log(erros.map((x) => "  - " + x).join("\n")); process.exit(1); }

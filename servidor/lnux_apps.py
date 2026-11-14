@@ -178,7 +178,9 @@ SALA_MAXIMO = 12           # salas ao mesmo tempo
 SALA_POR_PESSOA = 3        # salas abertas ao mesmo tempo por quem não é o dono (pelo endereço de quem criou)
 SALA_PESSOAS = 16          # pessoas por sala (no máximo; quem cria pode pôr menos)
 RESERVA_DISCO = 300 * 1024 * 1024  # envios (cenário, personagens, loja) não podem deixar o aparelho com menos que isto livre
-SALA_SUMIU = 20            # segundos sem notícia de uma pessoa: ela saiu
+# segundos sem notícia de uma pessoa: ela saiu (quem fecha a aba avisa na hora; isto é para quem some). Os testes no
+# navegador sem placa de vídeo pedem mais (LNUX_SALA_SUMIU): lá, desenhar o cenário pela primeira vez trava a página.
+SALA_SUMIU = int(os.environ.get("LNUX_SALA_SUMIU") or 45)
 SALA_VAZIA = 900           # segundos sem ninguém: a sala fecha
 SALA_LETRAS = "abcdefghjkmnpqrstuvwxyz23456789"  # sem as que se confundem (i, l, o, 0, 1)
 

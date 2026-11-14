@@ -135,7 +135,7 @@
       this.querPular = false;
       this.voando = false;      // voar: sem gravidade, atravessando as paredes (na sala, só quem criou)
       this.podeVoar = () => true; // quem usa o mundo decide (a tela troca quando entra numa sala)
-      this.cfg = { velocidade: 1 };
+      this.cfg = { velocidade: 1, sensibilidade: 1, inverterY: false }; // Opções › Controle
       try { Object.assign(this.cfg, JSON.parse(LNUX.preferencia.ler("companhia.mundo", "{}"))); } catch (e) { /* padrão */ }
       this.estado = "parado";   // parado | andando | correndo | pulando
       this.fase = 0;
@@ -334,8 +334,9 @@
       });
       c.addEventListener("pointermove", (e) => {
         if (!arrasto || arrasto.id !== e.pointerId || !this.andando) return;
-        this.cam.giro -= (e.clientX - arrasto.x) * 0.006;
-        this.cam.altura = limitar(this.cam.altura + (e.clientY - arrasto.y) * 0.005, -0.35, 1.3);
+        const k = this.cfg.sensibilidade || 1, y = this.cfg.inverterY ? -1 : 1;
+        this.cam.giro -= (e.clientX - arrasto.x) * 0.006 * k;
+        this.cam.altura = limitar(this.cam.altura + (e.clientY - arrasto.y) * 0.005 * k * y, -0.35, 1.3);
         arrasto.x = e.clientX;
         arrasto.y = e.clientY;
       });

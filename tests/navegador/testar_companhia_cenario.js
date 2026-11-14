@@ -7,6 +7,7 @@
 // volta ao começo. Na sala: quem visita nasce dentro, não voa (nem pelo V nem pelo menu) e vê o painel travado; quem
 // criou voa e muda a posição do mapa, que chega a todos sem baixar o cenário de novo.
 const { chromium } = require("playwright");
+const { menus, nomeGuardado } = require("./companhia_menus.js");
 const fs = require("fs");
 const path = require("path");
 const { bonecoVRM0, casaDeTeste } = require("./companhia_arquivos.js");
@@ -25,6 +26,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
   const consola = [];
   const pessoa = async (nome) => {
     const contexto = await navegador.newContext({ viewport: { width: 1100, height: 760 }, locale: "pt-BR" });
+    await nomeGuardado(contexto, nome);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|voz do navegador/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
@@ -33,14 +35,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     pagina.on("request", (r) => { if (/\/api\/sala\/[a-z0-9]+\/mapa\?/.test(r.url()) && r.method() === "GET") mapas.push(r.url()); });
     return {
       pagina, mapas, ev: (f, a) => pagina.evaluate(f, a),
-      menu: async (topo, item) => { await pagina.click(`.lnux-menubar > button:text-is("${topo}")`); await pagina.click(`.lnux-menu button:has(.rotulo:text-is("${item}"))`); },
-      itemDoMenu: async (topo, item) => {
-        await pagina.click(`.lnux-menubar > button:text-is("${topo}")`);
-        const b = pagina.locator(`.lnux-menu button:has(.rotulo:text-is("${item}"))`);
-        const r = { existe: (await b.count()) > 0, ativo: (await b.count()) > 0 && !(await b.isDisabled()) };
-        if (await pagina.locator(".lnux-menu").count()) await pagina.click(`.lnux-menubar > button:text-is("${topo}")`); // fecha o menu
-        return r;
-      },
+      ...menus(pagina),
       segurar: async (tecla, ms) => { await pagina.keyboard.down(tecla); await pagina.waitForTimeout(ms); await pagina.keyboard.up(tecla); },
     };
   };
@@ -112,7 +107,6 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.goto("about:blank"); // só trocar o # do endereço não recarrega a página
     await ana.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=sala`);
     await ana.pagina.waitForSelector(".salas #sala-criar", { timeout: 30000 });
-    await ana.pagina.fill('.salas input[aria-label="Seu nome"]', "Ana");
     await ana.pagina.click("#sala-criar");
     await ana.pagina.waitForSelector('.lnux-dialogo input[aria-label="Nome da sala"]');
     await ana.pagina.fill('.lnux-dialogo input[aria-label="Nome da sala"]', "Casa da Ana");
@@ -128,7 +122,6 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
 
     await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
     await bia.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
-    await bia.pagina.fill('.salas input[aria-label="Seu nome"]', "Bia");
     await bia.pagina.click(`.cartao-sala[data-codigo="${codigo}"] .entrar`);
     await bia.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     p = await posicao(bia);

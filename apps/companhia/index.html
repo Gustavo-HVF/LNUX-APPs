@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-carregando>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -9,8 +9,11 @@
   <link rel="stylesheet" href="temas/vlc-web-temas.css">
   <link rel="stylesheet" href="companhia.css">
   <meta name="theme-color" content="#000000">
+  <!-- antes de desenhar: o tema guardado (sem piscar outras cores); até o modo ser escolhido, só a tela do WEBC (data-carregando) -->
+  <script>try { document.documentElement.dataset.skin = localStorage.getItem("webc.tema") || "webc"; } catch (e) { document.documentElement.dataset.skin = "webc"; }</script>
 </head>
 <body>
+  <div class="webc-abrindo" aria-hidden="true"><span>WEBC</span></div>
   <div class="lnux-app">
     <header class="lnux-topo">
       <a class="lnux-marca" href="../../" title="Todos os apps"><span id="marca-icone"></span><span class="nome-marca">WEBC</span></a>
@@ -107,6 +110,7 @@
   <script src="js/contas.js"></script>
   <script src="js/salas.js"></script>
   <script src="js/inicio.js"></script>
+  <script src="js/widgets.js"></script>
   <script src="js/webc.js"></script>
   <script src="js/personagens.js"></script>
   <script src="js/ia.js"></script>
@@ -114,6 +118,7 @@
   <script src="js/memoria.js"></script>
   <script src="js/reacoes.js"></script>
   <script src="js/estudio.js"></script>
+  <script src="js/jogo.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

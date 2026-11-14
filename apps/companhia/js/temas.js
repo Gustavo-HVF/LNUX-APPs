@@ -114,4 +114,15 @@
     if (ativo) ativo.focus();
   };
   C.temas.aplicar();
+
+  /** Tira a tela de abertura do WEBC (data-carregando): quando a tela de entrar, o site ou o chat bot já estão prontos.
+   *  Até lá, o layout do app (o do chat bot) não aparece. */
+  C.paginaPronta = () => {
+    const raiz = document.documentElement;
+    if (!("carregando" in raiz.dataset)) return;
+    delete raiz.dataset.carregando;
+    const abrindo = document.querySelector(".webc-abrindo");
+    if (abrindo) { abrindo.classList.add("saindo"); setTimeout(() => abrindo.remove(), 400); }
+  };
+  setTimeout(C.paginaPronta, 15000); // se algo der errado, não fica preso na abertura
 })();

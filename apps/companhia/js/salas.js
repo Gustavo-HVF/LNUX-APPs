@@ -147,7 +147,6 @@
     let busca = "", soVagas = false, semSenha = false, ordem = "pessoas";
     const t = (x, v) => (C.t ? C.t(x, v) : x);
     const terminou = new Promise((ok) => (fechar = ok));
-    const nome = el("input", { class: "lnux-entrada", value: ctx.nome(), maxlength: 24, placeholder: "Como os outros vão te ver", "aria-label": "Seu nome" });
     const personagem = el("select", { class: "lnux-selecao", "aria-label": "Sua personagem" });
     const grade = el("div", { class: "loja-grade salas-grade", role: "list", id: "salas-lista" });
     const vazio = el("div", { class: "loja-vazio", hidden: true });
@@ -173,12 +172,10 @@
         botaoCriar, botaoFiltro,
         pagina ? null : el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a lista de salas", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair(false) })),
       filtro,
+      // o nome é dito na tela de entrar (ou é o da conta); aqui, só a personagem com que se entra
       el("div", { class: "salas-eu" },
         barraConta,
-        el("label", { class: "lnux-campo" }, el("span", {}, "Seu nome"), nome),
-        el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), personagem),
-        ctx.lojaDisponivel ? el("button", { class: "lnux-botao", type: "button", id: "sala-loja-personagem", title: "Ver as personagens da loja, em 3D, e escolher uma",
-          onclick: async () => { const id = await ctx.escolherNaLoja(); if (id) await desenharPersonagens(id); } }, "🛍️ Personagens da loja") : null),
+        el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), personagem)),
       pedeConta, dono, convite,
       el("div", { class: "salas-codigo linha" }, el("label", { class: "lnux-campo" }, codigoCampo),
         el("button", { class: "lnux-botao", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigoCampo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigoCampo.focus(); return; } entrarPeloCodigo(c).catch(LNUX.erro); } }, "Entrar pelo link")),
@@ -192,8 +189,6 @@
     function desenharConta() {
       const eu = C.contas && C.contas.eu, pub = (C.contas && C.contas.publico) || {};
       pedeConta.hidden = !(pub.exigir_conta && !eu);
-      nome.readOnly = !!eu;
-      if (eu) { nome.value = eu.nome; nome.title = "O nome da sua conta (mude em Meu perfil)."; } else nome.title = "";
       if (!pub.contas) { barraConta.replaceChildren(); return; }
       barraConta.replaceChildren(...(eu
         ? [C.fotoDaConta(eu, 38), el("span", { class: "nome-conta" }, eu.nome),
@@ -230,10 +225,11 @@
       try { const id = await ctx.importarPersonagem(); if (id) await desenharPersonagens(id); } catch (e) { LNUX.erro(e); }
     });
     /** Quem vai entrar: o nome (obrigatório; com a conta, o dela) e a personagem. */
-    function jogador() {
-      const n = (C.contas && C.contas.eu && C.contas.eu.nome) || nome.value.trim();
-      if (!n) { LNUX.aviso("Diga o seu nome (como os outros vão te ver).", "alerta"); nome.focus(); return null; }
-      return { nome: n, personagem: personagem.value };
+    async function jogador() {
+      let n = (C.nomeDoJogo ? C.nomeDoJogo.atual() : ctx.nome()) || "";
+      if (!n.trim()) n = (C.trocarNomeDoJogo && (await C.trocarNomeDoJogo())) || ""; // (veio sem passar pela tela de entrar)
+      if (!n.trim()) return null;
+      return { nome: n.trim(), personagem: personagem.value };
     }
     function cartao(s, destaque) {
       const minha = !!C.Sala.minhas()[s.codigo], cheia = s.pessoas >= s.max;
@@ -316,7 +312,7 @@
     }
     async function entrarNa(s) {
       if (!(await garantirConta())) return;
-      const j = jogador();
+      const j = await jogador();
       if (!j) return;
       let senha = "";
       for (let tentativa = 0; tentativa < 5; tentativa++) {
@@ -338,7 +334,7 @@
     }
     async function criar() {
       if (!(await garantirConta())) return;
-      const j = jogador();
+      const j = await jogador();
       if (!j) return;
       const f = await C.formularioDeSala(ctx, { inicial: { nome: `Sala de ${j.nome}` }, pessoasMax: lista.pessoas_max || 16 });
       if (!f) return;

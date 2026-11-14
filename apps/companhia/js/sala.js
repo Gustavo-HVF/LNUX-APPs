@@ -25,7 +25,8 @@
   const arred = (v) => Math.round(v * 1000) / 1000;
   const CORES = [0x4f8ef7, 0xf2647a, 0x38c793, 0xf5a623, 0x9b6cf2, 0x2bc4d6, 0xe8704f, 0x8bc34a];
   /** Emoção → expressões do VRM (as mesmas do palco). */
-  const ROSTO = { feliz: { happy: 0.8 }, rindo: { happy: 1, aa: 0.35 }, triste: { sad: 0.85 }, brava: { angry: 0.9 }, surpresa: { surprised: 0.9 }, apaixonada: { happy: 0.6, relaxed: 0.5 }, sonolenta: { relaxed: 0.6, blink: 0.45 } };
+  const ROSTO = { feliz: { happy: 0.8 }, rindo: { happy: 1, aa: 0.35 }, triste: { sad: 0.85 }, brava: { angry: 0.9 }, surpresa: { surprised: 0.9 }, apaixonada: { happy: 0.6, relaxed: 0.5 }, sonolenta: { relaxed: 0.6, blink: 0.45 },
+    pensativa: { relaxed: 0.3 }, provocadora: { happy: 0.55, blinkLeft: 0.9 }, timida: { happy: 0.35, relaxed: 0.45 }, animada: { happy: 1, surprised: 0.2 }, confusa: { surprised: 0.35, sad: 0.25 } };
   const PRESETS_ROSTO = ["happy", "sad", "angry", "relaxed", "surprised", "aa", "ih", "ou", "ee", "oh", "blink", "blinkLeft", "blinkRight"];
 
   /** Pede à sala (o código da sala é o que dá acesso; a chave da ponte só vai se houver: é o dono do servidor). */

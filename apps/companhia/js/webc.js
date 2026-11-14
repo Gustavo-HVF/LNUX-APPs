@@ -9,7 +9,7 @@
   const C = (window.C = window.C || {});
   const { el } = LNUX;
   const t = (s, v) => C.t(s, v);
-  const reduzir = () => window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduzir = () => "reduzir" in document.documentElement.dataset || !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches); // Opções › Acessibilidade também
   const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const svg = (html) => { const s = el("span", { class: "webc-svg", "aria-hidden": "true" }); s.innerHTML = html; return s; };
 
@@ -33,6 +33,11 @@
     baixar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>',
     salvar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>',
     voltar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    chatbot: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M14 16h36a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H30l-10 8v-8h-6a6 6 0 0 1-6-6V22a6 6 0 0 1 6-6Z"/><circle cx="24" cy="31" r="2.2" fill="currentColor"/><circle cx="32" cy="31" r="2.2" fill="currentColor"/><circle cx="40" cy="31" r="2.2" fill="currentColor"/><path d="M32 16V9m-3 0h6"/></svg>',
+    novidades: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M32 8l6 14 15 1-11.5 10 3.5 15L32 40l-13 8 3.5-15L11 23l15-1Z"/></svg>',
+    widgets: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="10" y="10" width="19" height="19" rx="5"/><rect x="35" y="10" width="19" height="19" rx="5"/><rect x="10" y="35" width="19" height="19" rx="5"/><path stroke-linecap="round" d="M44.5 37v15M37 44.5h15"/></svg>',
+    mais: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    fechar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   };
   C.iconeWebc = (nome) => svg(ICONES[nome] || "");
 
@@ -85,6 +90,7 @@
     const conta = C.contas && C.contas.eu, pub = (C.contas && C.contas.publico) || {}, ctx = estado.ctx;
     menuPequeno(botao, [
       { id: "perfil", rotulo: t("Meu perfil"), acao: () => ir("perfil") },
+      conta ? null : { id: "nome", rotulo: t("Trocar o meu nome"), acao: () => C.trocarNomeDoJogo().then(() => desenharEu()) },
       conta ? null : pub.contas ? { id: "entrar", rotulo: t("Entrar na conta"), acao: () => C.janelaConta("entrar") } : null,
       conta ? null : pub.contas && pub.contas_email !== false ? { id: "criar", rotulo: t("Criar conta"), acao: () => C.janelaConta("criar") } : null,
       LNUX.ponte && LNUX.ponte.disponivel && C.janelaContasDono ? { id: "contas-dono", rotulo: t("Contas e e-mail do servidor..."), acao: () => C.janelaContasDono().catch(LNUX.erro) } : null,
@@ -98,6 +104,7 @@
 
   const PAGINAS = {
     inicio: paginaInicio,
+    novidades: paginaNovidades,
     loja: (pag, op) => paginaDeOverlay(pag, () => C.abrirLoja(estado.ctx.loja, { dentro: pag, pagina: true, tipo: op.tipo || "personagem", item: op.item, busca: op.busca })),
     sala: (pag, op) => paginaDeOverlay(pag, () => C.abrirSalas(estado.ctx.salas, { dentro: pag, pagina: true, codigo: op.codigo || "" })),
     perfil: paginaPerfil,
@@ -135,13 +142,57 @@
     requestAnimationFrame(() => requestAnimationFrame(() => pag.classList.remove("webc-entra")));
   }
 
+  /** O início: os três cartões grandes, os quadrados menores (chat bot, novidades e widgets) e os widgets da pessoa. */
   function paginaInicio(pag) {
     const cartao = (id, titulo, sub) => el("button", { type: "button", class: "webc-cartao", "data-ir": id, onclick: () => ir(id) },
       el("span", { class: "webc-cartao-icone" }, C.iconeWebc(id)), el("span", { class: "webc-cartao-titulo" }, titulo), el("span", { class: "webc-cartao-sub" }, sub));
-    pag.append(el("div", { class: "webc-cartoes" },
-      cartao("loja", "LOJA", "Personagens, mapas e animações"),
-      cartao("sala", "SALA", "Entre numa sala ou crie a sua"),
-      cartao("perfil", "PERFIL", "Sua foto, bio, salvos e amigos")));
+    const quadrado = (id, titulo, sub, acao) => el("button", { type: "button", class: "webc-quadrado", "data-quadrado": id, onclick: acao },
+      el("span", { class: "webc-quadrado-icone" }, C.iconeWebc(id)), el("span", { class: "webc-quadrado-texto" }, el("b", {}, titulo), el("span", {}, sub)));
+    const area = el("section", { class: "webc-widgets", "aria-label": "Widgets" });
+    const widgets = C.widgets.montar(area, { ir, escolher: () => C.widgets.escolher().then(() => widgets.desenhar()) });
+    const ctx = estado.ctx;
+    pag.append(el("div", { class: "webc-inicio" },
+      el("div", { class: "webc-cartoes" },
+        cartao("loja", "LOJA", "Personagens, mapas e animações"),
+        cartao("sala", "SALA", "Entre numa sala ou crie a sua"),
+        cartao("perfil", "PERFIL", "Sua foto, bio, salvos e amigos")),
+      el("div", { class: "webc-quadrados" },
+        ctx && ctx.conversar ? quadrado("chatbot", "Chat bot", "Converse com a personagem", () => ctx.conversar()) : null,
+        quadrado("novidades", "Novidades", "O que há de novo", () => ir("novidades")),
+        quadrado("widgets", "Widgets", "Adicione ao seu início", () => C.widgets.escolher().then(() => widgets.desenhar()))),
+      area));
+    return { fechar() { widgets.parar(); } };
+  }
+
+  // ── as novidades ─────────────────────────────────────────────────────
+
+  /** O que mudou no WEBC (os mais novos primeiro). */
+  const MUDANCAS = [
+    "A tela do jogo: as expressões de 1 a 9, o bate-papo no canto e a janela Opções (personagem, sala, ajuda, acessibilidade, gráfico e controle).",
+    "No início: o chat bot, as novidades e os widgets.",
+    "O nome é pedido na tela de entrar, também para quem joga sem conta.",
+    "A loja com # para achar, curtidas e quantas pessoas baixaram.",
+    "O perfil com capa, salvos e amigos.",
+    "Português, English e 日本語, e os temas do VLC-Web.",
+    "Vídeo numa tela da sala e luz calculada por raios.",
+  ];
+  async function paginaNovidades(pag) {
+    const loja = el("div", { class: "webc-grade novidades-loja" }, el("p", { class: "fraco" }, t("Carregando...")));
+    const salas = el("div", { class: "novidades-salas" }, el("p", { class: "fraco" }, t("Carregando...")));
+    pag.append(el("section", { class: "webc-painel novidades-pagina" },
+      el("header", { class: "webc-painel-topo" }, el("h1", { class: "webc-painel-titulo" }, "NOVIDADES")),
+      el("section", { class: "novidades-secao" }, el("h2", {}, "Chegou na loja"), loja),
+      el("section", { class: "novidades-secao" }, el("h2", {}, "Salas novas"), salas),
+      el("section", { class: "novidades-secao" }, el("h2", {}, "O que mudou no WEBC"), el("ul", { class: "novidades-lista" }, MUDANCAS.map((m) => el("li", {}, m))))));
+    C.loja.lista().then((r) => {
+      const novos = r.itens.slice().sort((a, b) => b.criado - a.criado).slice(0, 8);
+      loja.replaceChildren(...(novos.length ? novos.map((i) => C.cartaoDaLoja(i, { aoAbrir: () => ir("loja", { tipo: i.tipo, item: i.id }) })) : [el("p", { class: "fraco" }, t("Nada na loja ainda."))]));
+    }).catch(() => loja.replaceChildren(el("p", { class: "fraco" }, t("A loja não respondeu."))));
+    C.Sala.lista().then((r) => {
+      const novas = (r.salas || []).slice().sort((a, b) => b.criada - a.criada).slice(0, 6);
+      salas.replaceChildren(...(novas.length ? novas.map((s) => el("button", { type: "button", class: "novidades-sala", "data-codigo": s.codigo, onclick: () => ir("sala", { codigo: s.codigo }) },
+        el("b", { translate: "no" }, s.nome), el("span", { class: "fraco pequeno" }, t("por {autor}", { autor: s.criador || "?" }) + " · " + `👥 ${s.pessoas}/${s.max}`))) : [el("p", { class: "fraco" }, t("Nenhuma sala pública aberta agora."))]));
+    }).catch(() => salas.replaceChildren(el("p", { class: "fraco" }, t("O servidor não respondeu."))));
     return { fechar() {} };
   }
 
@@ -260,6 +311,7 @@
     estado.raiz.hidden = false;
     document.documentElement.dataset.webc = "site";
     desenharFaixa();
+    C.paginaPronta();
   }
   function esconder() {
     if (!estado.raiz) return;

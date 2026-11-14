@@ -80,7 +80,7 @@ def main(argv: list) -> int:
     with tempfile.TemporaryDirectory(prefix="lnux-apps-navegador-") as tmp:
         tmp = Path(tmp)
         gerar_midias(tmp / "midias")
-        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados")}
+        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados"), "LNUX_SALA_SUMIU": "240"}  # sem placa de vídeo, a página trava ao desenhar o cenário
         porta = porta_livre()
         servidor = subprocess.Popen([sys.executable, str(RAIZ / "servidor" / "lnux_apps.py"), "--porta", str(porta), "--raiz", str(tmp)],
                                     env=env, stdout=subprocess.DEVNULL, stderr=open(tmp / "servidor.log", "w"))

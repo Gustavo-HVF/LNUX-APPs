@@ -696,3 +696,50 @@
   // por último: um emoji na frente de um texto do dicionário ("💃 Animação", "🎮 Entrar numa sala"...)
   C.PADROES.push([/^(\p{Extended_Pictographic}️?) (.+)$/u, "$1 $2", "$1 $2"]);
 })();
+
+// ── a tela do jogo (js/jogo.js), o nome na tela de entrar, o início (novidades e widgets) ──
+(function () {
+  "use strict";
+  const C = window.C, T = C.TEXTOS;
+  Object.assign(T, {
+    // as expressões e o canto
+    "Apaixonada": ["In love", "ときめき"], "Piscadinha": ["Wink", "ウインク"], "Pensativa": ["Thinking", "考え中"],
+    "Expressões da personagem (1 a 9)": ["Character expressions (1 to 9)", "キャラクターの表情（1〜9）"], "Bate-papo": ["Chat", "チャット"], "Bate-papo e vídeo": ["Chat and video", "チャットと動画"],
+    "Fechar o bate-papo": ["Close the chat", "チャットを閉じる"],
+    // a janela Opções
+    "Opções": ["Options", "オプション"], "Acessibilidade": ["Accessibility", "アクセシビリティ"], "Gráfico": ["Graphics", "グラフィック"], "Controle": ["Controls", "操作"],
+    "As expressões: clique nelas embaixo da tela ou aperte de 1 a 9 no teclado. Os outros na sala veem.": ["Expressions: click them at the bottom of the screen or press 1 to 9 on the keyboard. Others in the room see them.", "表情: 画面下のボタンをクリックするか、キーボードの 1〜9 を押します。ルームのみんなに見えます。"],
+    "Leitura": ["Reading", "読みやすさ"], "Tamanho da interface": ["Interface size", "表示サイズ"], "Maior": ["Larger", "特大"],
+    "Cores fortes: texto claro no preto": ["Strong colors: light text on black", "はっきりした色: 黒地に明るい文字"], "Movimento na tela": ["Motion on screen", "画面の動き"], "Reduzir animações": ["Reduce animations", "アニメーションを減らす"],
+    "Sem as transições entre as páginas e sem os efeitos que se mexem": ["No page transitions and no moving effects", "ページの切り替え効果や動く効果をなくします"],
+    "Mostrar os números das expressões": ["Show the expression numbers", "表情の番号を表示"],
+    "Desempenho": ["Performance", "パフォーマンス"], "Resolução": ["Resolution", "解像度"], "Luz, sombras e luzes do mapa...": ["Light, shadows and map lights...", "ライト、影、マップのライト..."],
+    "Teclado": ["Keyboard", "キーボード"], "Andar (ou as setas)": ["Walk (or the arrows)", "歩く（矢印キーでも可）"], "Voar (quem criou a sala)": ["Fly (the room's creator)", "飛ぶ（ルームの作成者）"],
+    "Subir e descer, voando": ["Up and down while flying", "飛行中の上昇・下降"], "Abrir o bate-papo": ["Open the chat", "チャットを開く"], "Espaço": ["Space", "スペース"],
+    "Câmera e andar": ["Camera and walking", "カメラと移動"], "Sensibilidade da câmera": ["Camera sensitivity", "カメラの感度"], "Inverter a câmera (para cima e para baixo)": ["Invert the camera (up and down)", "カメラの上下を反転"],
+    "Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar.": ["Open a VRoid character (.vrm) to change the camera and walking.", "カメラと移動を変更するには VRoid キャラクター（.vrm）を開いてください。"],
+    "No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima.": ["On a phone: the on-screen pad walks; dragging turns the camera; pinching zooms.", "スマホ: 画面のパッドで移動、ドラッグでカメラ回転、ピンチでズーム。"],
+    // o nome na tela de entrar
+    "Todo mundo entra com um nome: é como os outros vão te ver nas salas.": ["Everyone joins with a name: it's how others will see you in the rooms.", "みんな名前を付けて入ります。ルームでほかの人に表示される名前です。"],
+    "Trocar o meu nome": ["Change my name", "名前を変更"],
+    // o início
+    "Chat bot": ["Chat bot", "チャットボット"], "Converse com a personagem": ["Talk to the character", "キャラクターと話す"], "Novidades": ["What's new", "新着情報"], "O que há de novo": ["What's new", "最新のお知らせ"],
+    "Widgets": ["Widgets", "ウィジェット"], "Adicione ao seu início": ["Add to your home", "ホームに追加"], "NOVIDADES": ["WHAT'S NEW", "新着情報"], "Chegou na loja": ["New in the store", "ストアの新着"],
+    "Salas novas": ["New rooms", "新しいルーム"], "O que mudou no WEBC": ["What changed in WEBC", "WEBC の更新内容"], "Nada na loja ainda.": ["Nothing in the store yet.", "ストアにはまだ何もありません。"],
+    "A tela do jogo: as expressões de 1 a 9, o bate-papo no canto e a janela Opções (personagem, sala, ajuda, acessibilidade, gráfico e controle).": ["The game screen: expressions 1 to 9, the chat in the corner and the Options window (character, room, help, accessibility, graphics and controls).", "ゲーム画面: 1〜9 の表情、隅のチャット、オプション画面（キャラクター、ルーム、ヘルプ、アクセシビリティ、グラフィック、操作）。"],
+    "No início: o chat bot, as novidades e os widgets.": ["On the home page: the chat bot, what's new and widgets.", "ホームに: チャットボット、新着情報、ウィジェット。"],
+    "O nome é pedido na tela de entrar, também para quem joga sem conta.": ["The name is asked on the login screen, also for people playing without an account.", "名前はログイン画面で入力します。アカウントなしで遊ぶ人も同じです。"],
+    "A loja com # para achar, curtidas e quantas pessoas baixaram.": ["The store with # to find things, likes and download counts.", "ストアに検索用の #、いいね、ダウンロード数。"],
+    "O perfil com capa, salvos e amigos.": ["The profile with a banner, saved items and friends.", "プロフィールにバナー、保存したもの、フレンド。"],
+    "Português, English e 日本語, e os temas do VLC-Web.": ["Português, English and 日本語, and the VLC-Web themes.", "Português、English、日本語、そして VLC-Web のテーマ。"],
+    "Vídeo numa tela da sala e luz calculada por raios.": ["Video on a screen in the room and ray-traced lighting.", "ルームのスクリーンで動画、レイトレーシング照明。"],
+    // os widgets
+    "Relógio": ["Clock", "時計"], "A hora e o dia": ["The time and date", "時刻と日付"], "Salas abertas": ["Open rooms", "開いているルーム"], "As salas com mais gente agora": ["The busiest rooms right now", "今いちばん人が多いルーム"],
+    "Novos na loja": ["New in the store", "ストアの新着"], "O que acabou de chegar": ["What just arrived", "届いたばかりのもの"], "Os seus amigos": ["Your friends", "あなたのフレンド"],
+    "Meus salvos": ["My saved items", "保存したもの"], "O que você salvou na loja": ["What you saved in the store", "ストアで保存したもの"], "Bloco de notas": ["Notepad", "メモ帳"], "Anotações neste navegador": ["Notes in this browser", "このブラウザのメモ"],
+    "Escreva aqui...": ["Write here...", "ここに書く..."], "Entre na sua conta para ver os amigos.": ["Log in to see your friends.", "フレンドを見るにはログインしてください。"],
+    "Entre na sua conta para salvar itens da loja.": ["Log in to save store items.", "ストアのアイテムを保存するにはログインしてください。"], "Para a esquerda": ["Move left", "左へ"], "Para a direita": ["Move right", "右へ"],
+    "Tirar do início": ["Remove from home", "ホームから外す"], "Adicionar widget": ["Add widget", "ウィジェットを追加"], "Adicionar um widget ao seu início": ["Add a widget to your home", "ホームにウィジェットを追加"],
+    "Adicionar": ["Add", "追加"], "Pronto": ["Done", "完了"], "Escolha o que fica no seu início. Os widgets ficam guardados neste navegador.": ["Choose what goes on your home page. Widgets are saved in this browser.", "ホームに置くものを選んでください。ウィジェットはこのブラウザに保存されます。"],
+  });
+})();

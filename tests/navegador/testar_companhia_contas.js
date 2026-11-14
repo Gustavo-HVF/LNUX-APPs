@@ -9,6 +9,7 @@
 // "Pessoas na sala", a foto e o perfil dela; sair, entrar de novo, "esqueci a senha"; a tela de início ("Continuar"
 // com a conta deste navegador, entrar pelo cartão); e o dono exigindo conta.
 const { chromium } = require("playwright");
+const { menus, nomeGuardado } = require("./companhia_menus.js");
 const fs = require("fs");
 const net = require("net");
 const path = require("path");
@@ -72,12 +73,13 @@ function png(w, h, [r, g, b]) {
   const consola = [];
   const pessoa = async (nome) => {
     const contexto = await navegador.newContext({ viewport: { width: 1200, height: 820 }, locale: "pt-BR" });
+    await nomeGuardado(contexto, nome);
     await contexto.route(/cubism\.live2d\.com|\/api\/live2d\/core/, (r) => r.fulfill({ status: 404, body: "" }));
     const pagina = await contexto.newPage();
     pagina.on("console", (m) => { if (m.type() === "error" && !RUIDO.test(m.text()) && !/40[13]|409/.test(m.text())) consola.push(`[${nome}] ${m.text()}`); });
     pagina.on("pageerror", (e) => consola.push(`[${nome}] [pageerror] ${e.message}`));
     pagina.on("crash", () => consola.push(`[${nome}] a página caiu (crash)`));
-    return { pagina, ev: (f, a) => pagina.evaluate(f, a) };
+    return { pagina, ev: (f, a) => pagina.evaluate(f, a), ...menus(pagina) };
   };
   const dono = await pessoa("dono"), ana = await pessoa("Ana");
   const esperarEmail = async (n) => { for (let i = 0; i < 100 && smtp.caixa.length < n; i++) await new Promise((r) => setTimeout(r, 100)); return smtp.caixa.length >= n ? lerEmail(smtp.caixa[n - 1]) : null; };
@@ -134,9 +136,9 @@ function png(w, h, [r, g, b]) {
     await ana.pagina.fill(".codigo-conta", codigoDe(codigo));
     await ana.pagina.click("#conta-confirmar");
     await ana.pagina.waitForSelector(".salas #conta-perfil", { timeout: 30000 });
-    const comConta = await ana.ev(() => ({ nome: document.querySelector('.salas input[aria-label="Seu nome"]').value, so: document.querySelector('.salas input[aria-label="Seu nome"]').readOnly,
+    const comConta = await ana.ev(() => ({ nome: C.nomeDoJogo.atual(), campo: !!document.querySelector('.salas input[aria-label="Seu nome"]'),
       barra: document.querySelector(".salas-conta").textContent, sessao: !!localStorage.getItem("companhia.conta.sessao") }));
-    ok(comConta.nome === "Ana Clara" && comConta.so && /Ana Clara/.test(comConta.barra) && comConta.sessao, "com o código certo, a conta é criada e a Ana já entra: o nome dela vem da conta");
+    ok(comConta.nome === "Ana Clara" && !comConta.campo && /Ana Clara/.test(comConta.barra) && comConta.sessao, "com o código certo, a conta é criada e a Ana já entra: o nome dela vem da conta (a página Sala não pede nome)");
 
     // ── o perfil: foto, bio, pronomes, link, cor ──
     await ana.pagina.click("#conta-perfil");
@@ -166,12 +168,10 @@ function png(w, h, [r, g, b]) {
     await dono.ev(() => { window.Companhia.janelaSala(); }); // (sem esperar a lista fechar)
     await dono.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigoSala}"]`, { timeout: 30000 });
     ok(await dono.ev((c) => /por Ana Clara/.test(document.querySelector(`.cartao-sala[data-codigo="${c}"]`).textContent), codigoSala), "na lista, a sala aparece como criada pela conta (\"por Ana Clara\")");
-    await dono.pagina.fill('.salas input[aria-label="Seu nome"]', "Dono");
     await dono.pagina.click(`.cartao-sala[data-codigo="${codigoSala}"] .entrar`);
     await dono.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     await dono.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].conta, null, { timeout: 20000 });
-    await dono.pagina.click('.lnux-menubar > button:text-is("Sala")');
-    await dono.pagina.click('.lnux-menu button:has(.rotulo:text-is("Pessoas na sala"))');
+    await dono.menu("Sala", "Pessoas na sala");
     await dono.pagina.waitForSelector(".pessoas-sala .pessoa-sala.com-conta");
     await dono.pagina.click(".pessoas-sala .pessoa-sala.com-conta");
     await dono.pagina.waitForSelector('.perfil-pagina .perfil-nome:text-is("Ana Clara")', { timeout: 20000 });
@@ -249,10 +249,9 @@ function png(w, h, [r, g, b]) {
       "com \"só entra quem tem conta\", a tela de início não oferece jogar sem conta");
     await ana.pagina.goto("about:blank");
     await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
-    await ana.pagina.waitForSelector(".salas .salas-pede-conta:not([hidden])", { timeout: 30000 });
-    await ana.pagina.click("#sala-criar");
-    await ana.pagina.waitForSelector("#conta-entrar", { timeout: 10000 });
-    ok(true, "com \"só entra quem tem conta\", a lista avisa e criar sala pede para entrar na conta antes");
+    await ana.pagina.waitForSelector(".tela-inicio .inicio-nota", { timeout: 30000 });
+    ok(await ana.ev(() => !document.querySelector("#inicio-sem-conta") && !!document.querySelector(".tela-inicio #conta-entrar")),
+      "com \"só entra quem tem conta\", até quem chega por um link (com o nome guardado) passa pela tela de entrar, sem jogar sem conta");
     await dono.ev(() => C.contas.salvarAjustes({ exigir_conta: false }));
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {
