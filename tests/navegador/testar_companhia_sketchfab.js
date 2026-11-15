@@ -38,11 +38,16 @@ function sketchfabFalso() {
     if (partes[2] === "models" && modelos[partes[3]]) {
       if (partes[4] === "download") {
         if (req.headers.authorization !== "Token chave-de-teste-123") return enviar({ detail: "não" }, "application/json", 401);
+        // o moinho: as versões com as texturas em 1K e em 4K e o USDZ (como o Sketchfab manda às vezes, em "latest", com um link relativo)
+        if (partes[3] === A) return enviar({ latest: { glb: [{ url: "/v3/archives/moinho-1k", size: glb.length, textureMaxResolution: 1024 },
+          { url: `http://127.0.0.1:${PORTA}/arquivos/moinho.glb`, size: glb.length + 1, textureMaxResolution: 4096 }], usdz: [{ url: `http://127.0.0.1:${PORTA}/arquivos/moinho.usdz`, size: 10 }] } });
         return enviar({ glb: { url: `http://127.0.0.1:${PORTA}/arquivos/moinho.glb`, size: glb.length, expires: 300 } });
       }
       return enviar(modelos[partes[3]]);
     }
+    if (caminho === "/v3/archives/moinho-1k") return enviar({ url: `http://127.0.0.1:${PORTA}/arquivos/moinho.glb` });
     if (caminho === "/arquivos/moinho.glb") return enviar(glb, "model/gltf-binary");
+    if (caminho === "/arquivos/moinho.usdz") return enviar(Buffer.from("usdz-falso"), "model/vnd.usdz+zip");
     if (caminho === "/miniatura.png") return enviar(mini, "image/png");
     enviar({ detail: "nada" }, "application/json", 404);
   });
@@ -96,13 +101,28 @@ function sketchfabFalso() {
     // a grade: três por fileira, cada cartão inteiro (antes as fileiras encolhiam até sobrar uma tira de cada miniatura)
     const grade = await dono.ev(() => {
       const g = document.querySelector(".sketchfab-grade"), c = [...g.querySelectorAll(".sketchfab-cartao")].map((x) => x.getBoundingClientRect()), r = g.getBoundingClientRect();
-      return { colunas: getComputedStyle(g).gridTemplateColumns.split(" ").length, altura: Math.round(c[0].height), dentro: c.every((x) => x.right <= r.right + 1), botoes: !!g.querySelector("[data-carregar]") && !!g.querySelector("[data-baixar]") };
+      return { colunas: getComputedStyle(g).gridTemplateColumns.split(" ").length, altura: Math.round(c[0].height), dentro: c.every((x) => x.right <= r.right + 1), botoes: !!g.querySelector("[data-arquivos]") };
     });
-    ok(grade.colunas === 3 && grade.altura > 200 && grade.dentro && grade.botoes, `a janela mostra os modelos em três por fileira, cada cartão inteiro (${grade.altura} px) e dentro da janela, com Carregar e Baixar`);
+    ok(grade.colunas === 3 && grade.altura > 200 && grade.dentro && grade.botoes, `a janela mostra os modelos em três por fileira, cada cartão inteiro (${grade.altura} px) e dentro da janela, com "Arquivos e formatos"`);
+    // os arquivos do moinho: cada versão (o formato, as texturas em 1K e 4K, o tamanho)
+    await dono.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] [data-arquivos]`);
+    await dono.pagina.waitForSelector('.janela-sketchfab-arquivos [data-arquivo="usdz-original"]', { timeout: 30000 });
+    const versoes = await dono.ev(() => [...document.querySelectorAll(".janela-sketchfab-arquivos .sketchfab-versao")].map((v) => ({ id: v.dataset.arquivo, texto: v.innerText.replace(/\s+/g, " "),
+      carregar: !v.querySelector("[data-carregar]").disabled, baixar: !v.querySelector("[data-baixar]").disabled })));
+    ok(versoes.map((v) => v.id).join() === "glb-1024,glb-4096,usdz-original" && /GLB 1K/.test(versoes[0].texto) && /GLB 4K/.test(versoes[1].texto) && /USDZ/.test(versoes[2].texto)
+      && versoes[0].carregar && versoes[1].carregar && !versoes[2].carregar && versoes.every((v) => v.baixar),
+      `"Arquivos e formatos" mostra as versões para baixar: ${versoes.map((v) => v.texto.replace(/ (Carregar|Baixar|Pôr na loja)/g, "")).join(" | ")} (o USDZ só baixa)`);
+    // baixar a de 4K, como veio
+    const [arquivo4k] = await Promise.all([dono.pagina.waitForEvent("download", { timeout: 60000 }), dono.pagina.click('.janela-sketchfab-arquivos [data-arquivo="glb-4096"] [data-baixar]')]);
+    ok(/moinho-animado-4k\.glb$/.test(arquivo4k.suggestedFilename()) && fs.readFileSync(await arquivo4k.path()).readUInt32LE(0) === 0x46546c67, `"Baixar" entrega a versão escolhida (${arquivo4k.suggestedFilename()})`);
+    await dono.pagina.click('.lnux-dialogo:has(.janela-sketchfab-arquivos) footer button:text-is("Fechar")');
     // o dono baixa até o comprado (Standard): é dele, para usar (não vai para a loja)
-    const [arquivoB] = await Promise.all([dono.pagina.waitForEvent("download", { timeout: 60000 }), dono.pagina.click(`.sketchfab-cartao[data-uid="${falso.B}"] [data-baixar]`)]);
+    await dono.pagina.click(`.sketchfab-cartao[data-uid="${falso.B}"] [data-arquivos]`);
+    await dono.pagina.waitForSelector('.janela-sketchfab-arquivos [data-arquivo] [data-baixar]:not([disabled])', { timeout: 30000 });
+    const [arquivoB] = await Promise.all([dono.pagina.waitForEvent("download", { timeout: 60000 }), dono.pagina.click(".janela-sketchfab-arquivos [data-arquivo] [data-baixar]")]);
     ok(/castelo-comprado\.glb$/.test(arquivoB.suggestedFilename()) && fs.readFileSync(await arquivoB.path()).readUInt32LE(0) === 0x46546c67,
-      `"Baixar" entrega o .glb (${arquivoB.suggestedFilename()}); o dono baixa até o comprado, para usar ele mesmo`);
+      `o dono baixa até o comprado (${arquivoB.suggestedFilename()}), para usar ele mesmo`);
+    await dono.pagina.click('.lnux-dialogo:has(.janela-sketchfab-arquivos) footer button:text-is("Fechar")');
 
     // ── trazer para a loja: o .glb, o crédito, a licença e os # ──
     await dono.pagina.fill('.janela-sketchfab input[aria-label="# para achar na loja"]', "praça");
@@ -141,14 +161,20 @@ function sketchfabFalso() {
     await bia.pagina.click("#loja-sketchfab");
     await bia.pagina.fill('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "moinho");
     await bia.pagina.press('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "Enter");
-    await bia.pagina.waitForSelector(`.sketchfab-cartao[data-uid="${falso.A}"] [data-carregar]:not([disabled])`, { timeout: 20000 });
-    const bloqueioB = await bia.ev((b) => ({ carregar: document.querySelector(`.sketchfab-cartao[data-uid="${b}"] [data-carregar]`).disabled, baixar: document.querySelector(`.sketchfab-cartao[data-uid="${b}"] [data-baixar]`).disabled }), falso.B);
+    await bia.pagina.waitForSelector(`.sketchfab-cartao[data-uid="${falso.B}"] [data-arquivos]`, { timeout: 20000 });
+    // o comprado: a lista aparece, mas sem Carregar e Baixar para quem não é o dono
+    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.B}"] [data-arquivos]`);
+    await bia.pagina.waitForSelector(".janela-sketchfab-arquivos [data-arquivo]", { timeout: 30000 });
+    const bloqueioB = await bia.ev(() => { const v = document.querySelector(".janela-sketchfab-arquivos [data-arquivo]"); return { carregar: v.querySelector("[data-carregar]").disabled, baixar: v.querySelector("[data-baixar]").disabled, aviso: /só o dono/.test(document.querySelector(".janela-sketchfab-arquivos").textContent) }; });
+    await bia.pagina.click('.lnux-dialogo:has(.janela-sketchfab-arquivos) footer button:text-is("Fechar")');
     const mapasAntes = await bia.ev(async () => (await C.mapas.lista()).length);
-    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] [data-carregar]`);
+    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] [data-arquivos]`);
+    await bia.pagina.waitForSelector('.janela-sketchfab-arquivos [data-arquivo="glb-1024"] [data-carregar]:not([disabled])', { timeout: 30000 });
+    await bia.pagina.click('.janela-sketchfab-arquivos [data-arquivo="glb-1024"] [data-carregar]');
     await bia.pagina.waitForFunction(async (n) => (await C.mapas.lista()).length > n, mapasAntes, { timeout: 60000, polling: 300 });
     const carregado = await bia.ev(async () => ({ nomes: (await C.mapas.lista()).map((m) => m.nome), janela: !!document.querySelector(".janela-sketchfab"), loja: (await C.loja.lista()).itens.filter((i) => i.trouxe === "Bia").length }));
-    ok(bloqueioB.carregar && bloqueioB.baixar && carregado.nomes.includes("Moinho animado") && !carregado.janela && carregado.loja === 0,
-      `"Carregar" traz o mapa direto para o jogo (Movimento › Cenário), sem pôr na loja; o comprado fica sem Carregar e Baixar para quem não é o dono`);
+    ok(bloqueioB.carregar && bloqueioB.baixar && bloqueioB.aviso && carregado.nomes.includes("Moinho animado") && !carregado.janela && carregado.loja === 0,
+      `"Carregar" (a versão de 1K) traz o mapa direto para o jogo (Movimento › Cenário), sem pôr na loja; o comprado fica sem Carregar e Baixar para quem não é o dono`);
 
     // ── usar o mapa animado numa sala ──
     await dono.ev(() => C.webc.ir("sala"));

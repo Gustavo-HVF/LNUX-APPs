@@ -1010,3 +1010,19 @@
 
 /* Opções › Bate-papo: o tamanho do texto das mensagens */
 :root[data-modo="jogar"] #mensagens { font-size: calc(1em * var(--webc-papo-escala, 1)); }
+
+/* os arquivos de um modelo do Sketchfab: cada versão (formato, tamanho das texturas e do arquivo) com carregar, baixar e pôr na loja */
+.janela-sketchfab-arquivos { min-width: 0; }
+.sketchfab-versoes { display: grid; gap: 8px; }
+.sketchfab-versao { display: grid; grid-template-columns: minmax(110px, auto) minmax(90px, auto) minmax(70px, 1fr) auto; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 14px; border: 2px solid var(--borda); background: var(--painel-2); }
+.sketchfab-formato { justify-self: start; font-weight: 800; font-size: .85em; padding: 3px 10px; border-radius: 999px; background: color-mix(in srgb, var(--destaque) 18%, transparent); }
+.sketchfab-formato[data-formato="usdz"], .sketchfab-formato[data-formato="source"] { background: var(--painel-3); }
+.sketchfab-textura b { font-size: 1.1em; }
+.sketchfab-tamanho { font-variant-numeric: tabular-nums; }
+.sketchfab-versao-acoes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+@media (max-width: 620px) {
+  .sketchfab-versao { grid-template-columns: auto auto 1fr; }
+  .sketchfab-versao-acoes { grid-column: 1 / -1; justify-content: stretch; }
+  .sketchfab-versao-acoes .lnux-botao { flex: 1 1 auto; }
+}

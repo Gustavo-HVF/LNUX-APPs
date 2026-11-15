@@ -267,12 +267,18 @@ def api_sketchfab() -> str:
 
 
 def pedir_sketchfab(caminho: str, chave: str = "", tempo: float = 30):
-    """GET na API do Sketchfab (a chave vai como "Token", a pessoal da conta). Devolve o JSON."""
+    """GET na API do Sketchfab (a chave vai como "Token", a pessoal da conta). Devolve o JSON. caminho: relativo à API
+    (/models/...) ou, começando por //, relativo ao servidor dela (os links das versões de um download)."""
     cab = {"User-Agent": "WEBC (LNUX-APPs)", "Accept": "application/json"}
     if chave:
         cab["Authorization"] = ("Bearer " + chave[7:]) if chave.lower().startswith("bearer ") else "Token " + chave
+    if caminho.startswith("//"):
+        base = urllib.parse.urlsplit(api_sketchfab())
+        endereco = f"{base.scheme}://{base.netloc}{caminho[1:]}"
+    else:
+        endereco = api_sketchfab() + caminho
     try:
-        with urllib.request.urlopen(urllib.request.Request(api_sketchfab() + caminho, headers=cab), timeout=tempo) as r:
+        with urllib.request.urlopen(urllib.request.Request(endereco, headers=cab), timeout=tempo) as r:
             return json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         motivo = {401: "A chave do Sketchfab não vale (confira em 🔑 Chaves das APIs).", 403: "O Sketchfab não deixou baixar este modelo.",
@@ -280,6 +286,80 @@ def pedir_sketchfab(caminho: str, chave: str = "", tempo: float = 30):
         raise ErroPonte(e.code if e.code in (401, 403, 404, 429) else 502, motivo)
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise ErroPonte(502, f"Não consegui falar com o Sketchfab ({getattr(e, 'reason', e)}). Tem internet?")
+
+
+# os formatos que o download do Sketchfab oferece (na ordem em que aparecem na tela)
+SKETCHFAB_FORMATOS = {"glb": ("GLB", ".glb", "model/gltf-binary"), "gltf": ("glTF (ZIP)", "-gltf.zip", "application/zip"),
+                      "usdz": ("USDZ", ".usdz", "model/vnd.usdz+zip"), "source": ("Original do autor (ZIP)", "-original.zip", "application/zip")}
+SKETCHFAB_ARQUIVOS: dict = {}       # uid → (instante, [versões], info do modelo): os links do Sketchfab valem uns 5 minutos
+SKETCHFAB_ARQUIVOS_TEMPO = 240
+
+
+def sketchfab_versoes(resposta: dict, archives: dict | None = None) -> list:
+    """As versões que um download do Sketchfab oferece: o formato (glb, gltf, usdz, source), a resolução máxima das
+    texturas (1024, 2048, 4096...) e o tamanho. A resposta vem de jeitos diferentes (um objeto por formato, uma lista de
+    versões por formato, ou tudo dentro de "latest"); aqui vira uma lista só, por formato e da menor textura para a maior.
+    archives: o que a ficha do modelo diz de cada formato (completa a resolução e o tamanho quando o download não diz)."""
+    base = resposta.get("latest") if isinstance(resposta.get("latest"), dict) else resposta
+    archives = archives if isinstance(archives, dict) else {}
+    saida = []
+    for formato, valor in (base.items() if isinstance(base, dict) else []):
+        if formato not in SKETCHFAB_FORMATOS:
+            continue
+        lista = valor if isinstance(valor, list) else [valor]
+        info = archives.get(formato) if isinstance(archives.get(formato), dict) else {}
+        for v in lista:
+            if not isinstance(v, dict) or not v.get("url"):
+                continue
+            tex = v.get("textureMaxResolution") or v.get("textureSize") or v.get("resolution")
+            tam = v.get("size")
+            if len(lista) == 1:
+                tex, tam = tex or info.get("textureMaxResolution"), tam or info.get("size")
+            try:
+                tex = int(tex) if tex else None
+            except (TypeError, ValueError):
+                tex = None
+            try:
+                tam = int(tam or 0)
+            except (TypeError, ValueError):
+                tam = 0
+            ident = base_id = f"{formato}-{tex or 'original'}"
+            n = 2
+            while any(x["id"] == ident for x in saida):
+                ident, n = f"{base_id}-{n}", n + 1
+            saida.append({"id": ident, "formato": formato, "textura": tex, "tamanho": tam, "url": str(v["url"])})
+    ordem = list(SKETCHFAB_FORMATOS)
+    saida.sort(key=lambda x: (ordem.index(x["formato"]), x["textura"] or 10 ** 6))
+    return saida
+
+
+def sketchfab_arquivos(uid: str, chave: str, novo: bool = False) -> tuple:
+    """As versões de um modelo (guardadas uns minutos: os links valem pouco) e a ficha dele."""
+    agora = time.time()
+    for k in [k for k, x in SKETCHFAB_ARQUIVOS.items() if agora - x[0] > SKETCHFAB_ARQUIVOS_TEMPO]:
+        SKETCHFAB_ARQUIVOS.pop(k, None)
+    guardado = SKETCHFAB_ARQUIVOS.get(uid)
+    if guardado and not novo:
+        return guardado[1], guardado[2]
+    info = pedir_sketchfab(f"/models/{uid}", chave)
+    versoes = sketchfab_versoes(pedir_sketchfab(f"/models/{uid}/download", chave), info.get("archives"))
+    if not versoes:
+        raise ErroPonte(502, "O Sketchfab não mandou nenhum arquivo para este modelo.")
+    SKETCHFAB_ARQUIVOS[uid] = (agora, versoes, info)
+    return versoes, info
+
+
+def sketchfab_link(versao: dict, chave: str) -> str:
+    """O link de download de uma versão: já vem pronto, ou é um caminho do Sketchfab que devolve o link."""
+    url = versao["url"]
+    if url.startswith(("https://", "http://")):
+        return url
+    if not url.startswith("/") or ".." in url or url.startswith("//"):
+        raise ErroPonte(502, "O Sketchfab mandou um endereço de download estranho.")
+    alvo = str(pedir_sketchfab("/" + url, chave).get("url") or "")
+    if not alvo.startswith(("https://", "http://")):
+        raise ErroPonte(502, "O Sketchfab não mandou o link do download.")
+    return alvo
 
 
 def baixar_de_fora(url: str, destino: Path, maximo: int, tempo: float = 120) -> int:
@@ -2288,7 +2368,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 social = self.loja_social()
                 itens = [self.loja_com_social(publico(i), social, conta) for i in self.loja_itens()]
             return self.responder_json({"itens": itens, "publicar": self.ponte.loja_publicar(), "dono": dono, "conta": bool(conta),
-                                        "sketchfab": bool(chave_sketchfab()) and (dono or self.ponte.loja_publicar()),
+                                        "sketchfab": bool(chave_sketchfab()),
                                         **({"pasta": str(self.ponte.loja)} if dono else {})})
         if partes == ["config"] and m == "POST":
             if not dono:
@@ -2407,26 +2487,29 @@ class Manipulador(BaseHTTPRequestHandler):
         """O Sketchfab na loja: GET /api/loja/sketchfab (o que dá para fazer), PUT (guardar a chave: só o dono), GET .../buscar
         (q, cursor, animado) e POST .../importar {uid, tags} (baixa o modelo, vira .glb e entra na loja como mapa).
 
-        A chave é do dono e fica só no servidor: ninguém mais a vê nem a troca. Buscar e trazer valem para todos que podem
-        publicar na loja (o dono decide, em "quem entra pelo link pode publicar"): o servidor usa a chave por eles. Para
-        quem não é o dono há um limite de pedidos por endereço (a cota da chave e o disco são do dono)."""
+        GET .../arquivos?uid= lista as versões que dá para baixar (o formato, a resolução das texturas: 1K, 2K, 4K... e o
+        tamanho) e POST .../baixar {uid, arquivo, bruto} baixa uma delas (bruto: o arquivo como veio; senão, o .glb).
+
+        A chave é do dono e fica só no servidor: ninguém mais a vê nem a troca. Com ela guardada, todos buscam, baixam e
+        carregam mapas (o servidor usa a chave por eles; os links do Sketchfab nunca vão para o navegador); trazer para a
+        loja vale para quem pode publicar nela (o dono decide, em "quem entra pelo link pode publicar"). Para quem não é o
+        dono há um limite de pedidos por endereço (a cota da chave e o disco são do dono)."""
         tem_chave = bool(chave_sketchfab())
         pode_trazer = dono or self.ponte.loja_publicar()
         if not partes and m == "GET":
-            return self.responder_json({"chave": tem_chave, "pode_trazer": bool(tem_chave and pode_trazer), "dono": dono,
+            return self.responder_json({"chave": tem_chave, "pode_trazer": bool(tem_chave and pode_trazer), "pode_baixar": tem_chave, "dono": dono,
                                         "licencas": {k: v[0] for k, v in SKETCHFAB_LICENCAS.items()}})
         if not partes and m == "PUT" and not dono:
             raise ErroPonte(403, "Só o dono do servidor guarda ou troca a chave do Sketchfab.")
         if not dono:
             if not tem_chave:
                 raise ErroPonte(503, "O dono do servidor ainda não guardou a chave do Sketchfab.")
-            if not pode_trazer:
+            if partes == ["importar"] and not pode_trazer:
                 raise ErroPonte(403, "O dono desta loja não está aceitando publicações agora.")
             origem = self.origem_do_pedido()
-            if partes == ["buscar"]:
-                contar_tentativa("sketchfab-busca:" + origem, 40, 60)
-            elif partes in (["importar"], ["baixar"]):
-                contar_tentativa("sketchfab-trazer:" + origem, 10, 3600)
+            limites = {"buscar": (40, 60), "arquivos": (30, 600), "baixar": (20, 3600), "importar": (10, 3600)}
+            if partes and partes[0] in limites:
+                contar_tentativa(f"sketchfab-{partes[0]}:" + origem, *limites[partes[0]])
         if not partes and m == "PUT":
             d = self.ler_json()
             token = str(d.get("token") or "").strip()
@@ -2450,6 +2533,20 @@ class Manipulador(BaseHTTPRequestHandler):
             if not proximo and r.get("next"):
                 proximo = (urllib.parse.parse_qs(urllib.parse.urlparse(str(r["next"])).query).get("cursor") or [None])[0]
             return self.responder_json({"modelos": [resumo_sketchfab(x) for x in r.get("results", []) if isinstance(x, dict)], "proximo": proximo or ""})
+        if partes == ["arquivos"] and m == "GET":
+            uid = str(p.get("uid") or "")
+            if not re.fullmatch(r"[0-9a-f]{32}", uid):
+                raise ErroPonte(400, "Esse não é um modelo do Sketchfab (falta o código dele).")
+            if not tem_chave:
+                raise ErroPonte(400, "Falta a chave do Sketchfab (em 🔑 Chaves das APIs).")
+            versoes, info = sketchfab_arquivos(uid, chave_sketchfab(), novo=p.get("novo") == "1")
+            r = resumo_sketchfab(info)
+            pode_baixar = r["pode_loja"] or dono  # os comprados (Standard) só para o dono, para ele usar
+            return self.responder_json({
+                "modelo": {k: r[k] for k in ("uid", "nome", "autor", "licenca", "licenca_nome", "pode_loja", "animacoes", "faces")},
+                "pode_baixar": pode_baixar, "pode_trazer": bool(pode_trazer and r["pode_loja"]),
+                "arquivos": [{"id": v["id"], "formato": v["formato"], "nome_formato": SKETCHFAB_FORMATOS[v["formato"]][0], "textura": v["textura"],
+                              "tamanho": v["tamanho"], "carregar": v["formato"] in ("glb", "gltf")} for v in versoes]})
         if partes == ["importar"] and m == "POST":
             d = self.ler_json()
             uid = str(d.get("uid") or "")
@@ -2468,7 +2565,7 @@ class Manipulador(BaseHTTPRequestHandler):
             pasta = pasta_tipo / ident
             pasta.mkdir()
             try:
-                nome_arq = self.sketchfab_glb(uid, chave, r, pasta)
+                nome_arq = self.sketchfab_glb(uid, chave, r, pasta, str(d.get("arquivo") or ""))
                 if r["miniatura"]:
                     try:
                         baixar_de_fora(r["miniatura"], pasta / ".miniatura", 8 * 1024 * 1024, 30)
@@ -2513,31 +2610,50 @@ class Manipulador(BaseHTTPRequestHandler):
             chave = chave_sketchfab()
             if not chave:
                 raise ErroPonte(400, "Falta a chave do Sketchfab (em 🔑 Chaves das APIs).")
-            r = resumo_sketchfab(pedir_sketchfab(f"/models/{uid}", chave))
+            versoes, info = sketchfab_arquivos(uid, chave)
+            r = resumo_sketchfab(info)
             if not r["pode_loja"] and not dono:
                 raise ErroPonte(403, f"A licença deste modelo ({r['licenca_nome'] or 'sem licença'}) não deixa redistribuir: só o dono do servidor pode baixar, para usar ele mesmo.")
+            arquivo, bruto = str(d.get("arquivo") or ""), bool(d.get("bruto"))
             pasta = Path(tempfile.mkdtemp(prefix="lnux-sketchfab-"))
             try:
-                nome_arq = self.sketchfab_glb(uid, chave, r, pasta)
+                if bruto:  # o arquivo como o Sketchfab manda (o ZIP do glTF, o USDZ, o original do autor...)
+                    v = next((x for x in versoes if x["id"] == arquivo), None)
+                    if not v:
+                        raise ErroPonte(404, "Esse arquivo não está mais na lista do Sketchfab: abra a lista de novo.")
+                    slug = re.sub(r"[^\w-]+", "-", r["nome"].lower()).strip("-")[:40] or "mapa"
+                    sufixo = ("-" + (f"{v['textura'] // 1024}k" if v["textura"] and v["textura"] >= 1024 else str(v["textura"]))) if v["textura"] else ""
+                    nome_arq = slug + sufixo + SKETCHFAB_FORMATOS[v["formato"]][1]
+                    cabe_no_disco(pasta, v["tamanho"] * 2)
+                    baixar_de_fora(sketchfab_link(v, chave), pasta / nome_arq, SKETCHFAB_MAXIMO)
+                    tipo = SKETCHFAB_FORMATOS[v["formato"]][2]
+                else:
+                    nome_arq, tipo = self.sketchfab_glb(uid, chave, r, pasta, arquivo), "model/gltf-binary"
                 nome_baixado = urllib.parse.quote(nome_arq)
-                return self.enviar_arquivo(pasta / nome_arq, "model/gltf-binary", cabecalhos={
+                return self.enviar_arquivo(pasta / nome_arq, tipo, cabecalhos={
                     "Content-Disposition": f"attachment; filename*=UTF-8''{nome_baixado}", "X-Sketchfab-Licenca": r["licenca"] or "",
                     "X-Sketchfab-Nome": urllib.parse.quote(r["nome"] or "")})
             finally:
                 shutil.rmtree(pasta, ignore_errors=True)
         raise ErroPonte(404, f"A loja não conhece /sketchfab/{'/'.join(partes)} ({m}).")
 
-    def sketchfab_glb(self, uid: str, chave: str, r: dict, pasta: Path) -> str:
-        """Baixa um modelo do Sketchfab para a pasta, como um .glb só (o glTF em ZIP é juntado), e devolve o nome do arquivo."""
-        arquivos = pedir_sketchfab(f"/models/{uid}/download", chave)
-        escolha = next(((k, arquivos[k]) for k in ("glb", "gltf") if isinstance(arquivos.get(k), dict) and arquivos[k].get("url")), None)
+    def sketchfab_glb(self, uid: str, chave: str, r: dict, pasta: Path, arquivo: str = "") -> str:
+        """Baixa um modelo do Sketchfab para a pasta, como um .glb só (o glTF em ZIP é juntado), e devolve o nome do arquivo.
+        arquivo: a versão escolhida (ex.: "glb-1024"); sem ela, o GLB (ou o glTF) com as texturas maiores."""
+        versoes = [v for v in sketchfab_arquivos(uid, chave)[0] if v["formato"] in ("glb", "gltf")]
+        if arquivo:
+            escolha = next((v for v in versoes if v["id"] == arquivo), None)
+            if not escolha:
+                raise ErroPonte(404, "Esse arquivo não abre no jogo (só GLB e glTF) ou não está mais na lista do Sketchfab.")
+        else:
+            escolha = max(versoes, key=lambda v: (v["formato"] == "glb", v["textura"] or 10 ** 6), default=None)
         if not escolha:
             raise ErroPonte(502, "O Sketchfab não mandou um glTF para este modelo.")
-        tipo_arq, alvo = escolha
-        cabe_no_disco(pasta, int(alvo.get("size") or 0) * 2)
+        tipo_arq = escolha["formato"]
+        cabe_no_disco(pasta, escolha["tamanho"] * 2)
         nome_arq = (re.sub(r"[^\w-]+", "-", r["nome"].lower()).strip("-")[:40] or "mapa") + ".glb"
         bruto = pasta / (".baixando." + tipo_arq)
-        baixar_de_fora(str(alvo["url"]), bruto, SKETCHFAB_MAXIMO)
+        baixar_de_fora(sketchfab_link(escolha, chave), bruto, SKETCHFAB_MAXIMO)
         if tipo_arq == "gltf":
             (pasta / nome_arq).write_bytes(gltf_zip_para_glb(bruto))
             bruto.unlink()

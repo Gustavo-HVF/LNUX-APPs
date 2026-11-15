@@ -286,17 +286,29 @@ Mapas do [Sketchfab](https://sketchfab.com) vêm direto para a loja, pela API de
    animações tem.
 3. **Trazer para a loja**: o servidor baixa o modelo (o `.glb`, ou o glTF em ZIP, que ele junta num `.glb` com as
    texturas dentro), tira a miniatura e publica em *Mapas*, com os # que você puser mais os # do próprio Sketchfab.
-4. **Carregar** e **Baixar**, sem pôr na loja: *Carregar* abre o mapa no jogo na hora (vai para *Movimento ›
-   Cenário*); *Baixar* entrega o `.glb` para o aparelho. Os de licença livre (Creative Commons) para todos; os
-   comprados (*Standard*) só para o dono, que usa a própria conta (a licença não deixa passar para os outros).
+4. **Arquivos e formatos**: a lista do que o Sketchfab oferece para aquele modelo, cada versão com o formato
+   (**GLB**, **glTF** em ZIP, **USDZ** e, às vezes, o **original do autor** em ZIP), o tamanho máximo das texturas
+   (**1K, 2K, 4K**... ou as originais) e o tamanho do arquivo. Em cada uma:
+   - **Carregar** abre o mapa no jogo na hora (vai para *Movimento › Cenário*); vale para o GLB e o glTF (o servidor
+     junta o glTF num `.glb`). Texturas menores (1K) carregam mais rápido, principalmente no celular.
+   - **Baixar** entrega o arquivo como veio (o `.glb`, o ZIP, o `.usdz`...), com a resolução no nome
+     (`moinho-4k.glb`). O USDZ e o original não abrem direto no jogo: baixe e abra em *Movimento › Cenário*.
+   - **Pôr na loja** traz aquela versão (a de 1K deixa a loja mais leve para quem entra pelo link).
+
+   Baixar e carregar valem para **todos** (com a chave do dono guardada), mesmo com a loja fechada para publicações;
+   pôr na loja só para quem pode publicar. Os de licença livre (Creative Commons) para todos; os comprados
+   (*Standard*) só para o dono, que usa a própria conta (a licença não deixa passar para os outros). Os links do
+   Sketchfab ficam no servidor (nunca vão para o navegador) e são guardados por uns minutos.
 
 A janela mostra três modelos por fileira (dois no celular), cada um com a miniatura, o nome, o autor, a licença e os
 botões.
 
-**Todos usam, só o dono vê a chave.** Com a chave guardada, o botão aparece para todos que podem publicar na loja
-(o dono decide, em "quem entra pelo link pode publicar"): eles buscam e trazem, e o servidor usa a chave por eles. Só o
+**Todos usam, só o dono vê a chave.** Com a chave guardada, o botão aparece para todos: buscam, baixam e carregam, e
+quem pode publicar na loja (o dono decide, em "quem entra pelo link pode publicar") também traz; o servidor usa a
+chave por eles. Só o
 dono vê se há chave e a troca; nenhuma resposta do servidor leva a chave, e ela não chega ao navegador de ninguém. Para
-quem não é o dono há um limite de pedidos por endereço (40 buscas por minuto e 10 mapas por hora), porque a cota da
+quem não é o dono há um limite de pedidos por endereço (40 buscas por minuto, 30 listas de arquivos a cada 10 minutos,
+20 downloads e 10 mapas trazidos por hora), porque a cota da
 chave e o disco são do dono. Quem trouxe aparece no crédito ("trazido por") e pode apagar o que trouxe, como ao
 publicar.
 
