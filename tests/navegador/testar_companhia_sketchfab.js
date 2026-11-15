@@ -4,7 +4,8 @@
 // Não fala com o Sketchfab de verdade: o teste sobe um Sketchfab de mentira (busca, detalhes, download e miniatura) na
 // porta que o testar_navegador.py passou ao servidor (LNUX_SKETCHFAB_API). Cobre: só o dono vê o botão Sketchfab; a
 // chave guardada no servidor; buscar; a licença que não deixa redistribuir fica bloqueada; trazer um mapa animado para a
-// loja (com o crédito, a licença e os # do Sketchfab); usar esse mapa numa sala: as animações tocam, a peça que se mexe
+// loja (com o crédito, a licença e os # do Sketchfab); quem entra pelo link traz só com conta (sem ela, "Trazer" pede
+// para entrar; o código chega num SMTP de mentira); usar esse mapa numa sala: as animações tocam, a peça que se mexe
 // sai da colisão, e quem entra na sala vê a animação no mesmo ponto (o relógio do servidor).
 const { chromium } = require("playwright");
 const fs = require("fs");
@@ -12,6 +13,7 @@ const http = require("http");
 const path = require("path");
 const { mapaAnimado, png } = require("./companhia_arquivos.js");
 const { nomeGuardado } = require("./companhia_menus.js");
+const { smtpFalso, configurarEmail, criarConta, apagarConta } = require("./companhia_email.js");
 
 const PASTA = process.env.LNUX_TESTE_SAIDA || __dirname;
 const TOKEN = process.env.LNUX_TESTE_TOKEN || fs.readFileSync(path.join(PASTA, "token.txt"), "utf8").trim();
@@ -136,7 +138,9 @@ function sketchfabFalso() {
       "é um mapa da loja, com a miniatura do Sketchfab, os # (os do dono e os do Sketchfab) e o aviso de que tem animação");
     ok(falso.vistos.some(([u, a]) => u.endsWith("/download") && a === "Token chave-de-teste-123"), "o download foi pedido com a chave, pelo servidor");
 
-    // ── a chave é do dono, mas todos usam: a Bia (pelo link) busca e traz, sem ver nem trocar a chave ──
+    // ── a chave é do dono, mas todos usam: a Bia (pelo link) busca e, com conta, traz, sem ver nem trocar a chave ──
+    const smtp = await smtpFalso();
+    await configurarEmail(dono, smtp.porta);
     await bia.pagina.reload();
     await bia.pagina.waitForSelector(".webc-loja #loja-sketchfab:not([hidden])", { timeout: 30000 });
     await bia.pagina.click("#loja-sketchfab");
@@ -146,17 +150,29 @@ function sketchfabFalso() {
     await bia.pagina.fill('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "moinho");
     await bia.pagina.press('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "Enter");
     await bia.pagina.waitForSelector(`.sketchfab-cartao[data-uid="${falso.A}"] button[data-uid]:not([disabled])`, { timeout: 20000 });
+    // sem conta, "Trazer para a loja" pede para entrar (trazer é publicar)
+    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] button[data-uid]`);
+    await bia.pagina.waitForSelector(".lnux-dialogo .janela-conta", { timeout: 10000 });
+    const pediuConta = await bia.ev(() => [...document.querySelectorAll(".lnux-aviso")].some((a) => /Só quem tem conta publica/.test(a.textContent)));
+    await bia.pagina.keyboard.press("Escape");
+    await bia.pagina.waitForFunction(() => !document.querySelector(".lnux-dialogo .janela-conta"));
+    const aindaAberta = await bia.ev(() => !!document.querySelector(".janela-sketchfab"));
+    ok(pediuConta && aindaAberta && !(await bia.ev(async () => (await C.loja.lista()).itens.some((i) => i.trouxe))),
+      "sem conta, \"Trazer para a loja\" avisa que só quem tem conta publica e abre o \"Entrar na conta\" (fechar volta para a janela do Sketchfab)");
+    await criarConta(smtp, bia, "Bia do Sketchfab", "bia.sketchfab@exemplo.com");
     await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] button[data-uid]`);
     await bia.pagina.waitForSelector(".loja-detalhe:not([hidden]) .loja-credito", { timeout: 60000 });
     const daBia = await bia.ev(async () => {
-      const credito = document.querySelector(".loja-detalhe .loja-credito").innerText, itens = (await C.loja.lista()).itens, meu = itens.find((i) => i.trouxe === "Bia");
+      const credito = document.querySelector(".loja-detalhe .loja-credito").innerText, itens = (await C.loja.lista()).itens, meu = itens.find((i) => i.trouxe === "Bia do Sketchfab");
       const vazou = document.documentElement.outerHTML.includes("chave-de-teste") || Object.keys(localStorage).some((k) => (localStorage.getItem(k) || "").includes("chave-de-teste"));
       const podia = !!(meu && C.loja.podeMexer(meu, false));
-      if (meu) await C.loja.apagar(meu); // quem trouxe apaga (o segredo ficou no navegador dela)
-      return { credito, vazou, podia, sobrou: (await C.loja.lista()).itens.some((i) => i.trouxe === "Bia") };
+      if (meu) await C.loja.apagar(meu); // quem trouxe apaga (pela conta, e o segredo ficou no navegador dela)
+      return { credito, vazou, podia, conta: !!(meu && meu.conta === C.contas.eu.id), sobrou: (await C.loja.lista()).itens.some((i) => i.trouxe === "Bia do Sketchfab") };
     });
-    ok(/trazido por Bia/.test(daBia.credito) && !daBia.vazou && daBia.podia && !daBia.sobrou,
-      `a Bia trouxe o mapa com a chave do dono, que nunca chegou ao navegador dela (${daBia.credito.replace(/\s+/g, " ").slice(0, 80)}); quem trouxe pode apagar`);
+    ok(/trazido por Bia do Sketchfab/.test(daBia.credito) && !daBia.vazou && daBia.podia && daBia.conta && !daBia.sobrou,
+      `com conta, a Bia trouxe o mapa com a chave do dono, que nunca chegou ao navegador dela (${daBia.credito.replace(/\s+/g, " ").slice(0, 80)}); quem trouxe pode apagar`);
+    await apagarConta(bia); // daqui em diante, a Bia joga sem conta (como quem entra pelo link)
+    smtp.srv.close();
     // carregar no jogo sem pôr na loja; o comprado (Standard) a Bia não baixa nem carrega (a licença não deixa passar adiante)
     await bia.pagina.click("#loja-sketchfab");
     await bia.pagina.fill('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "moinho");
@@ -172,7 +188,7 @@ function sketchfabFalso() {
     await bia.pagina.waitForSelector('.janela-sketchfab-arquivos [data-arquivo="glb-1024"] [data-carregar]:not([disabled])', { timeout: 30000 });
     await bia.pagina.click('.janela-sketchfab-arquivos [data-arquivo="glb-1024"] [data-carregar]');
     await bia.pagina.waitForFunction(async (n) => (await C.mapas.lista()).length > n, mapasAntes, { timeout: 60000, polling: 300 });
-    const carregado = await bia.ev(async () => ({ nomes: (await C.mapas.lista()).map((m) => m.nome), janela: !!document.querySelector(".janela-sketchfab"), loja: (await C.loja.lista()).itens.filter((i) => i.trouxe === "Bia").length }));
+    const carregado = await bia.ev(async () => ({ nomes: (await C.mapas.lista()).map((m) => m.nome), janela: !!document.querySelector(".janela-sketchfab"), loja: (await C.loja.lista()).itens.filter((i) => i.trouxe).length }));
     ok(bloqueioB.carregar && bloqueioB.baixar && bloqueioB.aviso && carregado.nomes.includes("Moinho animado") && !carregado.janela && carregado.loja === 0,
       `"Carregar" (a versão de 1K) traz o mapa direto para o jogo (Movimento › Cenário), sem pôr na loja; o comprado fica sem Carregar e Baixar para quem não é o dono`);
 

@@ -57,8 +57,8 @@
     "Nada com esse nome.": ["Nothing with that name.", "その名前のものはありません。"], "Nada com o {tag}.": ["Nothing with {tag}.", "{tag} のものはありません。"],
     "Ainda não há {tipo} na loja.": ["There are no {tipo} in the store yet.", "ストアにはまだ{tipo}がありません。"],
     "Seja a primeira pessoa a publicar: ＋ Publicar.": ["Be the first to publish: ＋ Publish.", "最初に公開しよう: ＋ 公開"],
-    "Deixar quem entra pelo link publicar": ["Let people who come through the link publish", "リンクから来た人も公開できるようにする"],
-    "Os visitantes podem publicar na loja.": ["Visitors can publish to the store.", "訪問者もストアに公開できます。"], "Só você publica na loja agora.": ["Only you can publish to the store now.", "今はあなただけがストアに公開できます。"],
+    "Deixar quem tem conta publicar": ["Let people with an account publish", "アカウントを持っている人も公開できるようにする"],
+    "Quem tem conta pode publicar na loja.": ["People with an account can publish to the store.", "アカウントを持っている人はストアに公開できます。"], "Só você publica na loja agora.": ["Only you can publish to the store now.", "今はあなただけがストアに公開できます。"],
     "Carregando a prévia...": ["Loading the preview...", "プレビューを読み込み中..."], "Baixar o arquivo": ["Download the file", "ファイルをダウンロード"],
     "Apagar da loja": ["Remove from the store", "ストアから削除"], "Apagar": ["Delete", "削除"], "Voltar à loja": ["Back to the store", "ストアに戻る"],
     "Salvar no perfil": ["Save to profile", "プロフィールに保存"], "Salvo no perfil": ["Saved to profile", "プロフィールに保存済み"],
@@ -913,5 +913,17 @@
     "O Sketchfab mandou um endereço de download estranho.": ["Sketchfab sent a strange download address.", "Sketchfab から不審なダウンロード先が送られてきました。"],
     "O Sketchfab não mandou o link do download.": ["Sketchfab didn't send the download link.", "Sketchfab はダウンロードリンクを送りませんでした。"],
     "Original do autor (ZIP)": ["Author's original (ZIP)", "作者のオリジナル（ZIP）"], "texturas originais": ["original textures", "オリジナルのテクスチャ"],
+  });
+})();
+
+// Só quem tem conta publica na loja (e traz do Sketchfab)
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Só quem tem conta publica na loja. Entre na sua conta (ou crie uma) para publicar.": ["Only people with an account can publish to the store. Sign in (or create an account) to publish.", "ストアに公開できるのはアカウントを持っている人だけです。公開するにはログイン（またはアカウントを作成）してください。"],
+    "Entre na sua conta para trazer para a loja.": ["Sign in to bring it to the store.", "ストアに入れるにはログインしてください。"],
+    "Quem não tem conta só vê, baixa e usa.": ["People without an account can only view, download and use.", "アカウントがない人は見る・ダウンロード・使うことだけができます。"],
+    "Para as pessoas criarem conta, configure o e-mail do servidor (Conta › Contas e e-mail do servidor).": ["For people to create accounts, set up the server's e-mail (Account › Server accounts and e-mail).", "みんながアカウントを作れるように、サーバーのメールを設定してください（アカウント › サーバーのアカウントとメール）。"],
   });
 })();

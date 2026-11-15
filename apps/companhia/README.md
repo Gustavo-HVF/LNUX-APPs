@@ -265,9 +265,12 @@ cartões com a miniatura, quantas **curtidas** (♥) e quantas pessoas **baixara
   arquivo* guarda o `.vrm`, `.glb`, `.vrma`, `.bvh` ou `.fbx`.
 - **Publicar** (＋ Publicar): uma das suas personagens, um dos seus mapas ou movimentos, ou um arquivo do aparelho
   (avatares do Unity viram `.vrm`; mapas de qualquer formato viram `.glb`), com os #. A miniatura é tirada da
-  prévia. Com conta, o autor é a conta, e quem publicou pode apagar o que é seu.
-- **O dono da loja** (quem abre no aparelho do servidor, com a ponte) apaga qualquer item, decide se quem entra
-  pelo link pode publicar e vê onde fica a pasta: `~/.lnux-apps/loja` (ou `"loja"` em `ponte.json`, ou `--loja`),
+  prévia. **Só quem tem conta publica** (sem conta, ＋ Publicar pede para entrar ou criar uma; quem não tem conta só
+  vê, baixa e usa). O autor é a conta, e quem publicou troca a miniatura ou apaga o que é seu entrando na conta, de
+  qualquer aparelho. O dono do servidor publica mesmo sem conta.
+- **O dono da loja** (quem abre no aparelho do servidor, com a ponte) apaga qualquer item, decide se quem tem conta
+  pode publicar ("Deixar quem tem conta publicar"; as contas precisam do e-mail do servidor configurado) e vê onde
+  fica a pasta: `~/.lnux-apps/loja` (ou `"loja"` em `ponte.json`, ou `--loja`),
   com as subpastas `personagens`, `mundos` e `animacoes`. Arquivos postos à mão nelas também aparecem na loja; as
   miniaturas que faltam o dono gera sozinho ao abrir a loja. Os #, as curtidas e os downloads ficam em
   `.social.json`, na mesma pasta.
@@ -296,7 +299,7 @@ Mapas do [Sketchfab](https://sketchfab.com) vêm direto para a loja, pela API de
    - **Pôr na loja** traz aquela versão (a de 1K deixa a loja mais leve para quem entra pelo link).
 
    Baixar e carregar valem para **todos** (com a chave do dono guardada), mesmo com a loja fechada para publicações;
-   pôr na loja só para quem pode publicar. Os de licença livre (Creative Commons) para todos; os comprados
+   pôr na loja (ou **Trazer para a loja**) é publicar: só para quem tem conta (sem ela, o botão pede para entrar). Os de licença livre (Creative Commons) para todos; os comprados
    (*Standard*) só para o dono, que usa a própria conta (a licença não deixa passar para os outros). Os links do
    Sketchfab ficam no servidor (nunca vão para o navegador) e são guardados por uns minutos.
 
@@ -304,13 +307,13 @@ A janela mostra três modelos por fileira (dois no celular), cada um com a minia
 botões.
 
 **Todos usam, só o dono vê a chave.** Com a chave guardada, o botão aparece para todos: buscam, baixam e carregam, e
-quem pode publicar na loja (o dono decide, em "quem entra pelo link pode publicar") também traz; o servidor usa a
+quem tem conta também traz para a loja (se o dono deixar, em "Deixar quem tem conta publicar"); o servidor usa a
 chave por eles. Só o
 dono vê se há chave e a troca; nenhuma resposta do servidor leva a chave, e ela não chega ao navegador de ninguém. Para
 quem não é o dono há um limite de pedidos por endereço (40 buscas por minuto, 30 listas de arquivos a cada 10 minutos,
 20 downloads e 10 mapas trazidos por hora), porque a cota da
-chave e o disco são do dono. Quem trouxe aparece no crédito ("trazido por") e pode apagar o que trouxe, como ao
-publicar.
+chave e o disco são do dono. Quem trouxe aparece no crédito ("trazido por", o nome da conta) e pode apagar o que
+trouxe, como ao publicar.
 
 **Licenças.** A loja redistribui o arquivo para quem entra pelo link, então só entram modelos com licença Creative
 Commons que deixa redistribuir: **CC0**, **CC BY**, **CC BY-SA**, **CC BY-NC** e **CC BY-NC-SA**. Os comprados na loja

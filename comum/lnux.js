@@ -352,6 +352,9 @@
       resolver(valor);
     };
     const teclas = (e) => {
+      // uma janela aberta por cima de outra (ex.: entrar na conta de dentro de outra janela): só a de cima responde
+      const abertas = document.querySelectorAll(".lnux-fundo-modal");
+      if (abertas[abertas.length - 1] !== fundo) return;
       if (e.key === "Escape") { e.stopPropagation(); e.preventDefault(); fechar(null); }
       // Enter aperta o botão principal, a não ser num campo que trata o próprio Enter (data-enter-proprio)
       if (e.key === "Enter" && e.target.tagName !== "TEXTAREA" && e.target.tagName !== "BUTTON" && !(e.target.closest && e.target.closest("[data-enter-proprio]"))) {

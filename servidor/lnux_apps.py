@@ -1773,7 +1773,7 @@ class Manipulador(BaseHTTPRequestHandler):
         # As contas também: cadastro, código, entrar e perfil, sem a chave da ponte (os ajustes são do dono)
         if rota == "contas" or rota.startswith("contas/"):
             return self.contas(self.command, rota[7:])
-        # A loja também: ver e baixar, qualquer um; publicar, se o dono deixar; apagar, o dono ou quem publicou
+        # A loja também: ver e baixar, qualquer um; publicar, quem tem conta (se o dono deixar); apagar, o dono ou quem publicou
         if rota == "loja" or rota.startswith("loja/"):
             return self.loja(self.command, rota[5:])
         # O cookie só vale para LER arquivos (é o que <video src> e <img src> precisam); o resto exige o cabeçalho
@@ -2368,6 +2368,7 @@ class Manipulador(BaseHTTPRequestHandler):
                 social = self.loja_social()
                 itens = [self.loja_com_social(publico(i), social, conta) for i in self.loja_itens()]
             return self.responder_json({"itens": itens, "publicar": self.ponte.loja_publicar(), "dono": dono, "conta": bool(conta),
+                                        "pode_publicar": bool(dono or (conta and self.ponte.loja_publicar())),
                                         "sketchfab": bool(chave_sketchfab()),
                                         **({"pasta": str(self.ponte.loja)} if dono else {})})
         if partes == ["config"] and m == "POST":
@@ -2388,6 +2389,9 @@ class Manipulador(BaseHTTPRequestHandler):
 
         def pode_mexer() -> bool:
             if dono:
+                return True
+            conta = self.conta_da_sessao() if item.get("conta") else None  # quem publicou com a conta, de qualquer aparelho
+            if conta and hmac.compare_digest(str(item["conta"]), conta["id"]):
                 return True
             segredo = self.headers.get("X-Loja-Segredo", "")
             return bool(segredo and item["_segredo"] and hmac.compare_digest(hashlib.sha256(segredo.encode()).hexdigest().encode(), item["_segredo"].encode()))
@@ -2492,20 +2496,23 @@ class Manipulador(BaseHTTPRequestHandler):
 
         A chave é do dono e fica só no servidor: ninguém mais a vê nem a troca. Com ela guardada, todos buscam, baixam e
         carregam mapas (o servidor usa a chave por eles; os links do Sketchfab nunca vão para o navegador); trazer para a
-        loja vale para quem pode publicar nela (o dono decide, em "quem entra pelo link pode publicar"). Para quem não é o
-        dono há um limite de pedidos por endereço (a cota da chave e o disco são do dono)."""
+        loja vale para quem pode publicar nela: quem tem conta (se o dono deixar, em "quem tem conta pode publicar") e o dono.
+        Para quem não é o dono há um limite de pedidos por endereço (a cota da chave e o disco são do dono)."""
         tem_chave = bool(chave_sketchfab())
-        pode_trazer = dono or self.ponte.loja_publicar()
+        conta = self.conta_da_sessao()
+        pode_trazer = dono or bool(conta and self.ponte.loja_publicar())
+        precisa_conta = not dono and not conta and self.ponte.loja_publicar()  # entrando na conta, pode trazer
         if not partes and m == "GET":
             return self.responder_json({"chave": tem_chave, "pode_trazer": bool(tem_chave and pode_trazer), "pode_baixar": tem_chave, "dono": dono,
+                                        "precisa_conta": bool(tem_chave and precisa_conta),
                                         "licencas": {k: v[0] for k, v in SKETCHFAB_LICENCAS.items()}})
         if not partes and m == "PUT" and not dono:
             raise ErroPonte(403, "Só o dono do servidor guarda ou troca a chave do Sketchfab.")
         if not dono:
             if not tem_chave:
                 raise ErroPonte(503, "O dono do servidor ainda não guardou a chave do Sketchfab.")
-            if partes == ["importar"] and not pode_trazer:
-                raise ErroPonte(403, "O dono desta loja não está aceitando publicações agora.")
+            if partes == ["importar"]:
+                self.quem_publica(dono)  # sem conta ou com a loja fechada: o erro
             origem = self.origem_do_pedido()
             limites = {"buscar": (40, 60), "arquivos": (30, 600), "baixar": (20, 3600), "importar": (10, 3600)}
             if partes and partes[0] in limites:
@@ -2544,7 +2551,7 @@ class Manipulador(BaseHTTPRequestHandler):
             pode_baixar = r["pode_loja"] or dono  # os comprados (Standard) só para o dono, para ele usar
             return self.responder_json({
                 "modelo": {k: r[k] for k in ("uid", "nome", "autor", "licenca", "licenca_nome", "pode_loja", "animacoes", "faces")},
-                "pode_baixar": pode_baixar, "pode_trazer": bool(pode_trazer and r["pode_loja"]),
+                "pode_baixar": pode_baixar, "pode_trazer": bool(pode_trazer and r["pode_loja"]), "precisa_conta": bool(precisa_conta and r["pode_loja"]),
                 "arquivos": [{"id": v["id"], "formato": v["formato"], "nome_formato": SKETCHFAB_FORMATOS[v["formato"]][0], "textura": v["textura"],
                               "tamanho": v["tamanho"], "carregar": v["formato"] in ("glb", "gltf")} for v in versoes]})
         if partes == ["importar"] and m == "POST":
@@ -2575,13 +2582,12 @@ class Manipulador(BaseHTTPRequestHandler):
                     except ErroPonte:
                         (pasta / ".miniatura").unlink(missing_ok=True)
                 slug = r["licenca"]
-                # quem trouxe (como quem publica): a conta, ou o segredo que fica no navegador de quem não tem conta
-                conta = self.conta_da_sessao()
+                # quem trouxe (como quem publica): a conta (que apaga de qualquer aparelho) e o segredo, no navegador de quem trouxe
                 segredo = secrets.token_urlsafe(18) if not dono else ""
                 dados = {"nome": sala_texto(d.get("nome"), 60) or r["nome"] or "Mapa do Sketchfab", "descricao": sala_texto(str(info.get("description") or ""), 600),
                          "autor": r["autor"], "conta": conta["id"] if conta and not dono else "", "arquivo": nome_arq, "criado": int(time.time()),
                          "segredo": hashlib.sha256(segredo.encode()).hexdigest() if segredo else "",
-                         "trouxe": (conta["nome"] if conta else sala_texto(d.get("quem"), 40)) if not dono else "",
+                         "trouxe": conta["nome"] if conta and not dono else "",
                          "origem": {"site": "Sketchfab", "uid": uid, "url": r["url"], "autor": r["autor"], "autor_url": r["autor_url"]},
                          "licenca": {"slug": slug, "nome": SKETCHFAB_LICENCAS[slug][0], "url": SKETCHFAB_LICENCAS[slug][1]},
                          "animacoes": r["animacoes"]}
@@ -2664,9 +2670,20 @@ class Manipulador(BaseHTTPRequestHandler):
         glb_sem_especular(pasta / nome_arq)  # specular/glossiness antigo: as texturas aparecem em qualquer programa
         return nome_arq
 
-    def loja_publicar(self, tipo: str, p: dict, dono: bool):
-        if not dono and not self.ponte.loja_publicar():
+    def quem_publica(self, dono: bool) -> dict | None:
+        """Quem pode publicar na loja (e trazer do Sketchfab): o dono do servidor e, se ele deixar, quem tem conta. Devolve a
+        conta (None para o dono sem conta); os outros recebem o erro (sem conta: 401, para a tela pedir que entre)."""
+        conta = self.conta_da_sessao()
+        if dono:
+            return conta
+        if not self.ponte.loja_publicar():
             raise ErroPonte(403, "O dono desta loja não está aceitando publicações agora.")
+        if not conta or not conta.get("verificada"):
+            raise ErroPonte(401, "Só quem tem conta publica na loja. Entre na sua conta (ou crie uma) para publicar.", conta=True)
+        return conta
+
+    def loja_publicar(self, tipo: str, p: dict, dono: bool):
+        conta = self.quem_publica(dono)
         sub, exts = LOJA_TIPOS[tipo]
         nome_arq = nome_seguro(p.get("arquivo", ""), "arquivo")
         ext = Path(nome_arq).suffix.lower()
@@ -2684,8 +2701,7 @@ class Manipulador(BaseHTTPRequestHandler):
             self.receber_para(pasta / nome_arq)
             if not formato_confere(pasta / nome_arq, ext):
                 raise ErroPonte(400, f"Esse arquivo não é um {ext} de verdade.")
-            segredo = secrets.token_urlsafe(18)
-            conta = self.conta_da_sessao()  # quem publica com a conta: o nome dela, e o perfil aparece no item
+            segredo = secrets.token_urlsafe(18)  # quem publica com a conta: o nome dela, e o perfil aparece no item
             dados = {"nome": sala_texto(p.get("nome"), 60) or Path(nome_arq).stem, "descricao": sala_texto(p.get("descricao"), 600),
                      "autor": (conta["nome"] if conta else "") or sala_texto(p.get("autor"), 40), "conta": conta["id"] if conta else "",
                      "arquivo": nome_arq, "criado": int(time.time()), "segredo": hashlib.sha256(segredo.encode()).hexdigest()}

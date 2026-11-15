@@ -87,6 +87,24 @@ def q(caminho):
 S = Servidor()
 
 
+def conta_de_teste(nome: str) -> tuple:
+    """Uma conta já confirmada (direto no cadastro, sem e-mail): (id, o cabeçalho da sessão). Apague com apagar_contas."""
+    cadastro = lnux_apps.contas_de(lnux_apps.DADOS)
+    with lnux_apps.CONTAS_TRAVA:
+        c = {"id": secrets.token_hex(6), "email": f"{secrets.token_hex(4)}@teste.exemplo", "nome": nome, "criada": int(time.time()), "verificada": True, "perfil": {}}
+        cadastro.ler()["contas"][c["id"]] = c
+        sessao = cadastro.nova_sessao(c)
+        cadastro.gravar()
+    return c["id"], {"X-Conta-Sessao": sessao}
+
+
+def apagar_contas(*ids) -> None:
+    cadastro = lnux_apps.contas_de(lnux_apps.DADOS)
+    with lnux_apps.CONTAS_TRAVA:
+        for cid in ids:
+            lnux_apps.Manipulador.apagar_conta(cadastro, cid)
+
+
 @caso("Apps: entrega os arquivos com o tipo certo e esconde pastas ocultas e caminhos para fora")
 def _():
     status, cab, dados = S.pedir("GET", "/comum/lnux.js", token=False)
@@ -664,8 +682,12 @@ def _():
     assert S.json("POST", f"/api/sala/{a['codigo']}/falar", json_corpo={"id": cia["id"], "segredo": cia["segredo"], "texto": "agora sim"}, **visita)[0] == 200
     assert S.json("GET", "/api/salas", **visita)[1]["salas"] == []
     # um mundo da loja vira o cenário (sem enviar o arquivo), com a miniatura dele
-    _, mundo, _ = S.json("PUT", "/api/loja/mundo?nome=Pista&arquivo=pista.glb", corpo=b"glTF" + b"p" * 64, **visita)
-    assert S.pedir("PUT", f"/api/loja/{mundo['item']['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": mundo["segredo"]}, **visita)[0] == 201
+    quem, eu = conta_de_teste("Quem fez a pista")
+    try:
+        _, mundo, _ = S.json("PUT", "/api/loja/mundo?nome=Pista&arquivo=pista.glb", corpo=b"glTF" + b"p" * 64, cabecalhos=eu, **visita)
+        assert S.pedir("PUT", f"/api/loja/{mundo['item']['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": mundo["segredo"]}, **visita)[0] == 201
+    finally:
+        apagar_contas(quem)
     assert S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, **visita)[0] == 403
     status, r, _ = S.json("POST", f"/api/sala/{a['codigo']}/mapa", json_corpo={"loja": mundo["item"]["id"]}, cabecalhos={"X-Sala-Chave": a["chave"]}, **visita)
     assert status == 201 and r["mapa"]["nome"] == "Pista" and r["miniatura"] == 1 and r["mapa"]["ajuste"] == {} and r["mapa"]["arquivo"] == r["mapa"]["versao"], r
@@ -1144,9 +1166,9 @@ def _():
         assert item["tags"][:3] == ["praia", "fnaf", "moinho-de-vento"] and item["miniatura"] > 0, item["tags"]
         assert S.pedir("GET", f"/api/loja/{item['id']}/arquivo", token=False)[2] == glb
         assert ("/v3/models/" + A + "/download", "Token chave-de-teste-123") in vistos
-        # quem entra pelo link também busca e traz (com a chave do dono, que fica no servidor), se a loja aceita publicações
+        # quem entra pelo link também busca e baixa (com a chave do dono, que fica no servidor); trazer, só com conta
         status, r, _ = S.json("GET", "/api/loja/sketchfab", token=False)
-        assert status == 200 and r["chave"] is True and r["pode_trazer"] is True and "chave-de-teste" not in json.dumps(r), r
+        assert status == 200 and r["chave"] is True and r["pode_baixar"] is True and r["pode_trazer"] is False and r["precisa_conta"] is True and "chave-de-teste" not in json.dumps(r), r
         assert S.json("GET", "/api/loja", token=False)[1]["sketchfab"] is True
         status, r, _ = S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)
         assert status == 200 and len(r["modelos"]) == 3 and "chave-de-teste" not in json.dumps(r)
@@ -1158,15 +1180,28 @@ def _():
         status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A, "arquivo": "glb-1024"}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
         assert status == 200 and dados == glb1k, status
         S.json("POST", "/api/loja/config", json_corpo={"publicar": True})
+        # trazer para a loja é publicar: só com conta (sem ela, 401 e "precisa_conta" para a tela pedir que entre)
+        estado = S.json("GET", "/api/loja/sketchfab", token=False)[1]
+        assert estado["pode_trazer"] is False and estado["precisa_conta"] is True, estado
         status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "quem": "Bia"}, token=False)
-        assert status == 201 and r["segredo"] and r["item"]["trouxe"] == "Bia" and r["item"]["autor"] == "Joana" and "chave-de-teste" not in json.dumps(r), r
-        assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False)[0] == 403  # sem o segredo
-        assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False, cabecalhos={"X-Loja-Segredo": r["segredo"]})[0] == 200  # quem trouxe apaga
+        assert status == 401 and r.get("conta") is True, (status, r)
+        bia, eu_bia = conta_de_teste("Bia do Sketchfab")
+        try:
+            estado = S.json("GET", "/api/loja/sketchfab", cabecalhos=eu_bia, token=False)[1]
+            assert estado["pode_trazer"] is True and estado["precisa_conta"] is False, estado
+            r = S.json("GET", f"/api/loja/sketchfab/arquivos?uid={A}", cabecalhos=eu_bia, token=False)[1]
+            assert r["pode_trazer"] is True and r["precisa_conta"] is False, r
+            status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "quem": "Outro nome"}, cabecalhos=eu_bia, token=False)
+            assert status == 201 and r["segredo"] and r["item"]["trouxe"] == "Bia do Sketchfab" and r["item"]["conta"] == bia and r["item"]["autor"] == "Joana" and "chave-de-teste" not in json.dumps(r), r
+            assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False)[0] == 403  # sem a conta nem o segredo
+            assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False, cabecalhos=eu_bia)[0] == 200  # quem trouxe apaga (pela conta)
+        finally:
+            apagar_contas(bia)
         # os arquivos: as versões (formato, texturas em 1K/2K/4K, tamanho), sem os links do Sketchfab (ficam no servidor)
         status, r, _ = S.json("GET", f"/api/loja/sketchfab/arquivos?uid={A}", token=False)
         assert status == 200 and [a["id"] for a in r["arquivos"]] == ["glb-1024", "glb-4096", "usdz-original"], r
         assert [a["textura"] for a in r["arquivos"]] == [1024, 4096, None] and [a["carregar"] for a in r["arquivos"]] == [True, True, False]
-        assert r["arquivos"][0]["tamanho"] == len(glb1k) and r["arquivos"][0]["nome_formato"] == "GLB" and r["pode_baixar"] and r["pode_trazer"]
+        assert r["arquivos"][0]["tamanho"] == len(glb1k) and r["arquivos"][0]["nome_formato"] == "GLB" and r["pode_baixar"] and not r["pode_trazer"] and r["precisa_conta"]
         assert "url" not in json.dumps(r["arquivos"]) and "archives/" not in json.dumps(r) and "chave-de-teste" not in json.dumps(r)
         r = S.json("GET", f"/api/loja/sketchfab/arquivos?uid={Cz}", token=False)[1]
         assert r["arquivos"] == [{"id": "gltf-2048", "formato": "gltf", "nome_formato": "glTF (ZIP)", "textura": 2048, "tamanho": len(pacote.getvalue()), "carregar": True}], r  # a resolução vem da ficha
@@ -1239,7 +1274,7 @@ def _():
         assert status == 201 and r["item"]["tags"] == ["fnaf", "terror", "anime", "アニメ"] and r["item"]["autor"] == "Ana" and r["item"]["conta"] == ana, r
         item, segredo = r["item"], r["segredo"]
         assert r["item"]["curtidas"] == 0 and r["item"]["baixados"] == 0 and r["item"]["curti"] is False
-        _, mapa, _ = S.json("PUT", "/api/loja/mundo?nome=Pizzaria&arquivo=pizzaria.glb&tags=fnaf", corpo=b"glTF" + b"z" * 50, **visita)
+        _, mapa, _ = S.json("PUT", "/api/loja/mundo?nome=Pizzaria&arquivo=pizzaria.glb&tags=fnaf", corpo=b"glTF" + b"z" * 50)  # o dono, sem conta
         assert mapa["item"]["autor"] == "" and mapa["item"]["conta"] == "" and mapa["item"]["tags"] == ["fnaf"]
         # curtir: só quem tem conta; desfazer; cada conta conta uma vez
         assert S.json("POST", f"/api/loja/{item['id']}/curtir", json_corpo={"curtir": True}, **visita)[0] == 401
@@ -1320,16 +1355,33 @@ def _():
 
 
 
-@caso("Loja: ver e baixar sem a chave; publicar (com o segredo de quem publicou); miniatura; apagar; formatos conferidos")
+@caso("Loja: ver e baixar sem a chave; publicar só com conta (e o segredo de quem publicou); miniatura; apagar; formatos conferidos")
 def _():
-    visita = dict(token=False)
-    status, loja, _ = S.json("GET", "/api/loja", **visita)
-    assert status == 200 and loja["itens"] == [] and loja["publicar"] is True and loja["dono"] is False and "pasta" not in loja
+    bia, eu_bia = conta_de_teste("Bia da loja")
+    caio, eu_caio = conta_de_teste("Caio da loja")
+    try:
+        loja_sem_contas(eu_bia, eu_caio, bia)
+    finally:
+        apagar_contas(bia, caio)
+
+
+def loja_sem_contas(eu_bia, eu_caio, bia):
+    sem_conta = dict(token=False)
+    visita = dict(token=False, cabecalhos=eu_bia)  # quem publica tem conta
+    status, loja, _ = S.json("GET", "/api/loja", **sem_conta)
+    assert status == 200 and loja["itens"] == [] and loja["publicar"] is True and loja["dono"] is False and "pasta" not in loja and loja["pode_publicar"] is False
+    assert S.json("GET", "/api/loja", **visita)[1]["pode_publicar"] is True and S.json("GET", "/api/loja")[1]["pode_publicar"] is True
     assert S.json("GET", "/api/loja")[1]["pasta"] == str(S.ponte.loja)  # o dono vê onde fica a pasta
-    # publicar: o arquivo no corpo; o resto no endereço
+    # sem conta não publica (401, para a tela pedir que entre); nada fica na pasta
     vrm = b"glTF\x02\x00\x00\x00" + b"x" * 500
-    status, r, _ = S.json("PUT", "/api/loja/personagem?nome=Ana%0A%3Cb%3E&descricao=Uma%20personagem&autor=Bia&arquivo=..%2F..%2Fana.vrm", corpo=vrm, **visita)
+    status, r, _ = S.json("PUT", "/api/loja/personagem?nome=Sem%20conta&arquivo=sem.vrm", corpo=vrm, **sem_conta)
+    assert status == 401 and r.get("conta") is True and "conta" in r["erro"], (status, r)
+    assert S.json("PUT", "/api/loja/personagem?arquivo=sem.vrm", corpo=vrm, cabecalhos={"X-Conta-Sessao": "inventada"}, token=False)[0] == 401
+    assert not (S.ponte.loja / "personagens").exists() or not [x for x in (S.ponte.loja / "personagens").iterdir() if x.is_dir()]
+    # publicar: o arquivo no corpo; o resto no endereço; o autor é a conta
+    status, r, _ = S.json("PUT", "/api/loja/personagem?nome=Ana%0A%3Cb%3E&descricao=Uma%20personagem&autor=Outro&arquivo=..%2F..%2Fana.vrm", corpo=vrm, **visita)
     assert status == 201 and len(r["segredo"]) >= 20 and r["item"]["nome"] == "Ana <b>" and r["item"]["arquivo"] == "ana.vrm" and r["item"]["tamanho"] == len(vrm), r
+    assert r["item"]["autor"] == "Bia da loja" and r["item"]["conta"] == bia, r
     ana, segredo = r["item"], r["segredo"]
     assert (S.ponte.loja / "personagens" / ana["id"] / "ana.vrm").is_file() and segredo not in (S.ponte.loja / "personagens" / ana["id"] / "item.json").read_text()
     assert S.json("PUT", "/api/loja/personagem?arquivo=ana.exe", corpo=vrm, **visita)[0] == 400
@@ -1347,16 +1399,21 @@ def _():
     assert status == 200 and dados == vrm and cab["Content-Type"] == "application/octet-stream" and cab["Content-Disposition"].startswith("attachment")
     assert S.pedir("GET", "/api/loja/..%2F..%2Fponte.json/arquivo", **visita)[0] == 404 and S.pedir("GET", "/api/loja/000000000000/arquivo", **visita)[0] == 404
     # miniatura: só quem publicou (pelo segredo) ou o dono
-    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": "errado"}, **visita)[0] == 403
-    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=b"<svg onload=x>", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 400
-    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 201
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": "errado"}, **sem_conta)[0] == 403
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=b"<svg onload=x>", cabecalhos={"X-Loja-Segredo": segredo}, **sem_conta)[0] == 400
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos={"X-Loja-Segredo": segredo}, **sem_conta)[0] == 201
     status, cab, dados = S.pedir("GET", f"/api/loja/{ana['id']}/miniatura", **visita)
     assert status == 200 and cab["Content-Type"] == "image/png" and dados == PNG
     assert S.json("GET", f"/api/loja/{ana['id']}", **visita)[1]["miniatura"] > 0
-    # apagar: quem publicou (pelo segredo) ou o dono; os outros não
-    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": "errado"}, **visita)[0] == 403
-    assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 403
-    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 200
+    # mexer no item: também a conta que publicou, de outro aparelho (sem o segredo); outra conta não
+    assert S.json("POST", f"/api/loja/{ana['id']}", json_corpo={"descricao": "De outro aparelho"}, **visita)[1]["descricao"] == "De outro aparelho"
+    assert S.json("POST", f"/api/loja/{ana['id']}", json_corpo={"descricao": "x"}, cabecalhos=eu_caio, token=False)[0] == 403
+    assert S.pedir("PUT", f"/api/loja/{ana['id']}/miniatura", corpo=PNG, cabecalhos=eu_caio, token=False)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos=eu_caio, token=False)[0] == 403
+    # apagar: quem publicou (pela conta ou pelo segredo) ou o dono; os outros não
+    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": "errado"}, **sem_conta)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **sem_conta)[0] == 403
+    assert S.json("DELETE", f"/api/loja/{ana['id']}", cabecalhos={"X-Loja-Segredo": segredo}, **sem_conta)[0] == 200
     assert S.json("DELETE", f"/api/loja/{mundo['item']['id']}")[0] == 200
     assert not (S.ponte.loja / "personagens" / ana["id"]).exists()
     # arquivos postos à mão na pasta aparecem; a miniatura deles e apagar, só o dono
@@ -1375,8 +1432,10 @@ def _():
     # o dono fecha a loja para publicações (e só ele)
     assert S.json("POST", "/api/loja/config", json_corpo={"publicar": False}, **visita)[0] == 403
     assert S.json("POST", "/api/loja/config", json_corpo={"publicar": False})[1] == {"publicar": False}
-    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY", **visita)[0] == 403
-    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY")[0] == 201
+    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY", **visita)[0] == 403  # nem com conta
+    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY", **sem_conta)[0] == 403  # fechada: nem pede a conta
+    assert S.json("GET", "/api/loja", **visita)[1]["pode_publicar"] is False
+    assert S.json("PUT", "/api/loja/animacao?arquivo=b.bvh", corpo=b"HIERARCHY")[0] == 201  # o dono, sem conta
     assert S.json("GET", "/api/publico", **visita)[1]["loja_publicar"] is False
     assert lnux_apps.carregar_config()["loja_publicar"] is False
     S.json("POST", "/api/loja/config", json_corpo={"publicar": True})
@@ -1388,8 +1447,8 @@ def _():
     finally:
         lnux_apps.RESERVA_DISCO = antes
     # a loja não abre o resto da ponte, nem é alcançada de outro site
-    assert S.json("GET", "/api/pastas?caminho=~", cabecalhos={"X-Loja-Segredo": segredo}, **visita)[0] == 401
-    assert S.json("PUT", "/api/loja/animacao?arquivo=d.bvh", corpo=b"HIERARCHY", cabecalhos={"Origin": "http://mal.example"}, **visita)[0] == 403
+    assert S.json("GET", "/api/pastas?caminho=~", cabecalhos={"X-Loja-Segredo": segredo, **eu_bia}, token=False)[0] == 401
+    assert S.json("PUT", "/api/loja/animacao?arquivo=d.bvh", corpo=b"HIERARCHY", cabecalhos={"Origin": "http://mal.example", **eu_bia}, token=False)[0] == 403
     assert S.json("GET", "/api/estado")[1]["recursos"]["loja"] is True
 
 
@@ -1431,7 +1490,12 @@ def _():
         _, ana, _ = T.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "Ana"}, cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)
         assert ana["id"]
         assert T.json("GET", "/api/loja", cabecalhos=fora, **visita)[0] == 200
-        assert T.json("PUT", "/api/loja/animacao?arquivo=v.bvh", corpo=b"HIERARCHY", cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)[0] == 201
+        assert T.json("PUT", "/api/loja/animacao?arquivo=v.bvh", corpo=b"HIERARCHY", cabecalhos={**fora, "Origin": "https://abc.trycloudflare.com"}, **visita)[0] == 401  # sem conta
+        quem, eu = conta_de_teste("Visita do túnel")
+        try:
+            assert T.json("PUT", "/api/loja/animacao?arquivo=v.bvh", corpo=b"HIERARCHY", cabecalhos={**fora, **eu, "Origin": "https://abc.trycloudflare.com"}, **visita)[0] == 201
+        finally:
+            apagar_contas(quem)
         assert T.json("GET", "/api/loja", cabecalhos=fora)[1]["dono"] is False  # a chave pelo túnel não faz de ninguém o dono
     finally:
         T.parar()
