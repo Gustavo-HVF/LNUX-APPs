@@ -147,6 +147,8 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Na sala**: cada pessoa anda com a própria personagem (W A S D, Shift, Espaço). Os outros veem você andar,
   correr, pular, **acenar** e mudar de **expressão** (os botões 👋 😀 😂 😮 😢 😠 😐) e, com a captura de movimento
   ligada, mexer os braços, as mãos e o rosto. O **bate-papo** aparece na conversa e num balão em cima da cabeça.
+- **Internet instável**: uma troca com o servidor que fica sem resposta não trava a sala; depois de 10 segundos ela
+  desiste e tenta de novo. Sair cancela o que ainda estava a caminho, então dá para sair e entrar de novo na hora.
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
   dos outros, nem eles a sua: ela vai junto ao entrar.

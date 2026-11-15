@@ -284,6 +284,14 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
       "a Ana deixa a sala privada (some da lista), tira a senha e desliga o bate-papo (a caixa de texto da Bia trava)");
 
     // ── sair e fechar ──
+    // uma troca de estado que fica sem resposta (rede ruim) não trava a sala: sair cancela o que estava a caminho (antes,
+    // ela segurava a sala "ocupada" e, ao entrar de novo, a Bia não via mais ninguém)
+    const segurados = [];
+    let segurar = 0; // quantas das próximas trocas ficam sem resposta (nunca respondem; as outras passam)
+    await bia.pagina.route("**/api/sala/*/estado", (rota) => { if (segurar > 0) { segurar--; segurados.push(rota); return; } rota.continue().catch(() => {}); });
+    const esperarSegurar = async (n) => { for (let i = 0; i < 1200 && segurados.length < n; i++) await bia.pagina.waitForTimeout(100); return segurados.length >= n; };
+    segurar = 1;
+    ok(await esperarSegurar(1), "uma troca de estado da Bia fica sem resposta (como numa rede ruim)");
     await bia.menu("Sala", "Sair da sala");
     // (sem placa de vídeo, como aqui nos testes, o quadro depois que um avatar sai da cena pode levar dezenas de segundos)
     await ana.pagina.waitForFunction(() => window.Companhia.sala.remotos.size === 0 && /Bia saiu/.test(document.querySelector("#mensagens").textContent), null, { timeout: 120000 });
@@ -292,8 +300,13 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await bia.ev((c) => { window.Companhia.janelaSala(c); }, codigo); // (sem esperar a lista fechar)
     await bia.pagina.waitForSelector(`.salas-convite .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
     ok(await bia.ev((c) => !document.querySelector(`#salas-lista .cartao-sala[data-codigo="${c}"]`), codigo), "pelo link, a sala privada aparece em destaque (\"A sala do seu link\"), fora da lista pública");
+    // e logo ao entrar de novo, a primeira troca também fica sem resposta: a sala desiste dela e continua
+    segurar = 1;
     await bia.pagina.click(`.salas-convite .cartao-sala[data-codigo="${codigo}"] .entrar`);
+    const segurouNaVolta = await esperarSegurar(2);
     await bia.pagina.waitForFunction(() => window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 120000 });
+    ok(segurouNaVolta, "a Bia entra de novo na sala e vê a Ana, mesmo com a troca da saída e a primeira da volta sem resposta (sair cancela; a sala desiste e tenta de novo)");
+    await bia.pagina.unroute("**/api/sala/*/estado");
     await ana.menu("Sala", "Fechar a sala para todos");
     await bia.pagina.waitForFunction(() => !window.Companhia.sala.dentro && /A sala foi fechada/.test(document.querySelector("#mensagens").textContent), null, { timeout: 120000 });
     ok((await bia.ev(async (c) => { const r = await fetch("/api/sala/" + c); await r.text().catch(() => ""); return r.status; }, codigo)) === 404, "a Ana fecha a sala: a Bia é avisada e o link deixa de valer");
