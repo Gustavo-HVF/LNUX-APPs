@@ -205,6 +205,18 @@ de salas (ou no menu *Conta*):
   (`~/.lnux-apps/email.json`, permissão 600) e nunca volta para a tela. Há um botão de e-mail de teste. Também: a
   idade mínima, **só entra nas salas quem tem conta**, e a lista das contas (com a opção de apagar uma).
 - Sem o e-mail configurado, dá para jogar e entrar, mas não para criar contas.
+- **O nome é único**: no cadastro e ao trocar o nome, um nome que já é de outra conta é recusado, sem diferença de
+  acentos, maiúsculas e espaços ("Ána  Clara" = "ana clara"). O formulário avisa já ao sair do campo. Quem joga sem
+  conta também não entra nas salas com o nome de uma conta (ninguém se passa por outra pessoa, nem pelos títulos
+  dela); o WEBC pede outro nome.
+- **Títulos** (Admin, Moderador, Criador, VIP, Apoiador, Dev, Artista... ou um escrito à mão, com a cor): até 4 por
+  pessoa, como selos coloridos no perfil, ao lado do nome em *Pessoas na sala*, no bate-papo e na placa em cima da
+  personagem. Quem dá:
+  - **o dono do servidor**, no aparelho dele (*Contas e e-mail* › *Títulos*, ou *Dar títulos...* no perfil de alguém);
+  - **as contas com cargo**: o dono marca a conta dele como **dono do servidor** (só no aparelho do servidor) e dá a
+    outras o cargo de **administrador**. Com a conta, eles dão títulos de **qualquer aparelho**, até pelo celular e
+    pelo link público: *Dar títulos...* aparece no perfil das pessoas. Um administrador não muda o cargo de ninguém
+    nem os títulos do dono.
 - **Configurar o Gmail** (quem manda os códigos é o próprio servidor: não precisa configurar nada no app de e-mail do
   celular):
 
@@ -251,17 +263,24 @@ cartões com a miniatura, quantas **curtidas** (♥) e quantas pessoas **baixara
 
 ### Mapas do Sketchfab na loja
 
-O dono da loja traz mapas do [Sketchfab](https://sketchfab.com) direto para a loja, pela API dele:
+Mapas do [Sketchfab](https://sketchfab.com) vêm direto para a loja, pela API dele, com a chave do dono do servidor:
 
 1. **A chave**: em [sketchfab.com/settings/password](https://sketchfab.com/settings/password) (*API Token*), copie a
    sua chave e guarde no LNUX (*🧩 Apps Web › 🔑 Chaves das APIs*) ou no próprio botão **Sketchfab** da loja aberta
    no aparelho do servidor. Ela fica em `~/.lnux-apps/chaves.json` (permissão 600; ou na variável `SKETCHFAB_TOKEN`) e
    **nunca vai para o navegador**: quem busca e baixa é o servidor.
-2. **Buscar**: o botão **Sketchfab** (só para o dono) procura entre os modelos que podem ser baixados, com
+2. **Buscar**: o botão **Sketchfab** procura entre os modelos que podem ser baixados, com
    "Só os com animação" para achar os que se mexem. Cada cartão mostra a miniatura, o autor, a licença e quantas
    animações tem.
 3. **Trazer para a loja**: o servidor baixa o modelo (o `.glb`, ou o glTF em ZIP, que ele junta num `.glb` com as
    texturas dentro), tira a miniatura e publica em *Mapas*, com os # que você puser mais os # do próprio Sketchfab.
+
+**Todos usam, só o dono vê a chave.** Com a chave guardada, o botão aparece para todos que podem publicar na loja
+(o dono decide, em "quem entra pelo link pode publicar"): eles buscam e trazem, e o servidor usa a chave por eles. Só o
+dono vê se há chave e a troca; nenhuma resposta do servidor leva a chave, e ela não chega ao navegador de ninguém. Para
+quem não é o dono há um limite de pedidos por endereço (40 buscas por minuto e 10 mapas por hora), porque a cota da
+chave e o disco são do dono. Quem trouxe aparece no crédito ("trazido por") e pode apagar o que trouxe, como ao
+publicar.
 
 **Licenças.** A loja redistribui o arquivo para quem entra pelo link, então só entram modelos com licença Creative
 Commons que deixa redistribuir: **CC0**, **CC BY**, **CC BY-SA**, **CC BY-NC** e **CC BY-NC-SA**. Os comprados na loja
@@ -434,6 +453,11 @@ personagem; em **Andar pelo cenário** ela anda por ele:
 | rodinha | aproximar e afastar |
 | celular | direcional, botão de correr e botão de pulo na tela; voando, 🕊 e os botões de subir e descer |
 
+- **Pés no chão (IK)**: as pernas se adaptam ao chão (cinemática inversa). Um raio desce sob cada pé; o quadril desce
+  o quanto o pé mais baixo precisa, o joelho dobra (IK analítica de duas partes, coxa e canela) e o pé inclina com
+  a rampa (até ~35°) quando está pisando. Num degrau, um pé fica em cima e o outro embaixo; numa rampa, os dois
+  pisam inclinados. Vale para as personagens dos outros na sala. Pular e voar desligam aos poucos; dá para desligar
+  em *Opções › Controle*.
 - A personagem é uma cápsula que desliza no chão, nas paredes, nas rampas e nos degraus baixos. As malhas do mapa
   são juntadas numa árvore ([three-mesh-bvh](https://github.com/gkjohnson/three-mesh-bvh)), então mapas grandes
   não pesam a cada quadro. Caiu para fora do mapa, volta ao começo.
@@ -720,6 +744,7 @@ para outro aparelho seu.
 
 ```
 index.html, companhia.css
+js/ik.js           a IK das pernas: os pés se adaptam ao chão do cenário (degraus, rampas), nossa personagem e as dos outros
 js/vrm.js          palco 3D para personagens VRoid (.vrm): a pose em camadas (descanso, movimento, captura, gestos,
                    ajuste do esqueleto), expressões, toques, peças e texturas
 js/captura.js      captura de movimento: câmera → MediaPipe (num Worker) → ossos, dedos, olhos e expressões do VRM
@@ -776,6 +801,7 @@ python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unityp
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
 python3 tests/testar_navegador.py companhia_sketchfab  # Sketchfab de mentira: buscar, licenças, trazer para a loja, mapa com movimento numa sala
+python3 tests/testar_navegador.py companhia_ik  # IK das pernas: um pé no degrau e o outro no piso, a rampa e a opção de desligar
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se

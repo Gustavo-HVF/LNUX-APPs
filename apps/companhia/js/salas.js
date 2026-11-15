@@ -228,6 +228,9 @@
     async function jogador() {
       let n = (C.nomeDoJogo ? C.nomeDoJogo.atual() : ctx.nome()) || "";
       if (!n.trim()) n = (C.trocarNomeDoJogo && (await C.trocarNomeDoJogo())) || ""; // (veio sem passar pela tela de entrar)
+      // sem conta, o nome não pode ser o de uma conta deste servidor (ninguém se passa por outra pessoa, nem pelos títulos dela)
+      if (n.trim() && C.contas && !C.contas.eu && !C.contas.souDonoDoServidor() && !(await C.contas.nomeLivre(n.trim())))
+        n = (C.trocarNomeDoJogo && (await C.trocarNomeDoJogo({ aviso: "Esse nome é de uma conta deste servidor. Entre na conta ou escolha outro nome." }))) || "";
       if (!n.trim()) return null;
       return { nome: n.trim(), personagem: personagem.value };
     }
@@ -322,6 +325,7 @@
           return;
         } catch (e) {
           if (e.status === 401 && C.contas && !C.contas.eu) { if (await C.janelaConta("entrar")) continue; return; }
+          if (e.status === 409 && e.campo === "nome" && C.trocarNomeDoJogo) { const n = await C.trocarNomeDoJogo({ aviso: e.message }); if (!n) return; j.nome = n; continue; }
           if (!e.senha) throw e;
           const campo = el("input", { class: "lnux-entrada", type: "password", "aria-label": "Senha", autocomplete: "off" });
           const r = await LNUX.dialogo({ titulo: `Senha de "${s.nome}"`, corpo: el("div", { class: "ajustes" }, tentativa ? el("p", { style: { margin: 0, color: "var(--perigo)" } }, "Senha errada. Tente de novo.") : null,

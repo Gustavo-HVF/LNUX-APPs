@@ -68,12 +68,12 @@ function sketchfabFalso() {
   };
   const dono = await pessoa("Dono"), bia = await pessoa("Bia");
   try {
-    // ── só o dono vê o Sketchfab na loja ──
+    // ── sem a chave guardada, só o dono vê o Sketchfab na loja (para guardar a chave) ──
     await bia.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=loja`);
     await bia.pagina.waitForSelector(".webc-loja .loja-topo", { timeout: 30000 });
     await dono.pagina.goto(`${BASE}/apps/companhia/#token=${TOKEN}&modo=jogar&pagina=loja`);
     await dono.pagina.waitForSelector(".webc-loja #loja-sketchfab:not([hidden])", { timeout: 30000 });
-    ok(await bia.ev(() => document.querySelector("#loja-sketchfab").hidden), "na loja, só o dono do servidor vê o botão Sketchfab");
+    ok(await bia.ev(() => document.querySelector("#loja-sketchfab").hidden), "sem a chave guardada, só o dono do servidor vê o botão Sketchfab na loja");
 
     // ── a chave fica no servidor ──
     await dono.pagina.click("#loja-sketchfab");
@@ -105,6 +105,29 @@ function sketchfabFalso() {
     ok(moinho && moinho.tipo === "mundo" && moinho.animacoes === 1 && /Com 1 animação/.test(detalhe.animado) && moinho.tags.includes("praça") && moinho.tags.includes("fnaf") && moinho.miniatura > 0,
       "é um mapa da loja, com a miniatura do Sketchfab, os # (os do dono e os do Sketchfab) e o aviso de que tem animação");
     ok(falso.vistos.some(([u, a]) => u.endsWith("/download") && a === "Token chave-de-teste-123"), "o download foi pedido com a chave, pelo servidor");
+
+    // ── a chave é do dono, mas todos usam: a Bia (pelo link) busca e traz, sem ver nem trocar a chave ──
+    await bia.pagina.reload();
+    await bia.pagina.waitForSelector(".webc-loja #loja-sketchfab:not([hidden])", { timeout: 30000 });
+    await bia.pagina.click("#loja-sketchfab");
+    await bia.pagina.waitForSelector('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]');
+    ok(await bia.ev(() => !document.querySelector('.janela-sketchfab input[aria-label="Chave da API do Sketchfab"]') && !document.querySelector("#sketchfab-guardar-chave") && !/Trocar a chave/.test(document.querySelector(".janela-sketchfab").textContent)),
+      "com a chave guardada, quem entra pelo link também vê o Sketchfab na loja, sem o campo da chave (não vê nem troca)");
+    await bia.pagina.fill('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "moinho");
+    await bia.pagina.press('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "Enter");
+    await bia.pagina.waitForSelector(`.sketchfab-cartao[data-uid="${falso.A}"] button[data-uid]:not([disabled])`, { timeout: 20000 });
+    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] button[data-uid]`);
+    await bia.pagina.waitForSelector(".loja-detalhe:not([hidden]) .loja-credito", { timeout: 60000 });
+    const daBia = await bia.ev(async () => {
+      const credito = document.querySelector(".loja-detalhe .loja-credito").innerText, itens = (await C.loja.lista()).itens, meu = itens.find((i) => i.trouxe === "Bia");
+      const vazou = document.documentElement.outerHTML.includes("chave-de-teste") || Object.keys(localStorage).some((k) => (localStorage.getItem(k) || "").includes("chave-de-teste"));
+      const podia = !!(meu && C.loja.podeMexer(meu, false));
+      if (meu) await C.loja.apagar(meu); // quem trouxe apaga (o segredo ficou no navegador dela)
+      return { credito, vazou, podia, sobrou: (await C.loja.lista()).itens.some((i) => i.trouxe === "Bia") };
+    });
+    ok(/trazido por Bia/.test(daBia.credito) && !daBia.vazou && daBia.podia && !daBia.sobrou,
+      `a Bia trouxe o mapa com a chave do dono, que nunca chegou ao navegador dela (${daBia.credito.replace(/\s+/g, " ").slice(0, 80)}); quem trouxe pode apagar`);
+    await bia.pagina.keyboard.press("Escape");
 
     // ── usar o mapa animado numa sala ──
     await dono.ev(() => C.webc.ir("sala"));

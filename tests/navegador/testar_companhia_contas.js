@@ -237,6 +237,27 @@ function png(w, h, [r, g, b]) {
     });
     ok(tema.local === "dracula" && tema.site !== "dracula" && tema.painel === tema.dele && tema.painel !== tema.dono && tema.banner && tema.proporcao === 2.31,
       `o perfil da Ana abre no tema dela (${tema.local}: painel ${tema.painel}); o site do dono continua no dele (${tema.site}); o banner aparece em 750 × 325 (${tema.proporcao}:1)`);
+    // ── o dono do servidor dá títulos à Ana pelo perfil dela (e o cargo de admin: ela passa a dar títulos também) ──
+    await dono.pagina.click("#perfil-titulos");
+    await dono.pagina.waitForSelector(".janela-titulos");
+    await dono.pagina.click('.janela-titulos .selo-titulo.opcao[data-titulo="Criador"]');
+    await dono.pagina.selectOption('.janela-titulos select[aria-label="Cargo"]', "admin");
+    await dono.pagina.fill('.janela-titulos input[aria-label="Outro título"]', "Dançarina");
+    await dono.pagina.click("#titulo-por");
+    await dono.pagina.click('.lnux-dialogo:last-of-type footer button:text-is("Salvar")');
+    await dono.pagina.waitForSelector('.perfil-pagina .selos-titulos .selo-titulo:text-is("Dançarina")', { timeout: 15000 });
+    const selos = await dono.ev(() => [...document.querySelectorAll(".perfil-pagina > .selos-titulos .selo-titulo")].map((x) => x.textContent));
+    ok(selos.join() === "Criador,Admin,Dançarina", `o dono dá títulos à Ana pelo perfil dela (${selos.join(", ")}); o cargo de admin já põe o título "Admin"`);
+    // ── o nome da Ana não serve para outra conta (nem com outros acentos e maiúsculas) ──
+    await dono.ev(() => { C.janelaConta("criar"); });
+    await dono.pagina.waitForSelector('.janela-conta input[aria-label="Nome"]');
+    await dono.pagina.fill('.janela-conta input[aria-label="Nome"]', "ÁNA  clara");
+    await dono.pagina.press('.janela-conta input[aria-label="Nome"]', "Tab");
+    await dono.pagina.waitForSelector(".conta-nome-aviso:not([hidden])", { timeout: 10000 });
+    ok(await dono.ev(() => document.querySelector('.janela-conta input[aria-label="Nome"]').getAttribute("aria-invalid") === "true"),
+      "no cadastro, um nome que já é de outra conta (\"ÁNA  clara\") é avisado na hora, no próprio campo");
+    await dono.pagina.keyboard.press("Escape");
+    await dono.pagina.waitForFunction(() => !document.querySelector(".janela-conta"), null, { timeout: 10000 });
     await dono.pagina.screenshot({ path: path.join(PASTA, "companhia-contas-perfil.png") });
     await dono.pagina.click("#webc-voltar-sala");
     await dono.pagina.waitForFunction(() => !C.webc.visivel, null, { timeout: 10000 });
@@ -281,6 +302,8 @@ function png(w, h, [r, g, b]) {
     await ana.pagina.waitForFunction(() => { const i = document.querySelector(".perfil-pagina .perfil-foto-grande img"); return i && i.complete; }, null, { timeout: 10000 }).catch(() => {});
     ok(await ana.ev(() => { const p = document.querySelector(".perfil-pagina"); return !!p.querySelector(".perfil-banner") && !!p.querySelector(".perfil-foto-grande img") && /Gosto de dançar/.test(p.textContent) && /Salvos/.test(p.textContent) && /Amigos/.test(p.textContent) && !!p.querySelector("#perfil-editar"); }),
       "a página Perfil: a capa (o banner), a foto redonda, a bio e embaixo os salvos e os amigos; \"Editar perfil\" para quem é dono");
+    ok(await ana.ev(() => { const p = document.querySelector(".perfil-pagina"); return !!p.querySelector("#perfil-titulos") && /Criador/.test(p.querySelector(".selos-titulos").textContent); }),
+      "a Ana (agora admin) vê os títulos dela e o \"Dar títulos\" (do celular dela, pela conta)");
     await ana.pagina.click("#webc-eu");
     await ana.pagina.click('.webc-menu [data-acao="sair"]');
     await ana.pagina.waitForFunction(() => !C.contas.eu, null, { timeout: 10000 });

@@ -64,7 +64,12 @@
       estado: () => pedir("GET", "sketchfab"),
       chave: (token) => pedir("PUT", "sketchfab", { json: { token } }),
       buscar: (q, { animado = false, cursor = "" } = {}) => pedir("GET", "sketchfab/buscar?" + new URLSearchParams({ q, animado: animado ? "1" : "0", cursor })),
-      importar: (uid, tags = "") => pedir("POST", "sketchfab/importar", { json: { uid, tags } }),
+      /** Traz um modelo para a loja (a chave do dono fica no servidor). Quem não é o dono recebe o segredo, como ao publicar. */
+      async importar(uid, tags = "") {
+        const j = await pedir("POST", "sketchfab/importar", { json: { uid, tags, quem: (C.nomeDoJogo && C.nomeDoJogo.atual()) || "" } });
+        if (j.segredo) gravarSegredo(j.item.id, j.segredo);
+        return j;
+      },
     },
     miniatura: (item) => `/api/loja/${item.id}/miniatura?v=${item.miniatura}`,
     /** Baixa o arquivo do item (com o andamento: aoProgresso(fração)). */
@@ -368,7 +373,8 @@
   C.creditoDoItem = function (item) {
     const o = item.origem || {}, l = item.licenca || {};
     const link = (texto, url) => (url && /^https?:\/\//.test(url) ? el("a", { href: url, target: "_blank", rel: "noopener noreferrer nofollow", translate: "no" }, texto) : el("span", { translate: "no" }, texto));
-    return LNUX.filhos(t("Original:") + " ", link("“" + item.nome + "”", o.url), " — ", link(o.autor || "?", o.autor_url), ` · ${o.site || ""}`, l.nome ? " · " : null, l.nome ? link(l.nome, l.url) : null);
+    return LNUX.filhos(t("Original:") + " ", link("“" + item.nome + "”", o.url), " — ", link(o.autor || "?", o.autor_url), ` · ${o.site || ""}`, l.nome ? " · " : null, l.nome ? link(l.nome, l.url) : null,
+      item.trouxe ? " · " + t("trazido por {nome}", { nome: item.trouxe }) : null);
   };
 
   /**
@@ -389,6 +395,11 @@
     const aviso = el("p", { class: "fraco pequeno", style: { margin: 0 } });
     const tags = el("input", { class: "lnux-entrada", placeholder: "# para achar na loja (opcional)", "aria-label": "# para achar na loja" });
     function desenharChave() {
+      // a chave é do dono: só ele vê se ela está guardada e a troca; os outros usam a loja sem nunca ver a chave
+      if (!estado.dono) {
+        areaChave.replaceChildren(...LNUX.filhos(estado.chave ? null : el("p", { class: "conta-msg erro", role: "alert" }, t("O dono do servidor ainda não guardou a chave do Sketchfab."))));
+        return;
+      }
       areaChave.replaceChildren(...LNUX.filhos(
         estado.chave ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("A chave do Sketchfab está guardada no servidor."), " ",
           el("button", { type: "button", class: "lnux-botao plano conta-link", onclick: () => { estado.chave = false; desenharChave(); } }, t("Trocar a chave")))
@@ -423,7 +434,7 @@
           el("div", { class: "linha" }, trazer, /^https?:\/\//.test(m.url || "") ? el("a", { class: "lnux-botao plano pequeno", href: m.url, target: "_blank", rel: "noopener noreferrer nofollow" }, t("Ver no Sketchfab")) : null)));
     }
     async function importar(m, botao) {
-      if (!estado.chave) { LNUX.aviso(t("Falta a chave do Sketchfab."), "alerta"); chaveCampo.focus(); return; }
+      if (!estado.chave) { LNUX.aviso(t(estado.dono ? "Falta a chave do Sketchfab." : "O dono do servidor ainda não guardou a chave do Sketchfab."), "alerta"); if (estado.dono) chaveCampo.focus(); return; }
       botao.disabled = true;
       const prog = LNUX.progresso(t("Trazendo do Sketchfab"));
       prog.definir(0.15, t("Baixando \"{nome}\" e convertendo para .glb...", { nome: m.nome }));
@@ -581,7 +592,7 @@
     }
     function desenharDono() {
       dono.hidden = !dados.dono;
-      botaoSketchfab.hidden = !dados.dono;
+      botaoSketchfab.hidden = !(dados.dono || dados.sketchfab); // o dono (para guardar a chave) e quem pode publicar, se há chave
       if (!dados.dono) return;
       const caixaPublicar = el("input", { type: "checkbox", checked: dados.publicar });
       caixaPublicar.addEventListener("change", async () => {

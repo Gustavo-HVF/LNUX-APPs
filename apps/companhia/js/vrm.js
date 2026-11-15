@@ -981,6 +981,13 @@
       for (const [n, q] of this.ajusteQ) if (pose[n]) pose[n].premultiply(q);
       // 6. ossos do modelo
       this.gravarPose();
+      // 7. os pés no chão do cenário (IK das pernas): degraus, rampas e chão torto
+      if (mundo && C.ikDosPes) {
+        const ligada = mundo.cfg.ik !== false && andando && mundo.noChao && !mundo.voando && !(ras && ras.pernas);
+        this.raiz.updateWorldMatrix(true, false);
+        this._frente = (this._frente || new window.THREE.Vector3()).set(0, 0, 1).applyQuaternion(this.raiz.quaternion);
+        this.ik = C.ikDosPes(vrm, { colisor: mundo.colisor, base: this.raiz.position, frente: this._frente, ativo: ligada, dt, estado: (this.estadoIk = this.estadoIk || {}) });
+      }
       // câmera do retrato: chegar perto
       if (!andando) {
         this.aproximar = misturar(this.aproximar, aproximar, Math.min(1, dt * 8));

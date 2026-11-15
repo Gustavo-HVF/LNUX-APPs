@@ -879,6 +879,82 @@ def _():
         lnux_apps.TENTATIVAS.clear()
 
 
+@caso("Contas: o nome é único (sem diferença de acentos e maiúsculas) e o dono dá títulos (Admin, Criador...), também pela conta de quem é admin")
+def _():
+    smtp = SMTPFalso()
+    visita = dict(token=False)
+    arquivo_email = Path(os.environ["LNUX_APPS_DADOS"]) / "email.json"
+    antes = arquivo_email.read_text("utf-8") if arquivo_email.exists() else None
+    sessoes = []
+    try:
+        lnux_apps.TENTATIVAS.clear()
+        S.json("POST", "/api/contas/ajustes", json_corpo={"email": {"servidor": "127.0.0.1", "porta": smtp.porta, "seguranca": "nenhuma", "usuario": "", "remetente": "dono@exemplo.com"}})
+
+        def criar(nome, email):
+            st, r, _ = S.json("POST", "/api/contas/cadastro", json_corpo={"nome": nome, "email": email, "senha": "segredo123", "idade": 20}, **visita)
+            if st != 201:
+                return st, r
+            st, r, _ = S.json("POST", "/api/contas/verificar", json_corpo={"email": email, "codigo": smtp.codigo()}, **visita)
+            sessoes.append(r["sessao"])
+            return st, r
+
+        st, caio = criar("Caio Souza", "caio@exemplo.com")
+        assert st == 200, caio
+        # o mesmo nome com outros acentos, maiúsculas e espaços: recusado (e a tela sabe que é o campo do nome)
+        st, r = criar("CÁIO   souza", "outro@exemplo.com")
+        assert st == 409 and r["campo"] == "nome" and "já é de outra conta" in r["erro"], r
+        assert S.json("GET", "/api/contas/nome?nome=caio%20s%C3%B3uza", **visita)[1]["livre"] is False
+        assert S.json("GET", "/api/contas/nome?nome=Duda", **visita)[1]["livre"] is True
+        st, duda = criar("Duda Lima", "duda@exemplo.com")
+        assert st == 200
+        eu_caio, eu_duda = {"X-Conta-Sessao": caio["sessao"]}, {"X-Conta-Sessao": duda["sessao"]}
+        cid, did = caio["conta"]["id"], duda["conta"]["id"]
+        # trocar para o nome de outra conta: recusado; o próprio nome, com outras maiúsculas, vale
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"nome": "duda lima"}, cabecalhos=eu_caio, **visita)[0] == 409
+        assert S.json("POST", "/api/contas/perfil", json_corpo={"nome": "Caio SOUZA"}, cabecalhos=eu_caio, **visita)[1]["nome"] == "Caio SOUZA"
+        assert S.json("GET", "/api/contas/nome?nome=caio%20souza", cabecalhos=eu_caio, **visita)[1]["livre"] is True
+        # nas salas, quem não tem conta não usa o nome de uma (ninguém se passa por ela, nem pelos títulos dela)
+        _, sala, _ = S.json("POST", "/api/sala", json_corpo={"nome": "Praça"}, **visita)
+        st, r, _ = S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "Duda  LÍMA"}, **visita)
+        assert st == 409 and r["campo"] == "nome", r
+        assert S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={"nome": "Visitante Novo"}, **visita)[0] == 201
+        # títulos: só o dono (o aparelho do servidor) e os admins dão
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": did, "titulos": [{"nome": "Admin"}]}, cabecalhos=eu_caio, **visita)[0] == 403
+        st, r, _ = S.json("POST", "/api/contas/titulos", json_corpo={"id": cid, "cargo": "admin",
+                                                                     "titulos": [{"nome": "Criador", "cor": "#8e24aa"}, {"nome": "<b>VIP</b>", "cor": "vermelho"}, {"nome": "criador"}, "Dev", "A", "B"]})
+        assert st == 200 and r["cargo"] == "admin" and [x["nome"] for x in r["titulos"]] == ["Criador", "VIP", "Dev", "A"] and r["titulos"][1]["cor"] == "#6b7280", r
+        publico = S.json("GET", f"/api/contas/perfil/{cid}", **visita)[1]
+        assert publico["titulos"][0] == {"nome": "Criador", "cor": "#8e24aa"} and "cargo" not in publico
+        # o Caio, agora admin, dá títulos pela conta dele (do celular, pelo link), mas não o cargo, nem muda os do dono
+        st, r, _ = S.json("POST", "/api/contas/titulos", json_corpo={"id": did, "titulos": [{"nome": "Moderador", "cor": "#1e88e5"}]}, cabecalhos=eu_caio, **visita)
+        assert st == 200 and r["titulos"] == [{"nome": "Moderador", "cor": "#1e88e5"}], r
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": did, "cargo": "admin"}, cabecalhos=eu_caio, **visita)[0] == 403
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": did, "cargo": "dono"})[1]["cargo"] == "dono"  # no aparelho do servidor
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": did, "titulos": []}, cabecalhos=eu_caio, **visita)[0] == 403
+        # a dona (pela conta) tira o cargo de admin; o de dono só muda no aparelho do servidor
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": cid, "cargo": ""}, cabecalhos=eu_duda, **visita)[1]["cargo"] == ""
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": cid, "cargo": "dono"}, cabecalhos=eu_duda, **visita)[0] == 403
+        assert S.json("GET", "/api/contas/eu", cabecalhos=eu_duda, **visita)[1]["cargo"] == "dono"
+        assert S.json("POST", "/api/contas/titulos", json_corpo={"id": cid, "titulos": [{"nome": "x"}]}, cabecalhos=eu_caio, **visita)[0] == 403  # sem o cargo, não dá mais
+        # nas salas: os títulos aparecem nas pessoas e no bate-papo
+        _, na_sala, _ = S.json("POST", f"/api/sala/{sala['codigo']}/entrar", json_corpo={}, cabecalhos=eu_duda, **visita)
+        S.json("POST", f"/api/sala/{sala['codigo']}/falar", json_corpo={"id": na_sala["id"], "segredo": na_sala["segredo"], "texto": "oi"}, **visita)
+        r = S.json("POST", f"/api/sala/{sala['codigo']}/estado", json_corpo={"id": na_sala["id"], "segredo": na_sala["segredo"]}, **visita)[1]
+        assert next(x for x in r["pessoas"] if x["conta"] == did)["titulos"] == [{"nome": "Moderador", "cor": "#1e88e5"}]
+        assert r["mensagens"][-1]["titulo"] == {"nome": "Moderador", "cor": "#1e88e5"}, r["mensagens"]
+        assert any(c["cargo"] == "dono" and c["titulos"] for c in S.json("GET", "/api/contas/lista")[1]["contas"])
+        S.json("DELETE", f"/api/sala/{sala['codigo']}", cabecalhos={"X-Sala-Chave": sala["chave"]}, **visita)
+    finally:
+        smtp.parar()
+        lnux_apps.TENTATIVAS.clear()
+        for sessao in sessoes:
+            S.json("POST", "/api/contas/apagar", json_corpo={"senha": "segredo123"}, cabecalhos={"X-Conta-Sessao": sessao}, token=False)
+        if antes is None:
+            arquivo_email.unlink(missing_ok=True)
+        else:
+            arquivo_email.write_text(antes, "utf-8")
+
+
 @caso("E-mail do servidor: o de receber (IMAP/POP) é recusado com o SMTP certo; os erros do envio vêm explicados (senha de app do Gmail)")
 def _():
     arquivo = Path(os.environ["LNUX_APPS_DADOS"]) / "email.json"
@@ -1026,12 +1102,18 @@ def _():
         (lnux_apps.DADOS / "chaves.json").unlink(missing_ok=True)
         status, r, _ = S.json("GET", "/api/loja/sketchfab")
         assert status == 200 and r["chave"] is False and "by" in r["licencas"], r
-        assert S.json("GET", "/api/loja/sketchfab", token=False)[0] == 403  # quem não é o dono não usa
+        # quem não é o dono: vê o que dá para fazer (nunca a chave); sem a chave guardada, não busca
+        status, r, _ = S.json("GET", "/api/loja/sketchfab", token=False)
+        assert status == 200 and r["chave"] is False and r["pode_trazer"] is False and r["dono"] is False and "token" not in json.dumps(r), r
+        assert S.json("GET", "/api/loja/sketchfab/buscar?q=x", token=False)[0] == 503
         assert S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A})[0] == 400  # sem a chave
         status, r, _ = S.json("PUT", "/api/loja/sketchfab", json_corpo={"token": "chave-de-teste-123"})
         assert status == 200 and r["chave"] is True
         arquivo = lnux_apps.DADOS / "chaves.json"
         assert json.loads(arquivo.read_text())["sketchfab"]["token"] == "chave-de-teste-123" and (arquivo.stat().st_mode & 0o777) == 0o600
+        # a chave é do dono: os outros usam, mas não veem nem trocam
+        assert S.json("PUT", "/api/loja/sketchfab", json_corpo={"token": "chave-de-outra-pessoa"}, token=False)[0] == 403
+        assert json.loads(arquivo.read_text())["sketchfab"]["token"] == "chave-de-teste-123"
         status, r, _ = S.json("GET", "/api/loja/sketchfab/buscar?q=moinho&animado=1")
         assert status == 200 and [m["uid"] for m in r["modelos"]] == [A, B, Cz] and r["proximo"] == "24", r
         porUid = {m["uid"]: m for m in r["modelos"]}
@@ -1050,6 +1132,20 @@ def _():
         assert item["tags"][:3] == ["praia", "fnaf", "moinho-de-vento"] and item["miniatura"] > 0, item["tags"]
         assert S.pedir("GET", f"/api/loja/{item['id']}/arquivo", token=False)[2] == glb
         assert ("/v3/models/" + A + "/download", "Token chave-de-teste-123") in vistos
+        # quem entra pelo link também busca e traz (com a chave do dono, que fica no servidor), se a loja aceita publicações
+        status, r, _ = S.json("GET", "/api/loja/sketchfab", token=False)
+        assert status == 200 and r["chave"] is True and r["pode_trazer"] is True and "chave-de-teste" not in json.dumps(r), r
+        assert S.json("GET", "/api/loja", token=False)[1]["sketchfab"] is True
+        status, r, _ = S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)
+        assert status == 200 and len(r["modelos"]) == 3 and "chave-de-teste" not in json.dumps(r)
+        S.json("POST", "/api/loja/config", json_corpo={"publicar": False})
+        assert S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)[0] == 403
+        assert S.json("GET", "/api/loja", token=False)[1]["sketchfab"] is False
+        S.json("POST", "/api/loja/config", json_corpo={"publicar": True})
+        status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "quem": "Bia"}, token=False)
+        assert status == 201 and r["segredo"] and r["item"]["trouxe"] == "Bia" and r["item"]["autor"] == "Joana" and "chave-de-teste" not in json.dumps(r), r
+        assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False)[0] == 403  # sem o segredo
+        assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False, cabecalhos={"X-Loja-Segredo": r["segredo"]})[0] == 200  # quem trouxe apaga
         # o .zip do glTF vira um .glb só, com o .bin e a textura dentro
         status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": Cz})
         assert status == 201, r

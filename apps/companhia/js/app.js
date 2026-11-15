@@ -1490,7 +1490,7 @@
   function mensagemDaSala(m) {
     if (!jogando()) return;
     const e = m.sistema ? el("div", { class: "msg sistema" }, m.texto)
-      : el("div", { class: "msg " + (m.meu ? "eu" : "ela") }, m.meu ? null : el("b", { class: "quem", translate: "no" }, m.nome + ": "), el("span", { class: "t", translate: "no" }, m.texto), el("span", { class: "info" }, hora(Date.now())));
+      : el("div", { class: "msg " + (m.meu ? "eu" : "ela") }, m.meu ? null : C.selosDeTitulos(m.titulo ? [m.titulo] : null, true), m.meu ? null : el("b", { class: "quem", translate: "no" }, m.nome + ": "), el("span", { class: "t", translate: "no" }, m.texto), el("span", { class: "info" }, hora(Date.now())));
     listaMsgs.append(e);
     rolarFim();
     if (jogo && !m.meu) jogo.novaMensagem();
@@ -1642,12 +1642,13 @@
   /** Quem está na sala: a foto e o nome (de quem tem conta, o perfil abre num clique). */
   function pessoasDaSala() {
     if (!sala || !sala.dentro) return;
-    const eu = C.contas.eu, linha = (foto, nome, extra, conta) => el(conta ? "button" : "div", { type: conta ? "button" : undefined, class: "pessoa-sala" + (conta ? " com-conta" : ""),
-      onclick: conta ? () => { document.querySelector(".lnux-fundo-modal") && document.querySelector(".lnux-fundo-modal").remove(); if (C.webc) C.webc.verPerfil(conta); else C.mostrarPerfil(conta); } : undefined, title: conta ? "Ver o perfil" : "" }, foto, el("span", {}, nome, extra ? el("span", { class: "fraco pequeno" }, " " + extra) : null));
+    const eu = C.contas.eu, linha = (foto, nome, extra, conta, titulos) => el(conta ? "button" : "div", { type: conta ? "button" : undefined, class: "pessoa-sala" + (conta ? " com-conta" : ""),
+      onclick: conta ? () => { document.querySelector(".lnux-fundo-modal") && document.querySelector(".lnux-fundo-modal").remove(); if (C.webc) C.webc.verPerfil(conta); else C.mostrarPerfil(conta); } : undefined, title: conta ? "Ver o perfil" : "" }, foto,
+      el("span", {}, el("span", { translate: "no" }, nome), extra ? el("span", { class: "fraco pequeno" }, " " + extra) : null, C.selosDeTitulos(titulos, true)));
     const corpo = el("div", { class: "ajustes pessoas-sala" },
-      linha(eu ? C.fotoDaConta(eu, 34) : C.fotoDaConta({ nome: sala.eu.nome }, 34), sala.eu.nome, "(você)", eu ? eu.id : null),
+      linha(eu ? C.fotoDaConta(eu, 34) : C.fotoDaConta({ nome: sala.eu.nome }, 34), sala.eu.nome, "(você)", eu ? eu.id : null, eu ? eu.titulos : null),
       ...[...sala.remotos.values()].map((r) => linha(r.conta ? el("img", { class: "foto-conta", src: `/api/contas/midia/${r.conta}/foto`, alt: "", style: { width: "34px", height: "34px" }, onerror: (e) => { e.target.replaceWith(C.fotoDaConta({ nome: r.nome }, 34)); } }) : C.fotoDaConta({ nome: r.nome }, 34),
-        r.nome, r.conta ? "" : "(sem conta)", r.conta)));
+        r.nome, r.conta ? "" : "(sem conta)", r.conta, r.titulos)));
     LNUX.dialogo({ titulo: `${sala.info.nome}: ${C.t(sala.pessoas === 1 ? "1 pessoa" : "{n} pessoas", { n: sala.pessoas })}`, corpo, botoes: [{ rotulo: "Fechar", primario: true, valor: null }] });
   }
   /** Quem criou muda as opções da sala: nome, descrição, pública ou privada, senha, quantas pessoas, bate-papo. */
