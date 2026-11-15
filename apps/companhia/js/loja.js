@@ -65,14 +65,19 @@
       chave: (token) => pedir("PUT", "sketchfab", { json: { token } }),
       buscar: (q, { animado = false, cursor = "" } = {}) => pedir("GET", "sketchfab/buscar?" + new URLSearchParams({ q, animado: animado ? "1" : "0", cursor })),
       /** Traz um modelo para a loja (a chave do dono fica no servidor). Quem não é o dono recebe o segredo, como ao publicar. */
-      async importar(uid, tags = "") {
-        const j = await pedir("POST", "sketchfab/importar", { json: { uid, tags, quem: (C.nomeDoJogo && C.nomeDoJogo.atual()) || "" } });
+      async importar(uid, tags = "", arquivo = "") {
+        const j = await pedir("POST", "sketchfab/importar", { json: { uid, tags, arquivo, quem: (C.nomeDoJogo && C.nomeDoJogo.atual()) || "" } });
         if (j.segredo) gravarSegredo(j.item.id, j.segredo);
         return j;
       },
-      /** Baixa o .glb de um modelo sem pôr na loja (para salvar ou carregar no jogo). Devolve {blob, nome}. */
-      async baixar(uid, aoProgresso = () => {}) {
-        const r = await pedir("POST", "sketchfab/baixar", { json: { uid }, como: "resposta" });
+      /** As versões que dá para baixar: {modelo, pode_baixar, pode_trazer, arquivos: [{id, formato, nome_formato, textura, tamanho, carregar}]}. */
+      arquivos: (uid) => pedir("GET", "sketchfab/arquivos?" + new URLSearchParams({ uid })),
+      /**
+       * Baixa uma versão sem pôr na loja: {arquivo (o id da versão), bruto (o arquivo como veio: ZIP, USDZ...; senão o
+       * .glb, para carregar no jogo)}. Devolve {blob, nome, titulo}.
+       */
+      async baixar(uid, aoProgresso = () => {}, { arquivo = "", bruto = false } = {}) {
+        const r = await pedir("POST", "sketchfab/baixar", { json: { uid, arquivo, bruto }, como: "resposta" });
         const disp = r.headers.get("Content-Disposition") || "", m = /filename\*=UTF-8''([^;]+)/i.exec(disp);
         const nome = m ? decodeURIComponent(m[1]) : "mapa.glb", titulo = decodeURIComponent(r.headers.get("X-Sketchfab-Nome") || "") || nome.replace(/\.glb$/i, "");
         const total = +r.headers.get("Content-Length") || 0;
@@ -80,7 +85,7 @@
         const leitor = r.body.getReader(), partes = [];
         let lido = 0;
         for (;;) { const { done, value } = await leitor.read(); if (done) break; partes.push(value); lido += value.length; aoProgresso(lido / total); }
-        return { blob: new Blob(partes, { type: "model/gltf-binary" }), nome, titulo };
+        return { blob: new Blob(partes, { type: r.headers.get("Content-Type") || "model/gltf-binary" }), nome, titulo };
       },
     },
     miniatura: (item) => `/api/loja/${item.id}/miniatura?v=${item.miniatura}`,
@@ -418,7 +423,12 @@
         estado.chave ? el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("A chave do Sketchfab está guardada no servidor."), " ",
           el("button", { type: "button", class: "lnux-botao plano conta-link", onclick: () => { estado.chave = false; desenharChave(); } }, t("Trocar a chave")))
           : el("div", { class: "linha" }, chaveCampo, el("button", { type: "button", class: "lnux-botao primario", id: "sketchfab-guardar-chave", onclick: async () => {
-            try { estado = { ...estado, ...(await C.loja.sketchfab.chave(chaveCampo.value.trim())) }; chaveCampo.value = ""; desenharChave(); LNUX.aviso(t("Chave do Sketchfab guardada no servidor."), "ok"); } catch (e) { LNUX.erro(e); }
+            try {
+              await C.loja.sketchfab.chave(chaveCampo.value.trim());
+              estado = await C.loja.sketchfab.estado(); // com a chave, o que dá para fazer muda (trazer, baixar)
+              chaveCampo.value = ""; desenharChave(); LNUX.aviso(t("Chave do Sketchfab guardada no servidor."), "ok");
+              if (grade.querySelector(".sketchfab-cartao")) buscar(false);
+            } catch (e) { LNUX.erro(e); }
           } }, t("Guardar a chave"))),
         estado.chave ? null : el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Para baixar, o Sketchfab pede a chave da sua conta (sketchfab.com › Configurações › Senha e API). Ela fica só no servidor, nunca no navegador."))));
     }
@@ -436,12 +446,12 @@
       } catch (e) { grade.replaceChildren(el("p", { class: "conta-msg erro" }, e.message)); }
     }
     function cartao(m) {
-      const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno sketchfab-trazer", disabled: !m.pode_loja, "data-uid": m.uid,
-        title: m.pode_loja ? "" : t("A licença deste modelo não deixa redistribuir: ele não pode ir para a loja."), onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
-      // baixar e carregar (sem pôr na loja): os de licença livre para todos; os comprados (Standard) só para o dono, para ele usar
-      const pode = m.pode_loja || estado.dono, sobre = pode ? "" : t("Só o dono do servidor baixa este (a licença não deixa passar para os outros).");
-      const carregar = el("button", { type: "button", class: "lnux-botao pequeno", "data-carregar": m.uid, disabled: !pode, title: sobre || t("Abrir este mapa no jogo agora (sem pôr na loja)"), onclick: () => baixar(m, carregar, true) }, t("Carregar"));
-      const salvar = el("button", { type: "button", class: "lnux-botao pequeno", "data-baixar": m.uid, disabled: !pode, title: sobre || t("Baixar o .glb para o aparelho"), onclick: () => baixar(m, salvar, false) }, t("Baixar"));
+      const semPublicar = m.pode_loja && !estado.pode_trazer;
+      const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno sketchfab-trazer", disabled: !m.pode_loja || semPublicar, "data-uid": m.uid,
+        title: !m.pode_loja ? t("A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.") : semPublicar ? t("O dono desta loja não está aceitando publicações agora.") : "",
+        onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
+      // carregar no jogo e baixar (sem pôr na loja), escolhendo a versão: o formato e o tamanho das texturas (1K, 2K, 4K...)
+      const arquivos = el("button", { type: "button", class: "lnux-botao pequeno sketchfab-arquivos", "data-arquivos": m.uid, onclick: () => abrirArquivos(m) }, t("Arquivos e formatos..."));
       return el("article", { class: "sketchfab-cartao" + (m.pode_loja ? "" : " bloqueado"), "data-uid": m.uid },
         el("div", { class: "capa" }, m.miniatura ? el("img", { src: m.miniatura, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : null,
           m.animacoes ? el("span", { class: "selo-novo" }, t("animado")) : null),
@@ -450,19 +460,60 @@
           el("span", { class: "fraco pequeno sketchfab-autor", translate: "no" }, m.autor),
           el("span", { class: "sketchfab-licenca" + (m.pode_loja ? " livre" : "") }, m.licenca_nome || "?"),
           el("div", { class: "sketchfab-acoes" }, trazer,
-            el("div", { class: "sketchfab-acoes-linha" }, carregar, salvar,
+            el("div", { class: "sketchfab-acoes-linha" }, arquivos,
               /^https?:\/\//.test(m.url || "") ? el("a", { class: "lnux-botao plano pequeno", href: m.url, target: "_blank", rel: "noopener noreferrer nofollow", title: t("Ver no Sketchfab") }, t("Ver")) : null))));
     }
-    /** Baixa o .glb (o servidor busca com a chave do dono) e salva no aparelho ou carrega no jogo. */
-    async function baixar(m, botao, carregarNoJogo) {
+    const rotuloTextura = (px) => (!px ? t("original") : px >= 1024 ? `${Math.round(px / 1024)}K` : `${px} px`);
+    /**
+     * Os arquivos de um modelo: cada versão que o Sketchfab oferece (GLB, glTF em ZIP, USDZ, o original do autor; com as
+     * texturas em 1K, 2K, 4K...) e o tamanho, para carregar no jogo, baixar ou pôr na loja.
+     */
+    async function abrirArquivos(m) {
       if (!estado.chave) { LNUX.aviso(t(estado.dono ? "Falta a chave do Sketchfab." : "O dono do servidor ainda não guardou a chave do Sketchfab."), "alerta"); return; }
+      const lista = el("div", { class: "sketchfab-versoes", role: "list" }, el("p", { class: "fraco" }, t("Procurando os arquivos...")));
+      const corpo = el("div", { class: "ajustes janela-sketchfab-arquivos" },
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Texturas menores (1K) carregam mais rápido, principalmente no celular; as maiores (4K) ficam mais bonitas. Carregar abre no jogo; Baixar guarda o arquivo como veio.")),
+        lista);
+      const d = LNUX.dialogo({ titulo: t("Arquivos de “{nome}”", { nome: m.nome }), largo: true, corpo, botoes: [{ rotulo: "Fechar", valor: null }] });
+      let info;
+      try { info = await C.loja.sketchfab.arquivos(m.uid); } catch (e) { lista.replaceChildren(el("p", { class: "conta-msg erro" }, e.message)); return; }
+      const linha = (a) => {
+        const carregar = el("button", { type: "button", class: "lnux-botao primario pequeno", "data-carregar": a.id, disabled: !(a.carregar && info.pode_baixar),
+          title: !info.pode_baixar ? "" : a.carregar ? t("Abrir este mapa no jogo agora (sem pôr na loja)") : t("Este formato não abre direto no jogo: baixe e abra em Movimento › Cenário (o WEBC converte)."),
+          onclick: () => usarVersao(m, a, "carregar", carregar, d) }, t("Carregar"));
+        const baixarA = el("button", { type: "button", class: "lnux-botao pequeno", "data-baixar": a.id, disabled: !info.pode_baixar, title: t("Baixar o arquivo para o aparelho, como veio"),
+          onclick: () => usarVersao(m, a, "baixar", baixarA, d) }, t("Baixar"));
+        const trazerA = el("button", { type: "button", class: "lnux-botao plano pequeno", "data-trazer": a.id, disabled: !(a.carregar && info.pode_trazer),
+          title: info.pode_trazer ? t("Pôr esta versão na loja") : "", onclick: () => usarVersao(m, a, "trazer", trazerA, d) }, t("Pôr na loja"));
+        return el("div", { class: "sketchfab-versao", role: "listitem", "data-arquivo": a.id },
+          el("span", { class: "sketchfab-formato", "data-formato": a.formato }, a.nome_formato),
+          el("span", { class: "sketchfab-textura", title: t("Tamanho máximo das texturas") }, ...(a.textura ? [el("b", {}, rotuloTextura(a.textura)), el("small", { class: "fraco" }, " " + t("texturas"))]
+            : [el("small", { class: "fraco" }, t("texturas originais"))])),
+          el("span", { class: "sketchfab-tamanho fraco" }, a.tamanho ? LNUX.bytes(a.tamanho) : "?"),
+          el("span", { class: "sketchfab-versao-acoes" }, carregar, baixarA, trazerA));
+      };
+      lista.replaceChildren(...LNUX.filhos(
+        info.pode_baixar ? null : el("p", { class: "conta-msg erro", role: "alert" }, t("A licença deste modelo ({licenca}) não deixa passar para os outros: só o dono do servidor baixa, para usar ele mesmo.", { licenca: info.modelo.licenca_nome || "?" })),
+        ...(info.arquivos.length ? info.arquivos.map(linha) : [el("p", { class: "fraco" }, t("O Sketchfab não mandou nenhum arquivo para este modelo."))])));
+    }
+    /** Carregar no jogo (o .glb), baixar (o arquivo como veio) ou pôr na loja uma versão escolhida. */
+    async function usarVersao(m, a, acao, botao, dialogoArquivos) {
       botao.disabled = true;
-      const prog = LNUX.progresso(carregarNoJogo ? t("Carregando do Sketchfab") : t("Baixando do Sketchfab"));
-      prog.definir(0.05, t("Baixando \"{nome}\" e convertendo para .glb...", { nome: m.nome }));
+      const prog = LNUX.progresso(acao === "baixar" ? t("Baixando do Sketchfab") : acao === "trazer" ? t("Trazendo do Sketchfab") : t("Carregando do Sketchfab"));
+      prog.definir(0.05, t("Baixando \"{nome}\" ({versao})...", { nome: m.nome, versao: `${a.nome_formato} · ${rotuloTextura(a.textura)}` }));
       try {
-        const r = await C.loja.sketchfab.baixar(m.uid, (f) => prog.definir(0.1 + f * 0.85, t("Baixando \"{nome}\"...", { nome: m.nome })));
-        if (!carregarNoJogo) { LNUX.baixar(r.blob, r.nome, "model/gltf-binary"); LNUX.aviso(t("\"{nome}\" baixado.", { nome: m.nome }), "ok"); return; }
+        if (acao === "trazer") {
+          const r = await C.loja.sketchfab.importar(m.uid, tags.value, a.id);
+          resolvido = r.item;
+          LNUX.aviso(t("\"{nome}\" está na loja.", { nome: r.item.nome }), "ok");
+          dialogoArquivos.fechar(null);
+          janela.fechar(r.item);
+          return;
+        }
+        const r = await C.loja.sketchfab.baixar(m.uid, (f) => prog.definir(0.1 + f * 0.85, t("Baixando \"{nome}\"...", { nome: m.nome })), { arquivo: a.id, bruto: acao === "baixar" });
+        if (acao === "baixar") { LNUX.baixar(r.blob, r.nome, r.blob.type); LNUX.aviso(t("\"{nome}\" baixado.", { nome: r.nome }), "ok"); return; }
         prog.fechar();
+        dialogoArquivos.fechar(null);
         janela.fechar(null);
         if (usarMapa) await usarMapa(r.titulo || m.nome, r.nome, r.blob);
         else { await C.mapas.guardar(r.titulo || m.nome, new Map([[r.nome, r.blob]]), r.nome); LNUX.aviso(t("\"{nome}\" foi para Movimento › Cenário: abra uma personagem VRoid para andar nele.", { nome: m.nome }), "ok"); }
@@ -629,7 +680,7 @@
     }
     function desenharDono() {
       dono.hidden = !dados.dono;
-      botaoSketchfab.hidden = !(dados.dono || dados.sketchfab); // o dono (para guardar a chave) e quem pode publicar, se há chave
+      botaoSketchfab.hidden = !(dados.dono || dados.sketchfab); // o dono (para guardar a chave) e, com a chave guardada, todos
       if (!dados.dono) return;
       const caixaPublicar = el("input", { type: "checkbox", checked: dados.publicar });
       caixaPublicar.addEventListener("change", async () => {

@@ -892,3 +892,26 @@
     [/^A licença deste modelo \((.+)\) não deixa redistribuir: só o dono do servidor pode baixar, para usar ele mesmo\.$/, "This model's license ($1) doesn't allow redistribution: only the server owner can download it, for their own use.", "このモデルのライセンス（$1）は再配布を認めていないため、サーバーの所有者だけが自分で使うためにダウンロードできます。"],
   );
 })();
+
+// Os arquivos de um modelo do Sketchfab (os formatos e as texturas em 1K, 2K, 4K...)
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Arquivos e formatos...": ["Files and formats...", "ファイルと形式..."], "original": ["original", "オリジナル"], "texturas": ["textures", "テクスチャ"],
+    "Procurando os arquivos...": ["Looking for the files...", "ファイルを探しています..."], "Arquivos de “{nome}”": ["Files of “{nome}”", "「{nome}」のファイル"],
+    "Texturas menores (1K) carregam mais rápido, principalmente no celular; as maiores (4K) ficam mais bonitas. Carregar abre no jogo; Baixar guarda o arquivo como veio.": ["Smaller textures (1K) load faster, especially on phones; bigger ones (4K) look better. Load opens it in the game; Download saves the file as it came.", "小さいテクスチャ（1K）は特にスマホで速く読み込め、大きいもの（4K）はきれいです。「読み込む」でゲームで開き、「ダウンロード」でファイルをそのまま保存します。"],
+    "Este formato não abre direto no jogo: baixe e abra em Movimento › Cenário (o WEBC converte).": ["This format doesn't open directly in the game: download it and open it in Movement › Scene (WEBC converts it).", "この形式はゲームで直接開けません。ダウンロードして「動き › シーン」で開いてください（WEBC が変換します）。"],
+    "Baixar o arquivo para o aparelho, como veio": ["Download the file to this device, as it came", "ファイルをそのままこの端末にダウンロード"],
+    "Pôr esta versão na loja": ["Put this version in the store", "このバージョンをストアに入れる"], "Pôr na loja": ["Add to store", "ストアに入れる"],
+    "Tamanho máximo das texturas": ["Maximum texture size", "テクスチャの最大サイズ"],
+    "A licença deste modelo ({licenca}) não deixa passar para os outros: só o dono do servidor baixa, para usar ele mesmo.": ["This model's license ({licenca}) doesn't allow passing it on: only the server owner downloads it, for their own use.", "このモデルのライセンス（{licenca}）は他の人に渡すことを認めていないため、サーバーの所有者だけが自分で使うためにダウンロードできます。"],
+    "O Sketchfab não mandou nenhum arquivo para este modelo.": ["Sketchfab didn't send any file for this model.", "Sketchfab はこのモデルのファイルを送りませんでした。"],
+    "Baixando \"{nome}\" ({versao})...": ["Downloading \"{nome}\" ({versao})...", "「{nome}」（{versao}）をダウンロード中..."],
+    "Esse arquivo não abre no jogo (só GLB e glTF) ou não está mais na lista do Sketchfab.": ["That file doesn't open in the game (only GLB and glTF) or is no longer in Sketchfab's list.", "そのファイルはゲームで開けません（GLB と glTF のみ）。または Sketchfab の一覧にもうありません。"],
+    "Esse arquivo não está mais na lista do Sketchfab: abra a lista de novo.": ["That file is no longer in Sketchfab's list: open the list again.", "そのファイルは Sketchfab の一覧にもうありません。一覧を開き直してください。"],
+    "O Sketchfab mandou um endereço de download estranho.": ["Sketchfab sent a strange download address.", "Sketchfab から不審なダウンロード先が送られてきました。"],
+    "O Sketchfab não mandou o link do download.": ["Sketchfab didn't send the download link.", "Sketchfab はダウンロードリンクを送りませんでした。"],
+    "Original do autor (ZIP)": ["Author's original (ZIP)", "作者のオリジナル（ZIP）"], "texturas originais": ["original textures", "オリジナルのテクスチャ"],
+  });
+})();

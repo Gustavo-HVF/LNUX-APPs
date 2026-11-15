@@ -1061,6 +1061,7 @@ def _():
                 "license": {"slug": lic, "label": lic.upper()}, "animationCount": anim, "faceCount": 1, "isDownloadable": True,
                 "thumbnails": {"images": [{"url": f"http://127.0.0.1:{{porta}}/miniatura.jpg", "width": 640}]}, "tags": [{"name": "fnaf"}, {"name": "Moinho de Vento"}],
                 "description": "Um moinho que gira."}
+    glb1k = glb_de({**g, "asset": {"version": "2.0", "generator": "texturas em 1K"}}, pos)  # a versão menor do moinho
     class Falso(BH):
         def log_message(self, *a):
             pass
@@ -1075,7 +1076,12 @@ def _():
         def do_GET(self):
             vistos.append((self.path, self.headers.get("Authorization")))
             caminho = self.path.split("?")[0]
-            ms = {A: modelo(A, "Moinho animado", "by", 2), B: modelo(B, "Castelo comprado", "st", 0), Cz: modelo(Cz, "Praça CC0", "cc0", 0)}
+            ms = {A: modelo(A, "Moinho animado", "by", 2), B: modelo(B, "Castelo comprado", "st", 0), Cz: {**modelo(Cz, "Praça CC0", "cc0", 0), "archives": {"gltf": {"textureMaxResolution": 2048, "size": 999}}}}
+            base = f"http://127.0.0.1:{self.server.server_address[1]}"
+            if caminho == "/v3/archives/a-1k":  # um link relativo (como o Sketchfab manda às vezes): devolve o link de verdade
+                if self.headers.get("Authorization") != "Token chave-de-teste-123":
+                    return self.enviar({"detail": "nao"}, status=401)
+                return self.enviar({"url": base + "/arquivos/a-1k.glb"})
             if caminho == "/v3/search":
                 return self.enviar({"results": list(ms.values()), "cursors": {"next": "24"}})
             partes = caminho.split("/")
@@ -1083,12 +1089,18 @@ def _():
                 if len(partes) == 5 and partes[4] == "download":
                     if self.headers.get("Authorization") != "Token chave-de-teste-123":
                         return self.enviar({"detail": "nao"}, status=401)
-                    base = f"http://127.0.0.1:{self.server.server_address[1]}"
-                    return self.enviar({"glb": {"url": base + "/arquivos/a.glb", "size": len(glb), "expires": 300}} if partes[3] == A
-                                       else {"gltf": {"url": base + "/arquivos/c.zip", "size": len(pacote.getvalue()), "expires": 300}})
+                    if partes[3] == A:  # o moinho: várias versões (texturas em 1K e em 4K) e o USDZ, dentro de "latest"
+                        return self.enviar({"latest": {"glb": [{"url": "/v3/archives/a-1k", "size": len(glb1k), "textureMaxResolution": 1024},
+                                                               {"url": base + "/arquivos/a.glb", "size": len(glb), "textureMaxResolution": 4096}],
+                                                       "usdz": [{"url": base + "/arquivos/a.usdz", "size": 10}]}})
+                    return self.enviar({"gltf": {"url": base + "/arquivos/c.zip", "size": len(pacote.getvalue()), "expires": 300}})
                 return self.enviar(ms[partes[3]])
             if caminho == "/arquivos/a.glb":
                 return self.enviar(glb, "model/gltf-binary")
+            if caminho == "/arquivos/a-1k.glb":
+                return self.enviar(glb1k, "model/gltf-binary")
+            if caminho == "/arquivos/a.usdz":
+                return self.enviar(b"usdz-falso", "model/vnd.usdz+zip")
             if caminho == "/arquivos/c.zip":
                 return self.enviar(pacote.getvalue(), "application/zip")
             if caminho == "/miniatura.jpg":
@@ -1139,13 +1151,40 @@ def _():
         status, r, _ = S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)
         assert status == 200 and len(r["modelos"]) == 3 and "chave-de-teste" not in json.dumps(r)
         S.json("POST", "/api/loja/config", json_corpo={"publicar": False})
-        assert S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)[0] == 403
-        assert S.json("GET", "/api/loja", token=False)[1]["sketchfab"] is False
+        assert S.json("GET", "/api/loja/sketchfab/buscar?q=moinho", token=False)[0] == 200  # buscar, baixar e carregar continuam
+        assert S.json("GET", "/api/loja", token=False)[1]["sketchfab"] is True
+        assert S.json("GET", "/api/loja/sketchfab", token=False)[1]["pode_trazer"] is False
+        assert S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A}, token=False)[0] == 403  # só trazer para a loja é barrado
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A, "arquivo": "glb-1024"}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 200 and dados == glb1k, status
         S.json("POST", "/api/loja/config", json_corpo={"publicar": True})
         status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "quem": "Bia"}, token=False)
         assert status == 201 and r["segredo"] and r["item"]["trouxe"] == "Bia" and r["item"]["autor"] == "Joana" and "chave-de-teste" not in json.dumps(r), r
         assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False)[0] == 403  # sem o segredo
         assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False, cabecalhos={"X-Loja-Segredo": r["segredo"]})[0] == 200  # quem trouxe apaga
+        # os arquivos: as versões (formato, texturas em 1K/2K/4K, tamanho), sem os links do Sketchfab (ficam no servidor)
+        status, r, _ = S.json("GET", f"/api/loja/sketchfab/arquivos?uid={A}", token=False)
+        assert status == 200 and [a["id"] for a in r["arquivos"]] == ["glb-1024", "glb-4096", "usdz-original"], r
+        assert [a["textura"] for a in r["arquivos"]] == [1024, 4096, None] and [a["carregar"] for a in r["arquivos"]] == [True, True, False]
+        assert r["arquivos"][0]["tamanho"] == len(glb1k) and r["arquivos"][0]["nome_formato"] == "GLB" and r["pode_baixar"] and r["pode_trazer"]
+        assert "url" not in json.dumps(r["arquivos"]) and "archives/" not in json.dumps(r) and "chave-de-teste" not in json.dumps(r)
+        r = S.json("GET", f"/api/loja/sketchfab/arquivos?uid={Cz}", token=False)[1]
+        assert r["arquivos"] == [{"id": "gltf-2048", "formato": "gltf", "nome_formato": "glTF (ZIP)", "textura": 2048, "tamanho": len(pacote.getvalue()), "carregar": True}], r  # a resolução vem da ficha
+        assert S.json("GET", f"/api/loja/sketchfab/arquivos?uid={B}", token=False)[1]["pode_baixar"] is False  # o comprado: só o dono
+        assert S.json("GET", f"/api/loja/sketchfab/arquivos?uid={B}")[1]["pode_baixar"] is True
+        # carregar a versão de 1K (o link relativo é resolvido com a chave, no servidor) e baixar o USDZ como veio
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A, "arquivo": "glb-1024"}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 200 and dados == glb1k and ("/v3/archives/a-1k", "Token chave-de-teste-123") in vistos, status
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A, "arquivo": "usdz-original", "bruto": True}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 200 and dados == b"usdz-falso" and cab["Content-Type"] == "model/vnd.usdz+zip" and "moinho-animado.usdz" in cab["Content-Disposition"], (status, cab)
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": Cz, "arquivo": "gltf-2048", "bruto": True}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 200 and dados == pacote.getvalue() and "praça-cc0-2k-gltf.zip" in urllib.parse.unquote(cab["Content-Disposition"]), cab
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A, "arquivo": "usdz-original"}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 404 and "não abre no jogo" in dados.decode(), dados  # o USDZ não carrega no jogo (só baixa)
+        # trazer para a loja a versão menor (a loja fica mais leve para quem entra pelo link)
+        status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": A, "arquivo": "glb-1024"})
+        assert status == 201 and S.pedir("GET", f"/api/loja/{r['item']['id']}/arquivo", token=False)[2] == glb1k, r
+        S.json("DELETE", f"/api/loja/{r['item']['id']}")
         # baixar (ou carregar no jogo) sem pôr na loja: o .glb vem do servidor; os comprados (Standard) só para o dono
         antes = len(S.json("GET", "/api/loja")[1]["itens"])
         status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
