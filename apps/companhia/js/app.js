@@ -1703,6 +1703,7 @@
       emocao: (nome) => palco.definirEmocao(nome),
       gesto: (nome) => { palco.gesto(nome); if (sala) sala.gestoMeu(nome); },
       video: () => videos.janela(),
+      videos: () => videos,
       cenario: () => estudio.painelCenario(),
       secoes: secoesDoJogo,
     });
@@ -1713,7 +1714,8 @@
     const semLoja = (i) => typeof i === "string" || !/^Loja:/.test(i.rotulo);
     return {
       personagem: [...itens("Personagem").filter(semLoja), "-", ...itens("Movimento").filter((i) => typeof i === "string" || !/^(Andar pelo cenário|Voar|Cenário \(mapa\)|Converter mapa)/.test(i.rotulo))],
-      sala: [...itens("Sala").filter(semLoja), "-", ...itens("Conta")],
+      sala: itens("Sala").filter(semLoja),
+      conta: itens("Conta"),
       ajuda: itens("Ajuda"),
       exibir: itens("Exibir"),
     };

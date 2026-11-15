@@ -50,7 +50,23 @@
     grafico: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="8" width="40" height="26" rx="4" fill="currentColor"/><path fill="currentColor" d="M18 38h12l1.5 4h-15Z"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M14 28l7-9 5 6 4-4 6 7Z"/><circle cx="33" cy="15" r="3" fill="var(--jogo-cartao-fundo, #fff)"/></svg>',
     controle: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M14.5 12h19c5.8 0 9.6 4.6 10.3 12.5l.9 9.2c.4 4-3.8 6.4-6.8 3.8L33 33H15l-4.9 4.5c-3 2.6-7.2.2-6.8-3.8l.9-9.2C4.9 16.6 8.7 12 14.5 12Zm-1 6.5v3.5H10v3h3.5v3.5h3V25H20v-3h-3.5v-3.5Zm19.5.2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm4.5 4.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>',
   };
-  const SECOES = [["personagem", "Personagem"], ["sala", "Sala"], ["ajuda", "Ajuda"], ["acessibilidade", "Acessibilidade"], ["grafico", "Gráfico"], ["controle", "Controle"]];
+  Object.assign(ICONES, {
+    batepapo: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M8 8h26a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H19l-8 6v-6H8a5 5 0 0 1-5-5V13a5 5 0 0 1 5-5Z"/><path fill="currentColor" opacity=".55" d="M42 17a4 4 0 0 1 3 4v12a4 4 0 0 1-4 4h-2v5l-7-5H22a4 4 0 0 1-3.5-2H35a7 7 0 0 0 7-7Z"/></svg>',
+    conta: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="9" width="40" height="30" rx="5" fill="currentColor"/><circle cx="17" cy="21" r="5" fill="var(--jogo-cartao-fundo, #fff)"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M8.5 33c.8-4.6 4.1-7 8.5-7s7.7 2.4 8.5 7Z"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M29 18h10v3H29Zm0 7h10v3H29Z"/></svg>',
+    aparencia: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M24 4C12.4 4 4 12.4 4 23.4 4 34.2 12.6 44 23.3 44c2.6 0 4-1.6 4-3.6 0-1-.4-1.8-1-2.6-.6-.8-1-1.6-1-2.6 0-2 1.6-3.2 3.6-3.2H33c6.1 0 11-4.5 11-10.6C44 11.4 35 4 24 4Z"/><circle cx="14.5" cy="22" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="19.5" cy="13.5" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="29" cy="13.5" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="34.5" cy="21" r="3" fill="var(--jogo-cartao-fundo, #fff)"/></svg>',
+    som: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M6 18h8l11-9v30l-11-9H6Z"/><path fill="none" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" d="M31 17.5a9 9 0 0 1 0 13M36.5 12a16.5 16.5 0 0 1 0 24"/></svg>',
+    camera: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M17 8h14l3 5h7a4 4 0 0 1 4 4v20a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V17a4 4 0 0 1 4-4h7Z"/><circle cx="24" cy="26" r="8" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="24" cy="26" r="4.5" fill="currentColor"/></svg>',
+    teclado: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="3" y="11" width="42" height="26" rx="5" fill="currentColor"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M9 17h4v4H9Zm7 0h4v4h-4Zm7 0h4v4h-4Zm7 0h4v4h-4Zm7 0h3v4h-3ZM9 24h4v4H9Zm7 0h4v4h-4Zm7 0h4v4h-4Zm7 0h4v4h-4Zm7 0h3v4h-3Zm-23 7h20v3H14Z"/></svg>',
+  });
+  // as categorias da janela Opções, em grupos (no computador, à esquerda; no celular, os quadrados)
+  const GRUPOS = [
+    ["Jogo", [["personagem", "Personagem"], ["sala", "Sala"], ["batepapo", "Bate-papo"]]],
+    ["Você", [["conta", "Conta"], ["aparencia", "Aparência"], ["acessibilidade", "Acessibilidade"]]],
+    ["Ajustes", [["grafico", "Gráfico"], ["som", "Som"], ["camera", "Câmera"], ["controle", "Controle"], ["teclado", "Teclado"]]],
+    ["Ajuda", [["ajuda", "Ajuda"]]],
+  ];
+  const SECOES = GRUPOS.flatMap(([, l]) => l);
+  const celular = () => matchMedia("(max-width: 760px)").matches;
   const icone = (nome, classe = "jogo-svg") => el("span", { class: classe, html: ICONES[nome] });
 
   // ── acessibilidade (guardada neste navegador) ───────────────────────
@@ -70,6 +86,19 @@
   }
   aplicarAcesso();
   C.acessibilidade = { ler: lerAcesso, gravar: gravarAcesso };
+
+  // ── o bate-papo (guardado neste navegador): os balões, o aviso das novas e o tamanho do texto ──
+  const CHAVE_PAPO = "webc.batepapo";
+  const lerPapo = () => { try { return { baloes: true, contador: true, tamanho: 1, ...JSON.parse(localStorage.getItem(CHAVE_PAPO) || "{}") }; } catch (e) { return { baloes: true, contador: true, tamanho: 1 }; } };
+  const aplicarPapo = (a = lerPapo()) => document.documentElement.style.setProperty("--webc-papo-escala", String(a.tamanho || 1));
+  function gravarPapo(mud) {
+    const a = { ...lerPapo(), ...mud };
+    try { localStorage.setItem(CHAVE_PAPO, JSON.stringify(a)); } catch (e) { /* sem armazenamento */ }
+    aplicarPapo(a);
+    return a;
+  }
+  aplicarPapo();
+  C.batePapo = { ler: lerPapo, gravar: gravarPapo };
 
   C.Jogo = function (ctx) {
     let emocaoAtual = "neutra", voltarT = 0, naoLidas = 0, opcoes = null;
@@ -121,7 +150,7 @@
       } else if (document.activeElement && document.activeElement.id === "texto") document.activeElement.blur();
     }
     function novaMensagem() {
-      if (raiz.dataset.chat === "aberto") return;
+      if (raiz.dataset.chat === "aberto" || lerPapo().contador === false) return;
       naoLidas++;
       contador.textContent = naoLidas > 9 ? "9+" : String(naoLidas);
       contador.hidden = false;
@@ -129,32 +158,45 @@
 
     // ── o ☰ e a janela Opções ──
     const fecharOpcoes = () => { if (opcoes) { opcoes.remove(); opcoes = null; document.removeEventListener("keydown", teclaOpcoes, true); } };
+    let ultimaSecao = "personagem";
     function teclaOpcoes(e) {
-      if (e.key !== "Escape" || document.querySelector(".lnux-fundo-modal")) return;
+      if (e.key !== "Escape" || document.querySelector(".lnux-fundo-modal, .galeria-temas")) return;
       e.preventDefault(); e.stopPropagation();
-      if (opcoes && opcoes.dataset.secao) abrirOpcoes(); else fecharOpcoes();
+      // no celular, dentro de uma categoria, o Esc volta aos quadrados; senão, fecha
+      if (opcoes && opcoes.dataset.secao && celular()) abrirOpcoes("", { grade: true }); else fecharOpcoes();
     }
-    /** Abre a janela Opções (os seis cartões) ou, com secao, uma das seções. */
-    function abrirOpcoes(secao = "") {
+    /**
+     * Abre a janela Opções. No computador: as categorias à esquerda e a escolhida à direita (a última vista, ou
+     * Personagem). No celular: os quadrados das categorias e, tocando num, a categoria (com o voltar).
+     */
+    function abrirOpcoes(secao = "", { grade = false } = {}) {
       const novo = !opcoes;
       if (novo) {
         opcoes = el("div", { class: "jogo-opcoes-fundo", onclick: (e) => { if (e.target === opcoes) fecharOpcoes(); } });
         document.body.append(opcoes);
         document.addEventListener("keydown", teclaOpcoes, true);
       }
+      if (!secao && !grade && !celular()) secao = ultimaSecao;
+      if (secao) ultimaSecao = secao;
       opcoes.dataset.secao = secao;
-      const titulo = secao ? t(SECOES.find((s) => s[0] === secao)[1]) : t("Opções");
-      const corpo = secao ? el("div", { class: "jogo-opcoes-lista" }, ...desenharSecao(secao))
-        : el("div", { class: "jogo-opcoes-grade" }, SECOES.map(([id, nome]) => el("button", { type: "button", class: "jogo-opcao", "data-secao": id, onclick: () => abrirOpcoes(id) },
-          el("span", { class: "jogo-opcao-icone", html: ICONES[id] }), el("span", { class: "jogo-opcao-nome" }, nome))));
-      opcoes.replaceChildren(el("section", { class: "jogo-opcoes" + (novo ? " entrando" : ""), role: "dialog", "aria-modal": "true", "aria-label": titulo },
+      const nomeDa = (id) => t((SECOES.find((x) => x[0] === id) || [id, id])[1]);
+      const titulo = secao ? nomeDa(secao) : t("Opções");
+      const nav = el("nav", { class: "jogo-opcoes-nav", "aria-label": t("Categorias") }, GRUPOS.map(([nomeGrupo, lista]) => el("div", { class: "jogo-opcoes-grupo" },
+        el("h3", {}, t(nomeGrupo)),
+        el("div", { class: "jogo-opcoes-grade" }, lista.map(([id, nome]) => el("button", { type: "button", class: "jogo-opcao" + (id === secao ? " ativa" : ""), "data-secao": id,
+          "aria-current": id === secao ? "page" : undefined, onclick: () => abrirOpcoes(id) },
+        el("span", { class: "jogo-opcao-icone", html: ICONES[id] }), el("span", { class: "jogo-opcao-nome" }, t(nome))))))));
+      const conteudo = el("div", { class: "jogo-opcoes-conteudo" }, secao ? el("div", { class: "jogo-opcoes-lista", "data-lista": secao },
+        el("h3", { class: "jogo-opcoes-secao-titulo" }, el("span", { class: "jogo-opcoes-secao-icone", html: ICONES[secao] }), titulo), ...desenharSecao(secao).filter(Boolean)) : null);
+      opcoes.replaceChildren(el("section", { class: "jogo-opcoes" + (novo ? " entrando" : "") + (secao ? " com-secao" : ""), role: "dialog", "aria-modal": "true", "aria-label": t("Opções") },
         el("header", { class: "jogo-opcoes-topo" },
-          secao ? el("button", { type: "button", class: "jogo-opcoes-voltar", "aria-label": "Voltar", title: "Voltar", onclick: () => abrirOpcoes() }, icone("voltar")) : null,
+          secao ? el("button", { type: "button", class: "jogo-opcoes-voltar", "aria-label": "Voltar", title: "Voltar", onclick: () => abrirOpcoes("", { grade: true }) }, icone("voltar")) : null,
           el("h2", {}, secao ? el("span", {}, el("span", { class: "fraco-claro" }, t("Opções") + " › "), titulo) : titulo),
+          el("span", { class: "jogo-opcoes-dica" }, el("kbd", {}, "Esc"), " ", t("fecha")),
           el("button", { type: "button", class: "jogo-opcoes-fechar", "aria-label": "Fechar", title: "Fechar", onclick: fecharOpcoes }, icone("fechar"))),
-        corpo));
-      const foco = opcoes.querySelector(secao ? ".jogo-opcoes-lista button:not(:disabled), .jogo-opcoes-lista input" : ".jogo-opcao");
-      if (foco) foco.focus();
+        el("div", { class: "jogo-opcoes-corpo" }, nav, conteudo)));
+      const foco = opcoes.querySelector(secao && celular() ? ".jogo-opcoes-lista button:not(:disabled), .jogo-opcoes-lista input" : secao ? ".jogo-opcao.ativa" : ".jogo-opcao");
+      if (foco) foco.focus({ preventScroll: true });
     }
     /** Uma linha de menu (o mesmo formato dos menus do app). Os que ligam e desligam ficam na janela; os outros fecham. */
     function linhaDeMenu(i, secao) {
@@ -200,11 +242,59 @@
       const p = ctx.palco();
       if (secao === "personagem") return linhas(s.personagem, secao);
       if (secao === "sala") return linhas(s.sala, secao);
+      if (secao === "conta") {
+        const eu = C.contas && C.contas.eu;
+        return [
+          grupo("", el("p", { class: "jogo-nota" }, eu ? t("Você está na conta de {nome}.", { nome: eu.nome }) : t("Você joga sem conta, como {nome}.", { nome: (C.nomeDoJogo && C.nomeDoJogo.atual()) || "?" }))),
+          ...linhas([...s.conta, "-",
+            ...(eu ? [] : [{ rotulo: "Trocar o meu nome...", acao: () => C.trocarNomeDoJogo && C.trocarNomeDoJogo() }]),
+            ...(eu ? [{ rotulo: "Editar o perfil (foto, banner, bio)...", acao: () => C.janelaPerfil() }] : [])], secao),
+        ];
+      }
+      if (secao === "batepapo") {
+        const a = lerPapo();
+        return [
+          grupo("", ...linhas([{ rotulo: "Abrir o bate-papo", atalho: "Enter", acao: () => alternarChat(true) }], secao)),
+          grupo(t("Mensagens"),
+            chave("Balões com as mensagens em cima das personagens", a.baloes !== false, (v) => gravarPapo({ baloes: v })),
+            chave("Avisar as mensagens novas (o número no botão)", a.contador !== false, (v) => { gravarPapo({ contador: v }); if (!v) { naoLidas = 0; contador.hidden = true; } })),
+          grupo(t("Leitura"), segmentos("Tamanho do texto do bate-papo", [[1, "Normal"], [1.15, "Grande"], [1.3, "Maior"]], a.tamanho || 1, (v) => gravarPapo({ tamanho: +v }))),
+          grupo("", el("p", { class: "jogo-nota" }, t("Enter abre o bate-papo; Esc fecha. Quem criou a sala pode desligar o bate-papo em Sala › Opções da sala."))),
+        ];
+      }
+      if (secao === "aparencia") {
+        const temaBotao = el("button", { type: "button", class: "jogo-item", id: "opcoes-tema", onclick: (e) => C.escolherTema(e.currentTarget) }, el("span", { class: "rotulo" }, t("Tema")), el("span", { class: "jogo-valor" }, C.temas.nome(C.temas.TEMAS.find((x) => x.id === C.temas.atual) || C.temas.TEMAS[0])));
+        return [
+          grupo(t("Tema"), temaBotao, el("p", { class: "jogo-nota" }, t("Com conta, o tema vai para o seu perfil: quem abre o seu perfil o vê nele."))),
+          grupo(t("Idioma"), segmentos("Idioma", Object.entries(C.IDIOMAS).map(([k, v]) => [k, v.nome]), C.idioma, (k) => { C.definirIdioma(k); abrirOpcoes(secao); })),
+        ];
+      }
+      if (secao === "som") {
+        const v = ctx.videos && ctx.videos();
+        if (!v) return [grupo("", el("p", { class: "jogo-nota" }, t("Ainda não há som para ajustar aqui.")))];
+        return [
+          grupo(t("Vídeos na sala"),
+            faixa("Volume dos vídeos", 0, 100, 5, Math.round((v.volumeGeral ?? 1) * 100), (x) => v.definirVolumeGeral(x / 100), (x) => x + "%"),
+            chave("Silenciar o meu vídeo", v.mudo, (x) => { if (!!x !== !!v.mudo) v.alternarMudo(); }),
+            chave("Ouvir os vídeos dos outros", v.somOutros, (x) => v.definirSomOutros(x))),
+          grupo("", el("p", { class: "jogo-nota" }, t("O som das telas dos outros diminui com a distância: chegue perto para ouvir melhor."))),
+        ];
+      }
+      if (secao === "camera") {
+        const m = p && p.mundo;
+        if (!m) return [grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar.")))];
+        return [
+          grupo(t("Câmera"),
+            faixa("Sensibilidade da câmera", 0.3, 2.5, 0.1, m.cfg.sensibilidade || 1, (x) => { m.cfg.sensibilidade = x; m.salvarCfg(); }, (x) => x.toFixed(1) + "×"),
+            chave("Inverter a câmera (para cima e para baixo)", m.cfg.inverterY, (x) => { m.cfg.inverterY = x; m.salvarCfg(); }),
+            faixa("Distância da câmera", 1.2, 8, 0.1, +(m.cfg.distancia || m.cam.dist || 3.2).toFixed(1), (x) => { m.cfg.distancia = x; m.cam.dist = x; m.salvarCfg(); }, (x) => x.toFixed(1) + " m")),
+          grupo("", el("p", { class: "jogo-nota" }, t("Arrastar gira a câmera; a rodinha do mouse (ou a pinça, no celular) aproxima e afasta. A câmera não atravessa as paredes."))),
+        ];
+      }
       if (secao === "ajuda") return [...linhas(s.ajuda, secao), el("hr"), grupo("", el("p", { class: "jogo-nota" }, t("As expressões: clique nelas embaixo da tela ou aperte de 1 a 9 no teclado. Os outros na sala veem.")))];
       if (secao === "acessibilidade") {
         const a = lerAcesso();
         return [
-          grupo("", segmentos("Idioma", Object.entries(C.IDIOMAS).map(([k, v]) => [k, v.nome]), C.idioma, (k) => { C.definirIdioma(k); abrirOpcoes(secao); })),
           grupo(t("Leitura"),
             segmentos("Tamanho da interface", [[1, "Normal"], [1.15, "Grande"], [1.3, "Maior"]], a.tamanho, (v) => gravarAcesso({ tamanho: +v })),
             chave("Alto contraste", a.contraste, (v) => { gravarAcesso({ contraste: v, temaAntes: v ? C.temas.atual : lerAcesso().temaAntes }); C.temas.definir(v ? "contrast" : (lerAcesso().temaAntes || "webc")); }, "Cores fortes: texto claro no preto")),
@@ -215,9 +305,7 @@
       }
       if (secao === "grafico") {
         const luz = p && p.luzCfg;
-        const temaBotao = el("button", { type: "button", class: "jogo-item", onclick: (e) => C.escolherTema(e.currentTarget) }, el("span", { class: "rotulo" }, t("Tema")), el("span", { class: "jogo-valor" }, C.temas.nome(C.temas.TEMAS.find((x) => x.id === C.temas.atual) || C.temas.TEMAS[0])));
         return [
-          grupo(t("Aparência"), temaBotao),
           grupo(t("Desempenho"),
             p && p.definirResolucao ? segmentos("Resolução", [[0.5, "50%"], [0.75, "75%"], [1, "100%"]], [0.5, 0.75, 1].reduce((m, v) => (Math.abs(v - p.resolucao) < Math.abs(m - p.resolucao) ? v : m), 1), (v) => p.definirResolucao(+v)) : null,
             luz ? chave("Luz e sombras realistas (no cenário)", luz.realista, (v) => p.definirLuz({ realista: v }), "Um sol com sombra, céu e tons naturais. Desligado, a luz de frente de sempre (mais leve).") : null,
@@ -230,17 +318,20 @@
       }
       if (secao === "controle") {
         const m = p && p.mundo;
-        const tecla = (k, o) => el("div", { class: "jogo-tecla" }, el("span", { class: "jogo-teclas" }, ...k.split(" ").map((x) => el("kbd", {}, x))), el("span", {}, o));
         return [
-          grupo(t("Teclado"),
-            tecla("W A S D", "Andar (ou as setas)"), tecla("Shift", "Correr"), tecla("Espaço", "Pular"), tecla("1 … 9", "Expressões"),
-            tecla("V", "Voar (quem criou a sala)"), tecla("Espaço C", "Subir e descer, voando"), tecla("Enter", "Abrir o bate-papo"), tecla("Esc", "Fechar")),
-          m ? grupo(t("Câmera e andar"),
-            faixa("Sensibilidade da câmera", 0.3, 2.5, 0.1, m.cfg.sensibilidade || 1, (v) => { m.cfg.sensibilidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×"),
-            chave("Inverter a câmera (para cima e para baixo)", m.cfg.inverterY, (v) => { m.cfg.inverterY = v; m.salvarCfg(); }),
+          m ? grupo(t("Andar"),
             faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade || 1, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×"),
             chave("Pés no chão (IK): as pernas se ajustam a degraus e rampas", m.cfg.ik !== false, (v) => { m.cfg.ik = v; m.salvarCfg(); })) : grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar."))),
-          grupo("", el("p", { class: "jogo-nota" }, t("No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima."))),
+          grupo(t("No celular"), el("p", { class: "jogo-nota" }, t("No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima."))),
+        ];
+      }
+      if (secao === "teclado") {
+        const tecla = (k, o) => el("div", { class: "jogo-tecla" }, el("span", { class: "jogo-teclas" }, ...k.split(" ").map((x) => el("kbd", {}, x))), el("span", {}, t(o)));
+        return [
+          grupo(t("Andar"), tecla("W A S D", "Andar (ou as setas)"), tecla("Shift", "Correr"), tecla("Espaço", "Pular"),
+            tecla("V", "Voar (quem criou a sala)"), tecla("Espaço C", "Subir e descer, voando")),
+          grupo(t("Personagem"), tecla("1 … 9", "Expressões")),
+          grupo(t("Janelas"), tecla("Enter", "Abrir o bate-papo"), tecla("Esc", "Abrir e fechar as Opções")),
         ];
       }
       return [];
@@ -250,7 +341,12 @@
     const digitando = (e) => { const a = e.target; return !!(a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))); };
     document.addEventListener("keydown", (e) => {
       if (raiz.dataset.modo !== "jogar" || e.ctrlKey || e.metaKey || e.altKey || digitando(e)) return;
-      if (opcoes || document.querySelector(".lnux-fundo-modal, .lnux-menu, .tela-inicio, .loja:not(.em-pagina)") || (C.webc && C.webc.visivel)) return;
+      if (opcoes || document.querySelector(".lnux-fundo-modal, .lnux-menu, .tela-inicio, .loja:not(.em-pagina), .galeria-temas") || (C.webc && C.webc.visivel)) return;
+      if (e.key === "Escape") { // o Esc abre as Opções do jogo (com o bate-papo aberto, fecha ele primeiro)
+        e.preventDefault();
+        if (raiz.dataset.chat === "aberto") alternarChat(false); else abrirOpcoes();
+        return;
+      }
       const n = /^(Digit|Numpad)([1-9])$/.exec(e.code);
       if (n && !e.shiftKey) { e.preventDefault(); expressar(EXPRESSOES[+n[2] - 1].id); return; }
       if (e.key === "Enter" && raiz.dataset.chat !== "aberto") { e.preventDefault(); alternarChat(true); }

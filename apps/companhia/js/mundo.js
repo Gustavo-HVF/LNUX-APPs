@@ -137,6 +137,7 @@
       this.podeVoar = () => true; // quem usa o mundo decide (a tela troca quando entra numa sala)
       this.cfg = { velocidade: 1, sensibilidade: 1, inverterY: false }; // Opções › Controle
       try { Object.assign(this.cfg, JSON.parse(LNUX.preferencia.ler("companhia.mundo", "{}"))); } catch (e) { /* padrão */ }
+      if (+this.cfg.distancia > 0) this.cam.dist = Math.min(8, Math.max(1.2, +this.cfg.distancia)); // Opções › Câmera
       this.estado = "parado";   // parado | andando | correndo | pulando
       this.fase = 0;
       this.pesoAndar = 0;

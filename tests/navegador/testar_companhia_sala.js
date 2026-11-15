@@ -104,13 +104,19 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
       const some = (s) => { const e = document.querySelector(s); return !e || getComputedStyle(e).display === "none"; };
       return { modo: window.Companhia.modo, selo: some("#selo-ia"), gasto: some("#gasto"), mic: some("#botao-mic"), rodape: some(".conversa-rodape"), afeto: some("#chip-afeto"), nucleo: some("#nucleo-aviso"), chip: !document.querySelector("#chip-sala").hidden };
     });
-    ok(m.join() === "personagem,sala,ajuda,acessibilidade,grafico,controle" && (await ana.ev(() => getComputedStyle(document.querySelector(".lnux-menubar")).display === "none")),
+    ok(m.join() === "personagem,sala,batepapo,conta,aparencia,acessibilidade,grafico,som,camera,controle,teclado,ajuda" && (await ana.ev(() => getComputedStyle(document.querySelector(".lnux-menubar")).display === "none")),
       `jogar: no lugar dos menus, o ☰ abre a janela Opções (${m.join(", ")}); sem IA, Conversa nem Voz`);
     ok(semIA.modo === "jogar" && semIA.selo && semIA.gasto && semIA.mic && semIA.rodape && semIA.afeto && semIA.nucleo && semIA.chip, "jogar: somem o selo da IA, os tokens, o microfone, \"Falar\", o afeto e o aviso do Live2D; aparece o botão da sala");
     await ana.pagina.waitForSelector(".salas .loja-vazio:not([hidden])");
     ok(await ana.ev(() => /Nenhuma sala pública aberta/.test(document.querySelector(".salas .loja-vazio").textContent) && !document.querySelector(".salas .loja-dono").hidden),
       "jogar: a página Sala lista as salas deste servidor (vazia), com \"Criar sala\"; o dono do servidor vê a opção de deixar os outros criarem");
     await ana.ev(() => C.webc.esconder());
+    // o Esc abre as Opções do jogo (em grupos de categorias) e fecha de novo
+    await ana.pagina.keyboard.press("Escape");
+    const abriuEsc = await ana.ev(() => document.querySelector(".jogo-opcoes") ? [...document.querySelectorAll(".jogo-opcoes-grupo > h3")].map((h) => h.textContent).join() : "");
+    await ana.pagina.keyboard.press("Escape");
+    const fechouEsc = await ana.ev(() => !document.querySelector(".jogo-opcoes"));
+    ok(abriuEsc === "Jogo,Você,Ajustes,Ajuda" && fechouEsc, `o Esc abre as Opções do jogo (grupos: ${abriuEsc}) e fecha de novo`);
     await ana.pagina.click("#jogo-menu");
     await ana.pagina.click('.jogo-opcoes [data-secao="personagem"]');
     const itens = await ana.pagina.locator(".jogo-opcoes-lista .rotulo").allTextContents();
@@ -253,7 +259,12 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await bia.pagina.screenshot({ path: path.join(PASTA, "companhia-sala-bia.png") });
 
     // ── o link só dá acesso à sala ──
-    const acesso = await bia.ev(async (c) => ({ pastas: (await fetch("/api/pastas?caminho=~")).status, estado: (await fetch("/api/estado")).status, fechar: (await fetch("/api/sala/" + c, { method: "DELETE" })).status, mapa: (await fetch("/api/sala/" + c + "/mapa", { method: "PUT", body: "x" })).status }), codigo);
+    // (lendo o corpo de cada resposta: uma resposta não lida segura a conexão, e o Chrome só abre 6 por servidor —
+    //  com várias presas, os pedidos da sala da Bia ficavam esperando e ela não via a Ana ao voltar)
+    const acesso = await bia.ev(async (c) => {
+      const st = async (u, o) => { const r = await fetch(u, o); await r.text().catch(() => ""); return r.status; };
+      return { pastas: await st("/api/pastas?caminho=~"), estado: await st("/api/estado"), fechar: await st("/api/sala/" + c, { method: "DELETE" }), mapa: await st("/api/sala/" + c + "/mapa", { method: "PUT", body: "x" }) };
+    }, codigo);
     ok(acesso.pastas === 401 && acesso.estado === 401 && acesso.fechar === 403 && acesso.mapa === 403, "com o link, a Bia não lê as pastas do aparelho, não troca o cenário nem fecha a sala da Ana");
 
     // ── a Ana muda as opções: privada, sem senha e sem bate-papo ──
@@ -264,7 +275,11 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.uncheck('.form-sala input[aria-label="Bate-papo por texto"]');
     await ana.pagina.click('.lnux-dialogo footer button:text-is("Salvar")');
     await bia.pagina.waitForFunction(() => document.querySelector("#texto").disabled, null, { timeout: 20000 });
-    const privada = await bia.ev(async (c) => ({ lista: (await (await fetch("/api/salas")).json()).salas.map((s) => s.codigo), falar: (await fetch("/api/sala/" + c + "/falar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: window.Companhia.sala.eu.id, segredo: window.Companhia.sala.eu.segredo, texto: "oi" }) })).status }), codigo);
+    const privada = await bia.ev(async (c) => {
+      const falar = await fetch("/api/sala/" + c + "/falar", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: window.Companhia.sala.eu.id, segredo: window.Companhia.sala.eu.segredo, texto: "oi" }) });
+      await falar.text().catch(() => "");
+      return { lista: (await (await fetch("/api/salas")).json()).salas.map((s) => s.codigo), falar: falar.status };
+    }, codigo);
     ok(!privada.lista.includes(codigo) && privada.falar === 403 && (await ana.ev(() => !window.Companhia.sala.info.senha)),
       "a Ana deixa a sala privada (some da lista), tira a senha e desliga o bate-papo (a caixa de texto da Bia trava)");
 
@@ -281,7 +296,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await bia.pagina.waitForFunction(() => window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 120000 });
     await ana.menu("Sala", "Fechar a sala para todos");
     await bia.pagina.waitForFunction(() => !window.Companhia.sala.dentro && /A sala foi fechada/.test(document.querySelector("#mensagens").textContent), null, { timeout: 120000 });
-    ok((await bia.ev(async (c) => (await fetch("/api/sala/" + c)).status, codigo)) === 404, "a Ana fecha a sala: a Bia é avisada e o link deixa de valer");
+    ok((await bia.ev(async (c) => { const r = await fetch("/api/sala/" + c); await r.text().catch(() => ""); return r.status; }, codigo)) === 404, "a Ana fecha a sala: a Bia é avisada e o link deixa de valer");
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {
     erros.push("exceção: " + e.message);

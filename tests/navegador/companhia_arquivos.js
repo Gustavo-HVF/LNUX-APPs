@@ -129,13 +129,14 @@ function casaComLuzes() {
  * Boneco VRM 0.x: só ossos (com uma caixinha em cada um, para aparecer na tela). Como nos VRM 0.x de verdade, olha
  * para −Z e o lado esquerdo fica em −X.
  */
-function bonecoVRM0() {
+function bonecoVRM0({ virado = false } = {}) {
+  // virado: o espelho (declarado 0.x, mas olhando para +Z, com o lado esquerdo em +X), como alguns arquivos por aí
   const ossos = [["hips", null, [0, 0.9, 0]], ["spine", "hips", [0, 1.0, 0]], ["chest", "spine", [0, 1.15, 0]], ["neck", "chest", [0, 1.35, 0]], ["head", "neck", [0, 1.45, 0]]];
-  for (const [l, s] of [["left", -1], ["right", 1]]) {
+  for (const [l, s] of [["left", virado ? 1 : -1], ["right", virado ? -1 : 1]]) {
     ossos.push([l + "Shoulder", "chest", [0.05 * s, 1.3, 0]], [l + "UpperArm", l + "Shoulder", [0.15 * s, 1.3, 0]], [l + "LowerArm", l + "UpperArm", [0.4 * s, 1.3, 0]], [l + "Hand", l + "LowerArm", [0.65 * s, 1.3, 0]],
       [l + "IndexProximal", l + "Hand", [0.73 * s, 1.3, -0.02]], [l + "IndexIntermediate", l + "IndexProximal", [0.77 * s, 1.3, -0.02]], [l + "IndexDistal", l + "IndexIntermediate", [0.8 * s, 1.3, -0.02]],
       [l + "MiddleProximal", l + "Hand", [0.735 * s, 1.3, 0]], [l + "MiddleIntermediate", l + "MiddleProximal", [0.775 * s, 1.3, 0]], [l + "MiddleDistal", l + "MiddleIntermediate", [0.805 * s, 1.3, 0]],
-      [l + "UpperLeg", "hips", [0.09 * s, 0.85, 0]], [l + "LowerLeg", l + "UpperLeg", [0.09 * s, 0.47, 0]], [l + "Foot", l + "LowerLeg", [0.09 * s, 0.08, 0]], [l + "Toes", l + "Foot", [0.09 * s, 0.02, -0.12]]);
+      [l + "UpperLeg", "hips", [0.09 * s, 0.85, 0]], [l + "LowerLeg", l + "UpperLeg", [0.09 * s, 0.47, 0]], [l + "Foot", l + "LowerLeg", [0.09 * s, 0.08, 0]], [l + "Toes", l + "Foot", [0.09 * s, 0.02, virado ? 0.12 : -0.12]]);
   }
   const { json, bin } = gltfDeMalha(caixas([[-0.5, -0.5, -0.5, 0.5, 0.5, 0.5]]));
   const lugar = Object.fromEntries(ossos.map(([n, , p]) => [n, p]));

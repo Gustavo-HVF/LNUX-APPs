@@ -858,3 +858,37 @@
     "Pés no chão (IK): as pernas se ajustam a degraus e rampas": ["Feet on the ground (IK): legs adapt to steps and slopes", "足を地面に（IK）：段差や坂に脚が合わせます"],
   });
 })();
+
+// O Sketchfab (carregar e baixar sem pôr na loja) e as Opções do jogo em grupos (bate-papo, conta, aparência, som, câmera, teclado)
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Carregar": ["Load", "読み込む"], "Baixar": ["Download", "ダウンロード"],
+    "Abrir este mapa no jogo agora (sem pôr na loja)": ["Open this map in the game now (without adding it to the store)", "このマップを今すぐゲームで開く（ストアには入れない）"],
+    "Baixar o .glb para o aparelho": ["Download the .glb to this device", ".glb をこの端末にダウンロード"],
+    "Só o dono do servidor baixa este (a licença não deixa passar para os outros).": ["Only the server owner can download this one (the license doesn't allow passing it on).", "これはサーバーの所有者だけがダウンロードできます（ライセンス上、他の人に渡せません）。"],
+    "Carregando do Sketchfab": ["Loading from Sketchfab", "Sketchfab から読み込み中"], "Baixando do Sketchfab": ["Downloading from Sketchfab", "Sketchfab からダウンロード中"],
+    "Baixando \"{nome}\"...": ["Downloading \"{nome}\"...", "「{nome}」をダウンロード中..."], "\"{nome}\" baixado.": ["\"{nome}\" downloaded.", "「{nome}」をダウンロードしました。"],
+    // as Opções
+    "Jogo": ["Game", "ゲーム"], "Ajustes": ["Settings", "設定"], "Som": ["Sound", "サウンド"], "Categorias": ["Categories", "カテゴリー"], "fecha": ["closes", "で閉じる"],
+    "Você está na conta de {nome}.": ["You're signed in as {nome}.", "{nome} のアカウントでログインしています。"],
+    "Você joga sem conta, como {nome}.": ["You're playing without an account, as {nome}.", "アカウントなしで {nome} としてプレイしています。"],
+    "Trocar o meu nome...": ["Change my name...", "名前を変更..."], "Editar o perfil (foto, banner, bio)...": ["Edit profile (photo, banner, bio)...", "プロフィールを編集（写真、バナー、自己紹介）..."],
+    "Mensagens": ["Messages", "メッセージ"], "Balões com as mensagens em cima das personagens": ["Message bubbles above the characters", "キャラクターの上にメッセージの吹き出し"],
+    "Avisar as mensagens novas (o número no botão)": ["Show new messages (the number on the button)", "新しいメッセージを知らせる（ボタンの数字）"],
+    "Tamanho do texto do bate-papo": ["Chat text size", "チャットの文字サイズ"],
+    "Enter abre o bate-papo; Esc fecha. Quem criou a sala pode desligar o bate-papo em Sala › Opções da sala.": ["Enter opens the chat; Esc closes it. The room's creator can turn the chat off in Room › Room options.", "Enter でチャットを開き、Esc で閉じます。ルームの作成者は「ルーム › ルームのオプション」でチャットをオフにできます。"],
+    "Com conta, o tema vai para o seu perfil: quem abre o seu perfil o vê nele.": ["With an account, the theme goes to your profile: whoever opens your profile sees it in that theme.", "アカウントがあれば、テーマはプロフィールに反映され、プロフィールを開いた人にもそのテーマで表示されます。"],
+    "Ainda não há som para ajustar aqui.": ["There's no sound to adjust here yet.", "ここで調整できるサウンドはまだありません。"],
+    "Vídeos na sala": ["Videos in the room", "ルームの動画"], "Volume dos vídeos": ["Video volume", "動画の音量"], "Silenciar o meu vídeo": ["Mute my video", "自分の動画をミュート"],
+    "Ouvir os vídeos dos outros": ["Hear other people's videos", "他の人の動画の音を聞く"],
+    "O som das telas dos outros diminui com a distância: chegue perto para ouvir melhor.": ["Other people's screens get quieter with distance: come closer to hear better.", "他の人の画面の音は距離で小さくなります。近づくとよく聞こえます。"],
+    "Distância da câmera": ["Camera distance", "カメラの距離"],
+    "Arrastar gira a câmera; a rodinha do mouse (ou a pinça, no celular) aproxima e afasta. A câmera não atravessa as paredes.": ["Dragging turns the camera; the mouse wheel (or pinching, on a phone) zooms in and out. The camera doesn't go through walls.", "ドラッグでカメラを回し、マウスホイール（スマホではピンチ）で寄ったり離れたりします。カメラは壁を通り抜けません。"],
+    "Andar": ["Walking", "歩く"], "No celular": ["On a phone", "スマホでは"], "Janelas": ["Windows", "ウィンドウ"], "Abrir e fechar as Opções": ["Open and close Options", "オプションを開く・閉じる"],
+  });
+  C.PADROES.push(
+    [/^A licença deste modelo \((.+)\) não deixa redistribuir: só o dono do servidor pode baixar, para usar ele mesmo\.$/, "This model's license ($1) doesn't allow redistribution: only the server owner can download it, for their own use.", "このモデルのライセンス（$1）は再配布を認めていないため、サーバーの所有者だけが自分で使うためにダウンロードできます。"],
+  );
+})();

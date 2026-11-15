@@ -93,6 +93,16 @@ function sketchfabFalso() {
     ok(/Moinho animado/.test(cartoes.a) && /Joana/.test(cartoes.a) && /CC BY 4.0/.test(cartoes.a) && /animado/.test(cartoes.a) && cartoes.img && cartoes.aLivre && !cartoes.bLivre,
       "a busca mostra os modelos com a miniatura, quem fez e a licença; o comprado (Standard) fica bloqueado para a loja");
     ok(falso.vistos.some(([u]) => /\/v3\/search\?.*q=moinho/.test(u)), "quem pergunta ao Sketchfab é o servidor (o navegador não fala com ele)");
+    // a grade: três por fileira, cada cartão inteiro (antes as fileiras encolhiam até sobrar uma tira de cada miniatura)
+    const grade = await dono.ev(() => {
+      const g = document.querySelector(".sketchfab-grade"), c = [...g.querySelectorAll(".sketchfab-cartao")].map((x) => x.getBoundingClientRect()), r = g.getBoundingClientRect();
+      return { colunas: getComputedStyle(g).gridTemplateColumns.split(" ").length, altura: Math.round(c[0].height), dentro: c.every((x) => x.right <= r.right + 1), botoes: !!g.querySelector("[data-carregar]") && !!g.querySelector("[data-baixar]") };
+    });
+    ok(grade.colunas === 3 && grade.altura > 200 && grade.dentro && grade.botoes, `a janela mostra os modelos em três por fileira, cada cartão inteiro (${grade.altura} px) e dentro da janela, com Carregar e Baixar`);
+    // o dono baixa até o comprado (Standard): é dele, para usar (não vai para a loja)
+    const [arquivoB] = await Promise.all([dono.pagina.waitForEvent("download", { timeout: 60000 }), dono.pagina.click(`.sketchfab-cartao[data-uid="${falso.B}"] [data-baixar]`)]);
+    ok(/castelo-comprado\.glb$/.test(arquivoB.suggestedFilename()) && fs.readFileSync(await arquivoB.path()).readUInt32LE(0) === 0x46546c67,
+      `"Baixar" entrega o .glb (${arquivoB.suggestedFilename()}); o dono baixa até o comprado, para usar ele mesmo`);
 
     // ── trazer para a loja: o .glb, o crédito, a licença e os # ──
     await dono.pagina.fill('.janela-sketchfab input[aria-label="# para achar na loja"]', "praça");
@@ -127,7 +137,18 @@ function sketchfabFalso() {
     });
     ok(/trazido por Bia/.test(daBia.credito) && !daBia.vazou && daBia.podia && !daBia.sobrou,
       `a Bia trouxe o mapa com a chave do dono, que nunca chegou ao navegador dela (${daBia.credito.replace(/\s+/g, " ").slice(0, 80)}); quem trouxe pode apagar`);
-    await bia.pagina.keyboard.press("Escape");
+    // carregar no jogo sem pôr na loja; o comprado (Standard) a Bia não baixa nem carrega (a licença não deixa passar adiante)
+    await bia.pagina.click("#loja-sketchfab");
+    await bia.pagina.fill('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "moinho");
+    await bia.pagina.press('.janela-sketchfab input[aria-label="Procurar no Sketchfab"]', "Enter");
+    await bia.pagina.waitForSelector(`.sketchfab-cartao[data-uid="${falso.A}"] [data-carregar]:not([disabled])`, { timeout: 20000 });
+    const bloqueioB = await bia.ev((b) => ({ carregar: document.querySelector(`.sketchfab-cartao[data-uid="${b}"] [data-carregar]`).disabled, baixar: document.querySelector(`.sketchfab-cartao[data-uid="${b}"] [data-baixar]`).disabled }), falso.B);
+    const mapasAntes = await bia.ev(async () => (await C.mapas.lista()).length);
+    await bia.pagina.click(`.sketchfab-cartao[data-uid="${falso.A}"] [data-carregar]`);
+    await bia.pagina.waitForFunction(async (n) => (await C.mapas.lista()).length > n, mapasAntes, { timeout: 60000, polling: 300 });
+    const carregado = await bia.ev(async () => ({ nomes: (await C.mapas.lista()).map((m) => m.nome), janela: !!document.querySelector(".janela-sketchfab"), loja: (await C.loja.lista()).itens.filter((i) => i.trouxe === "Bia").length }));
+    ok(bloqueioB.carregar && bloqueioB.baixar && carregado.nomes.includes("Moinho animado") && !carregado.janela && carregado.loja === 0,
+      `"Carregar" traz o mapa direto para o jogo (Movimento › Cenário), sem pôr na loja; o comprado fica sem Carregar e Baixar para quem não é o dono`);
 
     // ── usar o mapa animado numa sala ──
     await dono.ev(() => C.webc.ir("sala"));

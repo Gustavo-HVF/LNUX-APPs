@@ -64,6 +64,7 @@ import uuid
 import zipfile
 import base64
 import struct
+import tempfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -2424,7 +2425,7 @@ class Manipulador(BaseHTTPRequestHandler):
             origem = self.origem_do_pedido()
             if partes == ["buscar"]:
                 contar_tentativa("sketchfab-busca:" + origem, 40, 60)
-            elif partes == ["importar"]:
+            elif partes in (["importar"], ["baixar"]):
                 contar_tentativa("sketchfab-trazer:" + origem, 10, 3600)
         if not partes and m == "PUT":
             d = self.ler_json()
@@ -2461,29 +2462,13 @@ class Manipulador(BaseHTTPRequestHandler):
             r = resumo_sketchfab(info)
             if not r["pode_loja"]:
                 raise ErroPonte(403, f"A licença deste modelo ({r['licenca_nome'] or 'sem licença'}) não deixa redistribuir: ele não pode ir para a loja.")
-            arquivos = pedir_sketchfab(f"/models/{uid}/download", chave)
-            escolha = next(((k, arquivos[k]) for k in ("glb", "gltf") if isinstance(arquivos.get(k), dict) and arquivos[k].get("url")), None)
-            if not escolha:
-                raise ErroPonte(502, "O Sketchfab não mandou um glTF para este modelo.")
-            tipo_arq, alvo = escolha
             pasta_tipo = self.ponte.loja / LOJA_TIPOS["mundo"][0]
             pasta_tipo.mkdir(parents=True, exist_ok=True)
-            cabe_no_disco(pasta_tipo, int(alvo.get("size") or 0) * 2)
             ident = secrets.token_hex(6)
             pasta = pasta_tipo / ident
             pasta.mkdir()
             try:
-                nome_arq = (re.sub(r"[^\w-]+", "-", r["nome"].lower()).strip("-")[:40] or "mapa") + ".glb"
-                bruto = pasta / (".baixando." + tipo_arq)
-                baixar_de_fora(str(alvo["url"]), bruto, SKETCHFAB_MAXIMO)
-                if tipo_arq == "gltf":
-                    (pasta / nome_arq).write_bytes(gltf_zip_para_glb(bruto))
-                    bruto.unlink()
-                else:
-                    os.replace(bruto, pasta / nome_arq)
-                if not formato_confere(pasta / nome_arq, ".glb"):
-                    raise ErroPonte(502, "O que veio do Sketchfab não é um glTF de verdade.")
-                glb_sem_especular(pasta / nome_arq)  # specular/glossiness antigo: as texturas aparecem em qualquer programa
+                nome_arq = self.sketchfab_glb(uid, chave, r, pasta)
                 if r["miniatura"]:
                     try:
                         baixar_de_fora(r["miniatura"], pasta / ".miniatura", 8 * 1024 * 1024, 30)
@@ -2518,7 +2503,50 @@ class Manipulador(BaseHTTPRequestHandler):
             with LOJA_TRAVA:
                 publico = self.loja_com_social({k: v for k, v in item.items() if not k.startswith("_")}, self.loja_social(), self.conta_da_sessao())
             return self.responder_json({"item": publico, **({"segredo": segredo} if segredo else {})}, 201)
+        if partes == ["baixar"] and m == "POST":
+            # baixar ou carregar no jogo (sem pôr na loja): os de licença livre para todos; os outros (comprados, Standard)
+            # só para o dono, que usa a própria conta (ele não pode redistribuir, então não vão para os outros)
+            d = self.ler_json()
+            uid = str(d.get("uid") or "")
+            if not re.fullmatch(r"[0-9a-f]{32}", uid):
+                raise ErroPonte(400, "Esse não é um modelo do Sketchfab (falta o código dele).")
+            chave = chave_sketchfab()
+            if not chave:
+                raise ErroPonte(400, "Falta a chave do Sketchfab (em 🔑 Chaves das APIs).")
+            r = resumo_sketchfab(pedir_sketchfab(f"/models/{uid}", chave))
+            if not r["pode_loja"] and not dono:
+                raise ErroPonte(403, f"A licença deste modelo ({r['licenca_nome'] or 'sem licença'}) não deixa redistribuir: só o dono do servidor pode baixar, para usar ele mesmo.")
+            pasta = Path(tempfile.mkdtemp(prefix="lnux-sketchfab-"))
+            try:
+                nome_arq = self.sketchfab_glb(uid, chave, r, pasta)
+                nome_baixado = urllib.parse.quote(nome_arq)
+                return self.enviar_arquivo(pasta / nome_arq, "model/gltf-binary", cabecalhos={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{nome_baixado}", "X-Sketchfab-Licenca": r["licenca"] or "",
+                    "X-Sketchfab-Nome": urllib.parse.quote(r["nome"] or "")})
+            finally:
+                shutil.rmtree(pasta, ignore_errors=True)
         raise ErroPonte(404, f"A loja não conhece /sketchfab/{'/'.join(partes)} ({m}).")
+
+    def sketchfab_glb(self, uid: str, chave: str, r: dict, pasta: Path) -> str:
+        """Baixa um modelo do Sketchfab para a pasta, como um .glb só (o glTF em ZIP é juntado), e devolve o nome do arquivo."""
+        arquivos = pedir_sketchfab(f"/models/{uid}/download", chave)
+        escolha = next(((k, arquivos[k]) for k in ("glb", "gltf") if isinstance(arquivos.get(k), dict) and arquivos[k].get("url")), None)
+        if not escolha:
+            raise ErroPonte(502, "O Sketchfab não mandou um glTF para este modelo.")
+        tipo_arq, alvo = escolha
+        cabe_no_disco(pasta, int(alvo.get("size") or 0) * 2)
+        nome_arq = (re.sub(r"[^\w-]+", "-", r["nome"].lower()).strip("-")[:40] or "mapa") + ".glb"
+        bruto = pasta / (".baixando." + tipo_arq)
+        baixar_de_fora(str(alvo["url"]), bruto, SKETCHFAB_MAXIMO)
+        if tipo_arq == "gltf":
+            (pasta / nome_arq).write_bytes(gltf_zip_para_glb(bruto))
+            bruto.unlink()
+        else:
+            os.replace(bruto, pasta / nome_arq)
+        if not formato_confere(pasta / nome_arq, ".glb"):
+            raise ErroPonte(502, "O que veio do Sketchfab não é um glTF de verdade.")
+        glb_sem_especular(pasta / nome_arq)  # specular/glossiness antigo: as texturas aparecem em qualquer programa
+        return nome_arq
 
     def loja_publicar(self, tipo: str, p: dict, dono: bool):
         if not dono and not self.ponte.loja_publicar():

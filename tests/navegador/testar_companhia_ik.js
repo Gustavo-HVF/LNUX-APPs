@@ -3,7 +3,8 @@
 // Monta um cenário com um piso (topo em y = 0,2), um degrau de 15 cm (x > 0) e uma rampa de 20° (z > 3), abre o boneco
 // VRM 0.x de teste, anda pelo cenário e põe a personagem com um pé em cima do degrau e o outro no piso. Confere: com a
 // IK, cada pé fica no chão dele (a mesma altura acima do chão que no piso plano), o quadril desce e o joelho do pé de
-// cima dobra; sem a IK (Opções › Controle), um pé fica no ar. Na rampa, o pé inclina junto com o chão.
+// cima dobra; sem a IK (Opções › Controle), um pé fica no ar. Na rampa, o pé inclina junto com o chão. E as personagens
+// ficam de frente pela geometria (um arquivo que declara uma versão e olha para o outro lado não aparece de costas).
 const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
@@ -122,8 +123,25 @@ function cenarioDaIk() {
     const inclinou = angulo(rampa.esq.cima, plano.esq.cima);
     ok(inclinou > 12 && inclinou < 28 && Math.abs(rampa.esq.acima - base) < 0.04 && Math.abs(rampa.dir.acima - base) < 0.04,
       `na rampa de 20°, o pé inclina com o chão (${inclinou.toFixed(0)}°) e os dois pisam nela (${rampa.esq.acima.toFixed(3)} e ${rampa.dir.acima.toFixed(3)} m)`);
-    // ── a opção está em Opções › Controle ──
     ok(await ev(() => !!window.C.ikDosPes), "a IK está carregada (js/ik.js)");
+    // ── de frente: a personagem fica de frente pela geometria, mesmo se o arquivo declara uma versão e olha para o outro lado ──
+    const frente = await ev(async ([normal, virado]) => {
+      const T = window.THREE, V = window.CompanhiaVRM;
+      const abrir = async (b64) => {
+        const carregador = new V.GLTFLoader();
+        carregador.register((parser) => new V.VRMLoaderPlugin(parser));
+        const u = URL.createObjectURL(new Blob([Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))]));
+        const gltf = await carregador.loadAsync(u);
+        URL.revokeObjectURL(u);
+        const vrm = gltf.userData.vrm, espelha = C.virarDeFrente(vrm, gltf);
+        vrm.scene.updateMatrixWorld(true);
+        const x = (n) => vrm.humanoid.getRawBoneNode(n).getWorldPosition(new T.Vector3()).x, z = (n) => vrm.humanoid.getRawBoneNode(n).getWorldPosition(new T.Vector3()).z;
+        return { espelha, esquerdaEmX: x("leftUpperLeg") > x("rightUpperLeg"), dedosNaFrente: z("leftToes") > z("leftFoot"), versao: vrm.meta.metaVersion };
+      };
+      return { normal: await abrir(normal), virado: await abrir(virado) };
+    }, [bonecoVRM0().toString("base64"), bonecoVRM0({ virado: true }).toString("base64")]);
+    ok(frente.normal.espelha && frente.normal.esquerdaEmX && frente.normal.dedosNaFrente && !frente.virado.espelha && frente.virado.esquerdaEmX && frente.virado.dedosNaFrente && frente.virado.versao === "0",
+      `de frente pela geometria: o VRM 0.x comum gira e espelha a pose; o arquivo 0.x que já olha para +Z (antes aparecia de costas) não gira — os dois ficam de frente (${JSON.stringify(frente)})`);
     await pagina.screenshot({ path: path.join(PASTA, "companhia-ik.png") });
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
   } catch (e) {

@@ -1146,6 +1146,16 @@ def _():
         assert status == 201 and r["segredo"] and r["item"]["trouxe"] == "Bia" and r["item"]["autor"] == "Joana" and "chave-de-teste" not in json.dumps(r), r
         assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False)[0] == 403  # sem o segredo
         assert S.json("DELETE", f"/api/loja/{r['item']['id']}", token=False, cabecalhos={"X-Loja-Segredo": r["segredo"]})[0] == 200  # quem trouxe apaga
+        # baixar (ou carregar no jogo) sem pôr na loja: o .glb vem do servidor; os comprados (Standard) só para o dono
+        antes = len(S.json("GET", "/api/loja")[1]["itens"])
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": A}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 200 and dados == glb and cab["Content-Type"] == "model/gltf-binary" and "moinho-animado.glb" in cab["Content-Disposition"], (status, cab)
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": B}).encode(), cabecalhos={"Content-Type": "application/json"}, token=False)
+        assert status == 403 and b"redistribuir" in dados, (status, dados)
+        status, cab, dados = S.pedir("POST", "/api/loja/sketchfab/baixar", corpo=json.dumps({"uid": B}).encode(), cabecalhos={"Content-Type": "application/json"})
+        assert status == 200 and dados[:4] == b"glTF" and cab["X-Sketchfab-Licenca"] == "st", status  # o dono baixa o que é dele, para usar
+        assert len(S.json("GET", "/api/loja")[1]["itens"]) == antes  # nada entrou na loja
+        assert not list(Path(tempfile.gettempdir()).glob("lnux-sketchfab-*"))  # a pasta temporária some
         # o .zip do glTF vira um .glb só, com o .bin e a textura dentro
         status, r, _ = S.json("POST", "/api/loja/sketchfab/importar", json_corpo={"uid": Cz})
         assert status == 201, r
