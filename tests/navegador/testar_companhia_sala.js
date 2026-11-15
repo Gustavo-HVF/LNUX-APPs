@@ -71,7 +71,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     const site = await ana.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.dataset.ir).join(), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.dataset.ir).join(),
       paleta: !!document.querySelector("#webc-tema svg"), idioma: !!document.querySelector("#webc-idioma"), eu: !!document.querySelector("#webc-eu") }));
-    ok(site.cartoes === "loja,sala,perfil" && site.nav === "loja,sala,perfil" && site.paleta && site.idioma && site.eu, "jogar sem conta abre o início: os cartões Loja, Sala e Perfil, e no alto a paleta de temas, o idioma e a conta");
+    ok(site.cartoes === "loja,sala,jogos,perfil" && site.nav === "loja,sala,jogos,perfil" && site.paleta && site.idioma && site.eu, "jogar sem conta abre o início: os cartões Loja, Sala, Jogos e Perfil, e no alto a paleta de temas, o idioma e a conta");
     ok(await ana.ev(() => [...document.querySelectorAll(".webc-quadrado")].map((q) => q.dataset.quadrado).join() === "chatbot,novidades,widgets" && /Ana/.test(document.querySelector("#webc-eu").textContent)),
       "embaixo dos cartões, os quadrados menores: Chat bot, Novidades e Widgets; no alto, o nome dito na tela de entrar");
 

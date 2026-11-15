@@ -213,7 +213,8 @@ const PLAYER_YT = `<!doctype html><body style="margin:0;background:#c4302b;color
     // ── fechar ──
     await ana.pagina.click('.barra-video [data-acao="fechar"]');
     await bia.pagina.waitForFunction(() => window.Companhia.videos.telas.size === 0, null, { timeout: 15000 });
-    ok(await ana.ev(() => !window.Companhia.videos.meu && window.Companhia.videos.telas.size === 0 && !document.querySelector(".barra-video")), "a Ana fecha o vídeo: a tela some para as duas");
+    // (do lado da Ana, a tela some quando o servidor confirma: sem placa de vídeo, pode levar um instante)
+    ok(await ana.pagina.waitForFunction(() => !window.Companhia.videos.meu && window.Companhia.videos.telas.size === 0 && !document.querySelector(".barra-video"), null, { timeout: 15000 }).then(() => true, () => false), "a Ana fecha o vídeo: a tela some para as duas");
     await bia.ev(() => window.Companhia.sala.sair());
     await ana.ev(() => window.Companhia.sala.fechar());
     ok(consola.length === 0, "sem erros no console" + (consola.length ? ": " + consola.slice(0, 3).join(" | ") : ""));
