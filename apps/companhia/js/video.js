@@ -311,6 +311,7 @@
       this.mudo = pref("mudo", "0") === "1";
       this.verOutros = pref("ver-outros", "1") === "1";
       this.somOutros = pref("som-outros", "1") === "1";
+      this.volumeGeral = Math.min(1, Math.max(0, +pref("volume", "1") || 0)); // Opções › Som: o volume de todos os vídeos
       this._v = null;
     }
     ligar(palco) {
@@ -424,6 +425,7 @@
     alternarMudo() { this.mudo = !this.mudo; gravarPref("mudo", this.mudo ? "1" : "0"); this.desenharBarra(); }
     definirVerOutros(v) { this.verOutros = !!v; gravarPref("ver-outros", v ? "1" : "0"); }
     definirSomOutros(v) { this.somOutros = !!v; gravarPref("som-outros", v ? "1" : "0"); }
+    definirVolumeGeral(v) { this.volumeGeral = Math.min(1, Math.max(0, +v || 0)); gravarPref("volume", String(this.volumeGeral)); }
 
     /** Entrou ou saiu de uma sala: o meu vídeo vai junto (entrando) ou continua só para mim (saindo). */
     async aoMudarSala() {
@@ -481,11 +483,12 @@
         else { const a = this.alvoSeguindo(q.pos, q.giro, q.altura, t.largura, q.rumo); t.mover(dt, a.pos, a.rumo, true); }
         t.conferir(cam, ver);
         // o som: a minha tela que me segue, cheio; as outras diminuem com a distância até a câmera
-        if (mudo) t.definirVolume(0);
-        else if (q.meu && e.modo !== "parada") t.definirVolume(100);
+        const geral = this.volumeGeral ?? 1;
+        if (mudo || geral <= 0) t.definirVolume(0);
+        else if (q.meu && e.modo !== "parada") t.definirVolume(100 * geral);
         else {
           const esc = (p.altura || 1.5) / 1.5, d = cam.position.distanceTo(t.ancora.position);
-          t.definirVolume(100 * limitar(1 - Math.max(0, d - 3 * esc - t.largura) / (22 * esc), 0, 1));
+          t.definirVolume(100 * geral * limitar(1 - Math.max(0, d - 3 * esc - t.largura) / (22 * esc), 0, 1));
         }
       }
       this.camada.desenhar(cam, this.telas.values());

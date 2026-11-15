@@ -1,6 +1,6 @@
 // Ajuda dos testes do WEBC: os menus. No chat bot (modo conversa), a barra de menus do app; no jogo, a janela Opções
-// (o ☰), em que os mesmos itens ficam nas seções Personagem, Sala, Ajuda e Gráfico.
-const SECAO = { Personagem: "personagem", Movimento: "personagem", Sala: "sala", Conta: "sala", Ajuda: "ajuda", Exibir: "grafico" };
+// (o ☰ ou o Esc), em que os mesmos itens ficam nas seções Personagem, Sala, Conta, Ajuda e Gráfico.
+const SECAO = { Personagem: "personagem", Movimento: "personagem", Sala: "sala", Conta: "conta", Ajuda: "ajuda", Exibir: "grafico" };
 // itens que, no jogo, ficam em outro lugar
 const NO_JOGO = { "Cenário (mapa)...": ["grafico", "Luz, sombras e luzes do mapa..."], "Voar, atravessando as paredes (V)": ["sala", "Voar, atravessando as paredes (V)"] };
 

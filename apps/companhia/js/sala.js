@@ -137,11 +137,9 @@
     if (!vrm) throw new Error("O avatar recebido não é um VRM.");
     V.VRMUtils.removeUnnecessaryVertices(gltf.scene);
     if (V.VRMUtils.combineSkeletons) V.VRMUtils.combineSkeletons(gltf.scene);
-    V.VRMUtils.rotateVRM0(vrm);
+    const v0 = C.virarDeFrente(vrm, gltf); // de frente, pela geometria (não só pela versão do arquivo)
     vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) o.castShadow = o.receiveShadow = true; });
     if (limiteTextura) C.Palco3D.prototype.reduzirTexturas.call({ modelo: vrm.scene, texturas: [] }, limiteTextura); // os avatares dos outros pesam menos
-    const ext = (gltf.parser.json && gltf.parser.json.extensions) || {};
-    const v0 = vrm.meta ? vrm.meta.metaVersion === "0" : !!ext.VRM && !ext.VRMC_vrm;
     const nos = {};
     if (vrm.humanoid) { vrm.humanoid.resetNormalizedPose(); for (const n of C.OSSOS_VRM) { const no = vrm.humanoid.getNormalizedBoneNode(n); if (no) nos[n] = no; } }
     const hips = nos.hips ? nos.hips.position.clone() : new T.Vector3(0, 0.9, 0);
@@ -569,7 +567,7 @@
         for (const m of r.mensagens || []) {
           this.visto = Math.max(this.visto, m.n);
           const meu = m.de === this.eu.id, rem = this.remotos.get(m.de);
-          if (rem) rem.falar(m.texto);
+          if (rem && !(C.batePapo && C.batePapo.ler().baloes === false)) rem.falar(m.texto); // Opções › Bate-papo: os balões
           this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu, titulo: m.titulo || null });
         }
         if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => console.warn(e)); }

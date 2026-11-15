@@ -71,24 +71,36 @@ pisca na tela).
 
 Com a personagem, a tela é só o jogo (`js/jogo.js`):
 
-- **No alto**, uma barra com o logo do WEBC (volta ao site), o nome da sala e o **☰**, que abre a janela **Opções**.
+- **No alto**, uma barra com o logo do WEBC (volta ao site), o nome da sala e o **☰**, que abre a janela **Opções**
+  (o **Esc** também abre e fecha).
 - **Embaixo, no meio**, as **expressões da personagem**, de 1 a 9: feliz, rindo, surpresa, apaixonada, triste, brava,
   acenar, piscadinha e pensativa. Um clique ou a **tecla do número** liga a expressão (a mesma de novo desliga; depois
   de uns segundos ela volta ao normal sozinha), e os outros na sala veem. Os desenhos são próprios (SVG, sem emoji).
 - **No canto**, o **bate-papo** (abre e fecha a conversa da sala por cima do jogo; um número mostra as mensagens novas;
   Enter abre, Esc fecha) e o **vídeo numa tela**.
-- **Opções**: seis cartões.
-  - **Personagem**: trocar e importar personagem, roupas, captura de movimento, pacotes de movimento, ajustar
-    esqueleto, exportar e apagar.
-  - **Sala**: salas, perfil, o link, quem está na sala, as opções da sala, o cenário, voar, o vídeo, sair e fechar, e
-    a conta.
+- **Opções** (o ☰ ou o **Esc**): no computador, as categorias numa coluna à esquerda e a escolhida à direita (abre na
+  última vista); no celular, os quadrados das categorias e, tocando num, a categoria, com o voltar (o Esc volta aos
+  quadrados). Onze categorias em quatro grupos:
+  - **Jogo**
+    - **Personagem**: trocar e importar personagem, roupas, captura de movimento, pacotes de movimento, ajustar
+      esqueleto, exportar e apagar.
+    - **Sala**: salas, o link, quem está na sala, as opções da sala, o cenário, voar, o vídeo, sair e fechar.
+    - **Bate-papo**: abrir, os balões com as mensagens em cima das personagens, o aviso das mensagens novas e o
+      tamanho do texto.
+  - **Você**
+    - **Conta**: entrar, criar conta, meu perfil, editar o perfil, trocar o nome (sem conta), sair e, no aparelho do
+      servidor, as contas e o e-mail.
+    - **Aparência**: o tema e o idioma.
+    - **Acessibilidade**: tamanho da interface (normal, grande, maior), alto contraste, reduzir animações e mostrar os
+      números das expressões.
+  - **Ajustes**
+    - **Gráfico**: a resolução do desenho (50%, 75%, 100%), luz e sombras realistas, sombras, as luzes do mapa, a
+      qualidade das texturas, o fundo, a foto e a tela cheia.
+    - **Som**: o volume dos vídeos da sala, silenciar o meu vídeo e ouvir os dos outros.
+    - **Câmera**: a sensibilidade, inverter (para cima e para baixo) e a distância.
+    - **Controle**: a velocidade ao andar e os pés no chão (IK).
+    - **Teclado**: todas as teclas.
   - **Ajuda**: como jogar, atalhos e créditos.
-  - **Acessibilidade**: idioma, tamanho da interface (normal, grande, maior), alto contraste, reduzir animações e
-    mostrar os números das expressões.
-  - **Gráfico**: o tema, a resolução do desenho (50%, 75%, 100%), luz e sombras realistas, sombras, as luzes do mapa,
-    a qualidade das texturas, o fundo, a foto e a tela cheia.
-  - **Controle**: as teclas, a sensibilidade da câmera, inverter a câmera (para cima e para baixo) e a velocidade ao
-    andar.
 
   As cores vêm do tema (no do WEBC, preto, branco e vermelho nas expressões).
 - **Temas**: a paleta abre a galeria com o tema do **WEBC** (preto e branco, como o mockup) e os **mesmos temas do
@@ -274,6 +286,12 @@ Mapas do [Sketchfab](https://sketchfab.com) vêm direto para a loja, pela API de
    animações tem.
 3. **Trazer para a loja**: o servidor baixa o modelo (o `.glb`, ou o glTF em ZIP, que ele junta num `.glb` com as
    texturas dentro), tira a miniatura e publica em *Mapas*, com os # que você puser mais os # do próprio Sketchfab.
+4. **Carregar** e **Baixar**, sem pôr na loja: *Carregar* abre o mapa no jogo na hora (vai para *Movimento ›
+   Cenário*); *Baixar* entrega o `.glb` para o aparelho. Os de licença livre (Creative Commons) para todos; os
+   comprados (*Standard*) só para o dono, que usa a própria conta (a licença não deixa passar para os outros).
+
+A janela mostra três modelos por fileira (dois no celular), cada um com a miniatura, o nome, o autor, a licença e os
+botões.
 
 **Todos usam, só o dono vê a chave.** Com a chave guardada, o botão aparece para todos que podem publicar na loja
 (o dono decide, em "quem entra pelo link pode publicar"): eles buscam e trazem, e o servidor usa a chave por eles. Só o
@@ -314,6 +332,11 @@ Personagens feitas no **VRoid Studio** (ou qualquer modelo **VRM 0.x / 1.0**) ab
 [three.js](https://threejs.org) e o [three-vrm](https://github.com/pixiv/three-vrm), a biblioteca oficial da pixiv.
 Basta *Personagem › Importar ZIP ou .vrm* (ou arrastar o arquivo). No VRoid Studio, use **Exportar como VRM**.
 O núcleo do Live2D não é preciso para elas.
+
+**Sempre de frente.** O WEBC decide para que lado a personagem olha pela própria geometria (de frente, o lado esquerdo
+dela fica em +X), não só pela versão declarada no arquivo: um VRM 1.0 exportado olhando para −Z, ou um 0.x olhando para
++Z, aparecia de costas na loja, nas miniaturas e no jogo. Vale para a sua personagem, para as dos outros na sala e para
+a vitrine; as miniaturas de personagens tiradas antes disso são refeitas uma vez (pelo dono ou por quem publicou).
 
 - **Tudo que as Live2D fazem:** conversa, voz, memória, as 15 emoções (nas expressões do VRM: happy, sad, angry,
   relaxed, surprised...), boca acompanhando a voz, piscar, olhar, gestos no esqueleto (concordar, negar, acenar,

@@ -70,8 +70,22 @@
         if (j.segredo) gravarSegredo(j.item.id, j.segredo);
         return j;
       },
+      /** Baixa o .glb de um modelo sem pôr na loja (para salvar ou carregar no jogo). Devolve {blob, nome}. */
+      async baixar(uid, aoProgresso = () => {}) {
+        const r = await pedir("POST", "sketchfab/baixar", { json: { uid }, como: "resposta" });
+        const disp = r.headers.get("Content-Disposition") || "", m = /filename\*=UTF-8''([^;]+)/i.exec(disp);
+        const nome = m ? decodeURIComponent(m[1]) : "mapa.glb", titulo = decodeURIComponent(r.headers.get("X-Sketchfab-Nome") || "") || nome.replace(/\.glb$/i, "");
+        const total = +r.headers.get("Content-Length") || 0;
+        if (!r.body || !total) return { blob: await r.blob(), nome, titulo };
+        const leitor = r.body.getReader(), partes = [];
+        let lido = 0;
+        for (;;) { const { done, value } = await leitor.read(); if (done) break; partes.push(value); lido += value.length; aoProgresso(lido / total); }
+        return { blob: new Blob(partes, { type: "model/gltf-binary" }), nome, titulo };
+      },
     },
     miniatura: (item) => `/api/loja/${item.id}/miniatura?v=${item.miniatura}`,
+    /** Sem miniatura, ou uma personagem com a miniatura de antes da correção das personagens de costas (é refeita uma vez). */
+    precisaMiniatura: (item) => !item.miniatura || (item.tipo === "personagem" && item.miniatura < 1794700800),
     /** Baixa o arquivo do item (com o andamento: aoProgresso(fração)). */
     async baixar(item, aoProgresso = () => {}) {
       const r = await pedir("GET", item.id + "/arquivo", { como: "resposta" });
@@ -226,9 +240,9 @@
       const vrm = gltf.userData.vrm;
       if (!vrm) throw new Error("Esse arquivo não é uma personagem VRM.");
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
-      VRMUtils.rotateVRM0(vrm);
+      const v0 = C.virarDeFrente(vrm, gltf); // de frente, pela geometria (não só pela versão do arquivo)
       vrm.scene.traverse((o) => { o.frustumCulled = false; });
-      const v0 = vrm.meta ? vrm.meta.metaVersion === "0" : false, s = v0 ? -1 : 1, h = vrm.humanoid;
+      const s = v0 ? -1 : 1, h = vrm.humanoid;
       // de pé, com os braços para baixo (a pose de descanso do palco), no espaço do VRM 1.0
       const descanso = C.poseDescanso(1.2), nos = {};
       for (const n of C.OSSOS_VRM) { const b = h.getNormalizedBoneNode(n); if (b) nos[n] = b; }
@@ -382,7 +396,7 @@
    * Sketchfab fica no servidor (chaves.json); o servidor baixa o modelo, converte para .glb e põe na loja com o crédito.
    * Resolve com o item que entrou na loja (ou null).
    */
-  C.janelaSketchfab = async function () {
+  C.janelaSketchfab = async function ({ usarMapa = null } = {}) {
     let estado;
     try { estado = await C.loja.sketchfab.estado(); } catch (e) { LNUX.erro(e); return null; }
     let resolvido = null, cursor = "", busca = "", animado = false;
@@ -422,16 +436,38 @@
       } catch (e) { grade.replaceChildren(el("p", { class: "conta-msg erro" }, e.message)); }
     }
     function cartao(m) {
-      const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno", disabled: !m.pode_loja, "data-uid": m.uid,
-        title: m.pode_loja ? "" : "A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.", onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
+      const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno sketchfab-trazer", disabled: !m.pode_loja, "data-uid": m.uid,
+        title: m.pode_loja ? "" : t("A licença deste modelo não deixa redistribuir: ele não pode ir para a loja."), onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
+      // baixar e carregar (sem pôr na loja): os de licença livre para todos; os comprados (Standard) só para o dono, para ele usar
+      const pode = m.pode_loja || estado.dono, sobre = pode ? "" : t("Só o dono do servidor baixa este (a licença não deixa passar para os outros).");
+      const carregar = el("button", { type: "button", class: "lnux-botao pequeno", "data-carregar": m.uid, disabled: !pode, title: sobre || t("Abrir este mapa no jogo agora (sem pôr na loja)"), onclick: () => baixar(m, carregar, true) }, t("Carregar"));
+      const salvar = el("button", { type: "button", class: "lnux-botao pequeno", "data-baixar": m.uid, disabled: !pode, title: sobre || t("Baixar o .glb para o aparelho"), onclick: () => baixar(m, salvar, false) }, t("Baixar"));
       return el("article", { class: "sketchfab-cartao" + (m.pode_loja ? "" : " bloqueado"), "data-uid": m.uid },
         el("div", { class: "capa" }, m.miniatura ? el("img", { src: m.miniatura, alt: "", loading: "lazy", referrerpolicy: "no-referrer" }) : null,
           m.animacoes ? el("span", { class: "selo-novo" }, t("animado")) : null),
         el("div", { class: "sketchfab-info" },
-          el("b", { translate: "no" }, m.nome),
-          el("span", { class: "fraco pequeno", translate: "no" }, m.autor),
+          el("b", { translate: "no", title: m.nome }, m.nome),
+          el("span", { class: "fraco pequeno sketchfab-autor", translate: "no" }, m.autor),
           el("span", { class: "sketchfab-licenca" + (m.pode_loja ? " livre" : "") }, m.licenca_nome || "?"),
-          el("div", { class: "linha" }, trazer, /^https?:\/\//.test(m.url || "") ? el("a", { class: "lnux-botao plano pequeno", href: m.url, target: "_blank", rel: "noopener noreferrer nofollow" }, t("Ver no Sketchfab")) : null)));
+          el("div", { class: "sketchfab-acoes" }, trazer,
+            el("div", { class: "sketchfab-acoes-linha" }, carregar, salvar,
+              /^https?:\/\//.test(m.url || "") ? el("a", { class: "lnux-botao plano pequeno", href: m.url, target: "_blank", rel: "noopener noreferrer nofollow", title: t("Ver no Sketchfab") }, t("Ver")) : null))));
+    }
+    /** Baixa o .glb (o servidor busca com a chave do dono) e salva no aparelho ou carrega no jogo. */
+    async function baixar(m, botao, carregarNoJogo) {
+      if (!estado.chave) { LNUX.aviso(t(estado.dono ? "Falta a chave do Sketchfab." : "O dono do servidor ainda não guardou a chave do Sketchfab."), "alerta"); return; }
+      botao.disabled = true;
+      const prog = LNUX.progresso(carregarNoJogo ? t("Carregando do Sketchfab") : t("Baixando do Sketchfab"));
+      prog.definir(0.05, t("Baixando \"{nome}\" e convertendo para .glb...", { nome: m.nome }));
+      try {
+        const r = await C.loja.sketchfab.baixar(m.uid, (f) => prog.definir(0.1 + f * 0.85, t("Baixando \"{nome}\"...", { nome: m.nome })));
+        if (!carregarNoJogo) { LNUX.baixar(r.blob, r.nome, "model/gltf-binary"); LNUX.aviso(t("\"{nome}\" baixado.", { nome: m.nome }), "ok"); return; }
+        prog.fechar();
+        janela.fechar(null);
+        if (usarMapa) await usarMapa(r.titulo || m.nome, r.nome, r.blob);
+        else { await C.mapas.guardar(r.titulo || m.nome, new Map([[r.nome, r.blob]]), r.nome); LNUX.aviso(t("\"{nome}\" foi para Movimento › Cenário: abra uma personagem VRoid para andar nele.", { nome: m.nome }), "ok"); }
+      } catch (e) { LNUX.erro(e); }
+      finally { prog.fechar(); botao.disabled = false; }
     }
     async function importar(m, botao) {
       if (!estado.chave) { LNUX.aviso(t(estado.dono ? "Falta a chave do Sketchfab." : "O dono do servidor ainda não guardou a chave do Sketchfab."), "alerta"); if (estado.dono) chaveCampo.focus(); return; }
@@ -456,6 +492,7 @@
       grade, mais, aviso,
       el("p", { class: "fraco pequeno", style: { margin: 0 } }, t("Só entram na loja os modelos com licença Creative Commons que deixa redistribuir (CC0, BY, BY-SA, BY-NC, BY-NC-SA), com o crédito de quem fez. Os comprados (licença Standard) não podem ir para a loja.")));
     const janela = LNUX.dialogo({ titulo: t("Mapas do Sketchfab"), largo: true, corpo, botoes: [{ rotulo: "Fechar", valor: null }], aoAbrir: () => { buscar(false); campo.focus(); } });
+    if (janela.elemento) janela.elemento.classList.add("dialogo-sketchfab"); // mais larga (três por fileira)
     const r = await janela;
     return resolvido || (r && r.id ? r : null);
   };
@@ -502,7 +539,7 @@
       el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
     const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => janelaPublicar(ctx, { tipo: aba || "personagem" }).then((item) => { if (item) { recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "＋ Publicar");
     const botaoSketchfab = el("button", { class: "lnux-botao", type: "button", id: "loja-sketchfab", hidden: true, title: "Trazer mapas do Sketchfab",
-      onclick: () => C.janelaSketchfab().then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "Sketchfab");
+      onclick: () => C.janelaSketchfab({ usarMapa: (nome, arquivo, blob) => (aoUsar || ctx.usar)({ tipo: "mundo", nome, arquivo }, blob) }).then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "Sketchfab");
     const caixa = el("div", { class: "loja webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Loja", "aria-modal": pagina ? undefined : "true" },
       el("header", { class: "loja-topo webc-painel-topo" },
         el("h1", { class: "webc-painel-titulo" }, "LOJA"),
@@ -710,7 +747,7 @@
         if (aviso) aviso.remove();
         palco.dataset.pronta = "1";
         // sem miniatura e com direito de pôr: tira agora, da prévia
-        if (!item.miniatura && C.loja.podeMexer(item, dados.dono)) {
+        if (C.loja.precisaMiniatura(item) && C.loja.podeMexer(item, dados.dono)) {
           await LNUX.esperar(600);
           if (vitrine && aberto === item) { if (item.tipo === "animacao") vitrine.pausarEm(0.4); await C.loja.trocarMiniatura(item, await vitrine.foto()); }
         }
@@ -719,10 +756,13 @@
         if (aviso) aviso.textContent = t("A prévia não abriu: {erro}", { erro: e.message });
       }
     }
-    /** O dono da loja (ou quem publicou) gera as miniaturas que faltam, uma de cada vez, numa vitrine escondida. */
+    /**
+     * O dono da loja (ou quem publicou) gera as miniaturas que faltam, uma de cada vez, numa vitrine escondida. As de
+     * personagens tiradas antes de a vitrine pôr de frente os arquivos virados (até 15/11/2026) são refeitas uma vez.
+     */
     async function gerarMiniaturas() {
       if (miniaturas) return;
-      const faltam = dados.itens.filter((i) => !i.miniatura && C.loja.podeMexer(i, dados.dono)).slice(0, 8);
+      const faltam = dados.itens.filter((i) => C.loja.precisaMiniatura(i) && C.loja.podeMexer(i, dados.dono)).slice(0, 8);
       if (!faltam.length) return;
       const estado = (miniaturas = { parar: false });
       const escondido = el("div", { class: "vitrine-escondida", "aria-hidden": "true" });
@@ -740,7 +780,10 @@
             await C.loja.trocarMiniatura(item, await v.foto());
             item.miniatura = Math.floor(Date.now() / 1000);
             const c = grade.querySelector(`[data-id="${item.id}"] .capa`);
-            if (c) { const s = c.querySelector(".sem-miniatura"); if (s) s.replaceWith(el("img", { src: C.loja.miniatura(item), alt: "" })); }
+            if (c) {
+              const s = c.querySelector(".sem-miniatura"), img = c.querySelector("img");
+              if (s) s.replaceWith(el("img", { src: C.loja.miniatura(item), alt: "" })); else if (img) img.src = C.loja.miniatura(item);
+            }
           } catch (e) { console.warn("loja: a miniatura de " + item.nome + " não saiu", e); }
         }
       } finally { if (v) v.destruir(); escondido.remove(); miniaturas = null; }

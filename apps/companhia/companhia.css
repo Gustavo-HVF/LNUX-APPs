@@ -803,26 +803,40 @@
 /* a janela Opções: o título no alto, os seis cartões; cada um abre a sua lista */
 .jogo-opcoes-fundo { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .55); animation: jogo-esmaece .2s ease; }
 @keyframes jogo-esmaece { from { opacity: 0; } }
-.jogo-opcoes { width: min(calc(1040px * var(--webc-escala)), 100%); max-height: min(88vh, 860px); display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: 38px; overflow: hidden;
+/* a janela Opções: no computador, as categorias (em grupos) numa coluna à esquerda e a escolhida à direita; no celular,
+   os quadrados das categorias e, tocando num, a categoria com o voltar */
+.jogo-opcoes { width: min(calc(1060px * var(--webc-escala)), 100%); height: min(86vh, 760px); display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: 34px; overflow: hidden;
   background: var(--panel); color: var(--text); border: 3px solid var(--jogo-barra); box-shadow: 0 30px 80px rgba(0, 0, 0, .45); font-size: calc(1rem * var(--webc-escala)); }
 .jogo-opcoes.entrando { animation: jogo-abre .28s cubic-bezier(.2, .8, .2, 1); }
 @keyframes jogo-abre { from { opacity: 0; transform: translateY(18px) scale(.97); } }
-.jogo-opcoes-topo { display: flex; align-items: center; gap: 10px; padding: 14px 18px 14px 26px; background: var(--jogo-barra); color: var(--jogo-barra-texto); }
-.jogo-opcoes-topo h2 { flex: 1; margin: 0; font-size: calc(1.7rem * var(--webc-escala)); font-weight: 600; }
+.jogo-opcoes-topo { display: flex; align-items: center; gap: 10px; padding: 12px 16px 12px 24px; background: var(--jogo-barra); color: var(--jogo-barra-texto); }
+.jogo-opcoes-topo h2 { flex: 1; margin: 0; font-size: calc(1.45rem * var(--webc-escala)); font-weight: 700; }
 .jogo-opcoes-topo .fraco-claro { opacity: .6; }
+.jogo-opcoes-dica { font-size: .85em; opacity: .7; white-space: nowrap; }
+.jogo-opcoes-dica kbd { font: 700 .85em var(--mono, monospace); padding: 1px 6px; border-radius: 6px; border: 1px solid currentColor; }
 .jogo-opcoes-fechar, .jogo-opcoes-voltar { width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 50%; background: none; color: inherit; cursor: pointer; flex: none; }
 .jogo-opcoes-fechar:hover, .jogo-opcoes-voltar:hover, .jogo-opcoes-fechar:focus-visible, .jogo-opcoes-voltar:focus-visible { background: color-mix(in srgb, var(--jogo-barra-texto) 16%, transparent); outline: none; }
-.jogo-opcoes-voltar { margin-left: -12px; }
-.jogo-opcoes-grade { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(12px, 2vw, 24px); padding: clamp(14px, 2.4vw, 28px); overflow: auto;
-  background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
-.jogo-opcao { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: clamp(150px, 26vh, 250px); padding: 0; border-radius: 30px; overflow: hidden; cursor: pointer; font: inherit;
-  border: 3px solid var(--jogo-barra); background: var(--panel); color: var(--text); transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s; }
-.jogo-opcao:hover, .jogo-opcao:focus-visible { transform: translateY(-5px); box-shadow: 0 12px 26px rgba(0, 0, 0, .18); outline: none; }
-.jogo-opcao:active { transform: scale(.98); }
-.jogo-opcao-icone { display: grid; place-items: center; background: var(--jogo-cartao-fundo); color: var(--jogo-cartao-icone); padding: 12% 0; }
-.jogo-opcao-icone svg { width: clamp(52px, 8vw, 92px); height: auto; transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
-.jogo-opcao:hover .jogo-opcao-icone svg { transform: scale(1.1) rotate(-4deg); }
-.jogo-opcao-nome { padding: 12px 8px 14px; font-weight: 800; font-size: calc(1.45rem * var(--webc-escala)); text-transform: lowercase; background: var(--panel); border-top: 3px solid var(--jogo-barra); }
+.jogo-opcoes-voltar { margin-left: -12px; display: none; }
+.jogo-opcoes-corpo { display: grid; grid-template-columns: minmax(220px, 270px) minmax(0, 1fr); min-height: 0; }
+.jogo-opcoes-nav { overflow-y: auto; padding: 14px 12px 20px; display: grid; gap: 14px; align-content: start;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel)); border-right: 2px solid color-mix(in srgb, var(--jogo-barra) 22%, transparent); }
+.jogo-opcoes-grupo { display: grid; gap: 4px; }
+.jogo-opcoes-grupo > h3 { margin: 0 10px 2px; font-size: .74em; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.jogo-opcoes-grade { display: grid; gap: 3px; }
+.jogo-opcao { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 0; border-radius: 14px; background: none; color: var(--text); font: inherit; font-weight: 700; text-align: left; cursor: pointer;
+  position: relative; transition: background .15s, transform .15s; }
+.jogo-opcao:hover, .jogo-opcao:focus-visible { background: var(--hover); outline: none; }
+.jogo-opcao:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.jogo-opcao.ativa { background: color-mix(in srgb, var(--accent) 18%, var(--panel)); }
+.jogo-opcao.ativa::before { content: ""; position: absolute; left: -6px; top: 22%; bottom: 22%; width: 4px; border-radius: 4px; background: var(--accent); }
+.jogo-opcao-icone { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; flex: none; background: var(--jogo-cartao-fundo); color: var(--jogo-cartao-icone); }
+.jogo-opcao-icone svg { width: 24px; height: 24px; transition: transform .25s cubic-bezier(.3, 1.6, .5, 1); }
+.jogo-opcao:hover .jogo-opcao-icone svg { transform: scale(1.12) rotate(-4deg); }
+.jogo-opcao-nome { font-size: 1.02em; }
+.jogo-opcoes-conteudo { overflow-y: auto; min-height: 0; }
+.jogo-opcoes-secao-titulo { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; font-size: 1.5em; font-weight: 800; }
+.jogo-opcoes-secao-icone { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: var(--jogo-cartao-fundo); color: var(--jogo-cartao-icone); }
+.jogo-opcoes-secao-icone svg { width: 28px; height: 28px; }
 .jogo-opcoes-lista { overflow: auto; padding: clamp(12px, 2vw, 22px) clamp(14px, 3vw, 34px) 24px; display: grid; gap: 4px; align-content: start; }
 .jogo-opcoes-lista hr { border: 0; border-top: 2px solid var(--border); margin: 8px 0; width: 100%; }
 .jogo-item { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 16px; border-radius: 16px; border: 0; background: none; color: inherit; font: inherit; font-size: 1.05em; cursor: pointer; }
@@ -861,10 +875,21 @@
   .jogo-canto-botao { width: 42px; height: 38px; }
   :root[data-modo="jogar"] .area .conversa { bottom: calc(138px * var(--webc-escala)); left: 8px; right: 8px; width: auto !important; height: 46vh; }
   :root[data-modo="jogar"] .controles-mundo { bottom: calc(138px * var(--webc-escala)); }
-  .jogo-opcoes { border-radius: 26px; }
-  .jogo-opcoes-grade { grid-template-columns: repeat(2, 1fr); }
-  .jogo-opcao { min-height: 140px; border-radius: 22px; }
-  .jogo-opcao-nome { font-size: 1.1rem; }
+  /* Opções no celular: os quadrados das categorias; tocando num, só a categoria (com o voltar) */
+  .jogo-opcoes { border-radius: 26px; height: auto; max-height: 88vh; }
+  .jogo-opcoes-dica { display: none; }
+  .jogo-opcoes.com-secao .jogo-opcoes-voltar { display: inline-block; }
+  .jogo-opcoes-corpo { grid-template-columns: minmax(0, 1fr); }
+  .jogo-opcoes-nav { border-right: 0; padding: 14px; background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+  .jogo-opcoes.com-secao .jogo-opcoes-nav { display: none; }
+  .jogo-opcoes:not(.com-secao) .jogo-opcoes-conteudo { display: none; }
+  .jogo-opcoes-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .jogo-opcao { flex-direction: column; justify-content: center; gap: 8px; min-height: 104px; padding: 12px 6px; border-radius: 20px; text-align: center; border: 2px solid color-mix(in srgb, var(--jogo-barra) 30%, transparent); background: var(--panel); }
+  .jogo-opcao.ativa::before { display: none; }
+  .jogo-opcao-icone { width: 48px; height: 48px; border-radius: 14px; }
+  .jogo-opcao-icone svg { width: 30px; height: 30px; }
+  .jogo-opcao-nome { font-size: .92rem; }
+  .jogo-opcoes-secao-titulo { display: none; }
   :root[data-modo="jogar"] .lnux-titulo-doc { display: none; }
 }
 
@@ -931,9 +956,25 @@
 @media (max-width: 760px) { .webc-inicio .webc-cartoes { min-height: 0; } .webc-quadrados { grid-template-columns: 1fr; } }
 
 /* ── o Sketchfab na loja (o dono traz mapas) ── */
-.janela-sketchfab { min-width: min(860px, 86vw); }
-.sketchfab-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; max-height: 52vh; overflow: auto; padding: 2px; }
-.sketchfab-cartao { display: grid; border-radius: 18px; overflow: hidden; background: var(--painel-2); border: 2px solid var(--borda); }
+/* a janela do Sketchfab: três por fileira (dois no celular), cada cartão inteiro (a miniatura, o nome, a licença e os botões).
+   (antes: os cartões tinham overflow:hidden numa grade de altura limitada, e as fileiras encolhiam até sobrar uma tira) */
+/* (uma classe na caixa, não :has(): o :has() fazia o navegador refazer os estilos a cada mudança e pesava no jogo) */
+.lnux-dialogo.largo.dialogo-sketchfab { width: min(980px, 100%); }
+.lnux-dialogo.dialogo-sketchfab > .corpo { grid-template-columns: minmax(0, 1fr); }
+.janela-sketchfab { width: 100%; min-width: 0; box-sizing: border-box; }
+.janela-sketchfab > .linha { display: flex; gap: 8px; align-items: center; }
+.janela-sketchfab > .linha .lnux-entrada { flex: 1; min-width: 0; }
+.sketchfab-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: max-content; align-content: start; gap: 14px;
+  max-height: 56vh; overflow-y: auto; overflow-x: hidden; padding: 2px 6px 2px 2px; }
+@media (max-width: 720px) { .sketchfab-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 340px) { .sketchfab-grade { grid-template-columns: minmax(0, 1fr); } }
+.sketchfab-cartao { display: flex; flex-direction: column; min-width: 0; border-radius: 18px; background: var(--painel-2); border: 2px solid var(--borda); }
+.sketchfab-cartao .capa { border-radius: 16px 16px 0 0; overflow: hidden; flex: none; }
+.sketchfab-acoes { display: grid; gap: 6px; margin-top: 4px; }
+.sketchfab-acoes .sketchfab-trazer { width: 100%; }
+.sketchfab-acoes-linha { display: flex; flex-wrap: wrap; gap: 6px; }
+.sketchfab-acoes-linha .lnux-botao { flex: 1 1 auto; justify-content: center; text-align: center; padding-inline: 8px; }
+.sketchfab-autor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sketchfab-cartao.bloqueado { opacity: .62; }
 .sketchfab-cartao .capa { position: relative; aspect-ratio: 16 / 10; background: var(--painel-3); }
 .sketchfab-cartao .capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -966,3 +1007,6 @@
 .conta-nome { display: grid; gap: 4px; }
 .conta-nome-aviso { color: var(--perigo); font-weight: 600; }
 .lnux-entrada[aria-invalid="true"] { border-color: var(--perigo) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--perigo) 30%, transparent); }
+
+/* Opções › Bate-papo: o tamanho do texto das mensagens */
+:root[data-modo="jogar"] #mensagens { font-size: calc(1em * var(--webc-papo-escala, 1)); }

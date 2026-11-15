@@ -29,6 +29,37 @@
   const limitar = (v, a, b) => Math.min(b, Math.max(a, v));
   const misturar = (a, b, t) => a + (b - a) * t;
 
+  /**
+   * Põe a personagem de frente (olhando para +Z) e diz se a pose precisa ser espelhada, como nos VRM 0.x. Decide pela
+   * própria geometria, não só pela versão declarada no arquivo: de frente, o lado esquerdo da personagem fica em +X.
+   * Arquivos que declaram uma versão mas olham para o outro lado (um VRM 1.0 exportado olhando para −Z, um 0.x olhando
+   * para +Z) apareciam de costas na loja e no jogo. Faz o papel do VRMUtils.rotateVRM0. Devolve true quando o modelo
+   * olha para −Z no arquivo (ele é girado 180° e a pose é espelhada).
+   */
+  C.virarDeFrente = function (vrm, gltf) {
+    const T = window.THREE, h = vrm && vrm.humanoid, ext = (gltf && gltf.parser && gltf.parser.json && gltf.parser.json.extensions) || {};
+    let olhaMenosZ = vrm.meta ? vrm.meta.metaVersion === "0" : !!ext.VRM && !ext.VRMC_vrm; // sem ossos para medir: a versão
+    if (h) {
+      vrm.scene.rotation.set(0, 0, 0);
+      vrm.scene.updateMatrixWorld(true);
+      const pares = [["leftUpperLeg", "rightUpperLeg"], ["leftUpperArm", "rightUpperArm"], ["leftShoulder", "rightShoulder"], ["leftHand", "rightHand"], ["leftFoot", "rightFoot"], ["leftEye", "rightEye"]];
+      for (const [e, d] of pares) {
+        const a = h.getRawBoneNode(e), b = h.getRawBoneNode(d);
+        if (!a || !b) continue;
+        const dx = vrm.scene.worldToLocal(a.getWorldPosition(new T.Vector3())).x - vrm.scene.worldToLocal(b.getWorldPosition(new T.Vector3())).x;
+        if (Math.abs(dx) < 1e-4) continue;
+        olhaMenosZ = dx < 0; // o lado esquerdo em −X: a personagem olha para −Z
+        break;
+      }
+    }
+    vrm.scene.rotation.y = olhaMenosZ ? Math.PI : 0;
+    vrm.scene.updateMatrixWorld(true);
+    // os olhos olham para a frente certa (o three-vrm já faz assim nos 0.x; aqui vale também para os arquivos virados)
+    if (vrm.lookAt && vrm.lookAt.faceFront) vrm.lookAt.faceFront.set(0, 0, olhaMenosZ ? -1 : 1);
+    if (vrm.lookAt && vrm.lookAt.applier && vrm.lookAt.applier.faceFront) vrm.lookAt.applier.faceFront.set(0, 0, olhaMenosZ ? -1 : 1);
+    return olhaMenosZ;
+  };
+
   let carregandoPacote = null;
   /** Carrega o three.js + three-vrm (uma vez). */
   C.prepararVRM = function () {
@@ -466,13 +497,12 @@
       if (this.personagem !== p) { VRMUtils.deepDispose(vrm.scene); return null; } // trocou no meio
       VRMUtils.removeUnnecessaryVertices(gltf.scene);
       if (VRMUtils.combineSkeletons) VRMUtils.combineSkeletons(gltf.scene);
-      VRMUtils.rotateVRM0(vrm); // os VRM 0.x olham para o outro lado
+      const olhaMenosZ = C.virarDeFrente(vrm, gltf); // de frente, pela geometria (os VRM 0.x e os arquivos virados)
       vrm.scene.traverse((o) => { o.frustumCulled = false; if (o.isMesh) o.castShadow = o.receiveShadow = true; }); // sombra: só com a luz realista ligada
       this.vrm = vrm;
       this.modelo = vrm.scene;
       this.roupa = roupa;
-      const extensoes = (gltf.parser && gltf.parser.json && gltf.parser.json.extensions) || {};
-      this.v0 = vrm.meta ? vrm.meta.metaVersion === "0" : !!extensoes.VRM && !extensoes.VRMC_vrm;
+      this.v0 = olhaMenosZ; // a pose é espelhada quando o modelo olha para −Z no arquivo
       this.raiz.add(vrm.scene);
       this.reduzirTexturas(this.limiteTextura(p.qualidade || "auto"));
       if (vrm.lookAt) vrm.lookAt.target = this.alvoOlhar;
