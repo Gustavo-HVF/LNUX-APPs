@@ -5,12 +5,12 @@
  * item, ele aparece em 3D (a personagem girando, o mundo visto de cima, a animação num boneco) antes de a pessoa
  * decidir usar. "Usar" baixa o arquivo para o navegador dela: a personagem vira uma das suas, o mundo vai para
  * Movimento › Cenário e a animação para os pacotes de movimento. "Publicar" manda uma personagem, um mundo ou
- * uma animação sua para a loja (com a miniatura tirada da prévia), se o dono do servidor deixar.
+ * uma animação sua para a loja (com a miniatura tirada da prévia): só quem tem conta (e se o dono do servidor deixar).
  *
  * O servidor (servidor/lnux_apps.py, /api/loja) guarda tudo numa pasta própria do aparelho (~/.lnux-apps/loja), a
- * única que os visitantes alcançam. Quem publica recebe um segredo (guardado só no navegador dela) para trocar a
- * miniatura ou apagar o que publicou; o dono (com a chave da ponte, no próprio aparelho) apaga qualquer item e
- * decide se os visitantes podem publicar.
+ * única que os visitantes alcançam. Quem publica troca a miniatura ou apaga o que publicou entrando na conta (de qualquer
+ * aparelho; o navegador de onde publicou guarda também um segredo); o dono (com a chave da ponte, no próprio aparelho)
+ * apaga qualquer item e decide se quem tem conta pode publicar.
  */
 (function () {
   "use strict";
@@ -66,11 +66,11 @@
       buscar: (q, { animado = false, cursor = "" } = {}) => pedir("GET", "sketchfab/buscar?" + new URLSearchParams({ q, animado: animado ? "1" : "0", cursor })),
       /** Traz um modelo para a loja (a chave do dono fica no servidor). Quem não é o dono recebe o segredo, como ao publicar. */
       async importar(uid, tags = "", arquivo = "") {
-        const j = await pedir("POST", "sketchfab/importar", { json: { uid, tags, arquivo, quem: (C.nomeDoJogo && C.nomeDoJogo.atual()) || "" } });
+        const j = await pedir("POST", "sketchfab/importar", { json: { uid, tags, arquivo } });
         if (j.segredo) gravarSegredo(j.item.id, j.segredo);
         return j;
       },
-      /** As versões que dá para baixar: {modelo, pode_baixar, pode_trazer, arquivos: [{id, formato, nome_formato, textura, tamanho, carregar}]}. */
+      /** As versões que dá para baixar: {modelo, pode_baixar, pode_trazer, precisa_conta, arquivos: [{id, formato, nome_formato, textura, tamanho, carregar}]}. */
       arquivos: (uid) => pedir("GET", "sketchfab/arquivos?" + new URLSearchParams({ uid })),
       /**
        * Baixa uma versão sem pôr na loja: {arquivo (o id da versão), bruto (o arquivo como veio: ZIP, USDZ...; senão o
@@ -139,9 +139,20 @@
     editar: (item, dados) => pedir("POST", item.id, { json: dados, segredo: lerSegredos()[item.id] }),
     /** "fnaf, terror #anime" → ["fnaf", "terror", "anime"] (como o servidor faz). */
     tags: (texto) => [...new Set(String(texto || "").split(/[\s,;#]+/).map((x) => x.trim().toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, "")).filter(Boolean))].slice(0, 12),
-    /** Quem pode apagar o item: o dono da loja ou quem publicou (o segredo ficou neste navegador). */
-    podeMexer: (item, dono) => !!(dono || (!item.solto && lerSegredos()[item.id])),
+    /** Pode trocar a miniatura e apagar: o dono, a conta que publicou (de qualquer aparelho) ou o navegador de onde publicou. */
+    podeMexer: (item, dono) => !!(dono || (!item.solto && ((item.conta && C.contas && C.contas.eu && C.contas.eu.id === item.conta) || lerSegredos()[item.id]))),
   };
+
+  /**
+   * Publicar (e trazer do Sketchfab) é só para quem tem conta: avisa e abre o "Entrar na conta" (de lá dá para criar uma).
+   * Devolve true se a pessoa entrou.
+   */
+  async function entrarParaPublicar() {
+    LNUX.aviso(t("Só quem tem conta publica na loja. Entre na sua conta (ou crie uma) para publicar."), "alerta");
+    if (!C.janelaConta || !C.contas || !(await C.contas.disponivel())) return false;
+    return !!(await C.janelaConta("entrar"));
+  }
+  C.entrarParaPublicar = entrarParaPublicar;
 
   // ── Vitrine: a prévia em 3D ──────────────────────────────────────────
 
@@ -446,10 +457,11 @@
       } catch (e) { grade.replaceChildren(el("p", { class: "conta-msg erro" }, e.message)); }
     }
     function cartao(m) {
-      const semPublicar = m.pode_loja && !estado.pode_trazer;
+      const semPublicar = m.pode_loja && !estado.pode_trazer && !estado.precisa_conta;
       const trazer = el("button", { type: "button", class: "lnux-botao primario pequeno sketchfab-trazer", disabled: !m.pode_loja || semPublicar, "data-uid": m.uid,
-        title: !m.pode_loja ? t("A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.") : semPublicar ? t("O dono desta loja não está aceitando publicações agora.") : "",
-        onclick: () => importar(m, trazer) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
+        title: !m.pode_loja ? t("A licença deste modelo não deixa redistribuir: ele não pode ir para a loja.") : semPublicar ? t("O dono desta loja não está aceitando publicações agora.")
+          : estado.pode_trazer ? "" : t("Entre na sua conta para trazer para a loja."),
+        onclick: () => comConta(() => importar(m, trazer)) }, m.pode_loja ? t("Trazer para a loja") : t("Licença não deixa"));
       // carregar no jogo e baixar (sem pôr na loja), escolhendo a versão: o formato e o tamanho das texturas (1K, 2K, 4K...)
       const arquivos = el("button", { type: "button", class: "lnux-botao pequeno sketchfab-arquivos", "data-arquivos": m.uid, onclick: () => abrirArquivos(m) }, t("Arquivos e formatos..."));
       return el("article", { class: "sketchfab-cartao" + (m.pode_loja ? "" : " bloqueado"), "data-uid": m.uid },
@@ -483,8 +495,9 @@
           onclick: () => usarVersao(m, a, "carregar", carregar, d) }, t("Carregar"));
         const baixarA = el("button", { type: "button", class: "lnux-botao pequeno", "data-baixar": a.id, disabled: !info.pode_baixar, title: t("Baixar o arquivo para o aparelho, como veio"),
           onclick: () => usarVersao(m, a, "baixar", baixarA, d) }, t("Baixar"));
-        const trazerA = el("button", { type: "button", class: "lnux-botao plano pequeno", "data-trazer": a.id, disabled: !(a.carregar && info.pode_trazer),
-          title: info.pode_trazer ? t("Pôr esta versão na loja") : "", onclick: () => usarVersao(m, a, "trazer", trazerA, d) }, t("Pôr na loja"));
+        const trazerA = el("button", { type: "button", class: "lnux-botao plano pequeno", "data-trazer": a.id, disabled: !(a.carregar && (info.pode_trazer || info.precisa_conta)),
+          title: info.pode_trazer ? t("Pôr esta versão na loja") : info.precisa_conta ? t("Entre na sua conta para trazer para a loja.") : "",
+          onclick: () => comConta(() => usarVersao(m, a, "trazer", trazerA, d)) }, t("Pôr na loja"));
         return el("div", { class: "sketchfab-versao", role: "listitem", "data-arquivo": a.id },
           el("span", { class: "sketchfab-formato", "data-formato": a.formato }, a.nome_formato),
           el("span", { class: "sketchfab-textura", title: t("Tamanho máximo das texturas") }, ...(a.textura ? [el("b", {}, rotuloTextura(a.textura)), el("small", { class: "fraco" }, " " + t("texturas"))]
@@ -519,6 +532,15 @@
         else { await C.mapas.guardar(r.titulo || m.nome, new Map([[r.nome, r.blob]]), r.nome); LNUX.aviso(t("\"{nome}\" foi para Movimento › Cenário: abra uma personagem VRoid para andar nele.", { nome: m.nome }), "ok"); }
       } catch (e) { LNUX.erro(e); }
       finally { prog.fechar(); botao.disabled = false; }
+    }
+    /** Trazer para a loja é só para quem tem conta: sem ela, entra primeiro (e o que dá para fazer é perguntado de novo). */
+    async function comConta(fazer) {
+      if (!estado.pode_trazer && estado.precisa_conta) {
+        if (!(C.contas && C.contas.eu) && !(await entrarParaPublicar())) return; // já entrou (em outra janela)? só pergunta de novo
+        estado = await C.loja.sketchfab.estado().catch(() => estado);
+        if (!estado.pode_trazer) { LNUX.aviso(t("O dono desta loja não está aceitando publicações agora."), "alerta"); return; }
+      }
+      try { await fazer(); } catch (e) { LNUX.erro(e); }
     }
     async function importar(m, botao) {
       if (!estado.chave) { LNUX.aviso(t(estado.dono ? "Falta a chave do Sketchfab." : "O dono do servidor ainda não guardou a chave do Sketchfab."), "alerta"); if (estado.dono) chaveCampo.focus(); return; }
@@ -588,7 +610,17 @@
     const filtro = el("div", { class: "webc-filtro-painel", hidden: true });
     const botaoFiltro = el("button", { type: "button", class: "webc-filtro", "aria-expanded": "false", onclick: () => { filtro.hidden = !filtro.hidden; botaoFiltro.setAttribute("aria-expanded", String(!filtro.hidden)); desenharFiltro(); } },
       el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
-    const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => janelaPublicar(ctx, { tipo: aba || "personagem" }).then((item) => { if (item) { recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "＋ Publicar");
+    const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => comecarAPublicar().catch(LNUX.erro) }, "＋ Publicar");
+    /** ＋ Publicar: quem não tem conta entra primeiro (só quem tem conta publica; o dono também sem conta). */
+    async function comecarAPublicar() {
+      if (!dados.pode_publicar) {
+        if (!(C.contas && C.contas.eu) && !(await entrarParaPublicar())) return; // já entrou? só pergunta de novo ao servidor
+        await recarregar();
+        if (!dados.pode_publicar) { LNUX.aviso(t("O dono desta loja não está aceitando publicações agora."), "alerta"); return; }
+      }
+      const item = await janelaPublicar(ctx, { tipo: aba || "personagem" });
+      if (item) { await recarregar(); abrirItem(item.id); }
+    }
     const botaoSketchfab = el("button", { class: "lnux-botao", type: "button", id: "loja-sketchfab", hidden: true, title: "Trazer mapas do Sketchfab",
       onclick: () => C.janelaSketchfab({ usarMapa: (nome, arquivo, blob) => (aoUsar || ctx.usar)({ tipo: "mundo", nome, arquivo }, blob) }).then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "Sketchfab");
     const caixa = el("div", { class: "loja webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Loja", "aria-modal": pagina ? undefined : "true" },
@@ -684,10 +716,12 @@
       if (!dados.dono) return;
       const caixaPublicar = el("input", { type: "checkbox", checked: dados.publicar });
       caixaPublicar.addEventListener("change", async () => {
-        try { dados.publicar = (await C.loja.configurar({ publicar: caixaPublicar.checked })).publicar; LNUX.aviso(dados.publicar ? "Os visitantes podem publicar na loja." : "Só você publica na loja agora.", "ok"); }
+        try { dados.publicar = (await C.loja.configurar({ publicar: caixaPublicar.checked })).publicar; LNUX.aviso(dados.publicar ? "Quem tem conta pode publicar na loja." : "Só você publica na loja agora.", "ok"); }
         catch (e) { caixaPublicar.checked = dados.publicar; LNUX.erro(e); }
       });
-      dono.replaceChildren(el("label", { class: "lnux-alternar" }, caixaPublicar, "Deixar quem entra pelo link publicar"));
+      const semEmail = ((C.contas && C.contas.publico) || {}).contas_email === false; // sem o e-mail do servidor, ninguém cria conta
+      dono.replaceChildren(el("label", { class: "lnux-alternar" }, caixaPublicar, "Deixar quem tem conta publicar"),
+        el("small", { class: "fraco" }, semEmail ? "Para as pessoas criarem conta, configure o e-mail do servidor (Conta › Contas e e-mail do servidor)." : "Quem não tem conta só vê, baixa e usa."));
     }
     async function recarregar() {
       dados = await C.loja.lista();
