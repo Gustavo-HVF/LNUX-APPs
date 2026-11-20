@@ -167,7 +167,7 @@
         hud.aviso(venceu > 0 ? t("Game seu!") : t("Game do CPU"), 1700, venceu > 0 ? "bom" : "ruim");
         if (placar.games[idx(venceu)] >= meta) {
           placar.fim = true;
-          setTimeout(() => ctx.fim({ vitoria: venceu > 0, titulo: venceu > 0 ? t("Você venceu!") : t("O CPU venceu"),
+          setTimeout(() => ctx.fim({ vitoria: venceu > 0, forcaCPU: ctx.forcaCPU, recorde: { valor: placar.trocas, melhor: "maior", rotulo: t("troca de {n} bolas", { n: placar.trocas }) }, titulo: venceu > 0 ? t("Você venceu!") : t("O CPU venceu"),
             subtitulo: t("Games {a} – {b}", { a: placar.games[0], b: placar.games[1] }), linhas: [t("Rebatidas suas: {n}", { n: placar.golpesVoce }), t("Maior troca de bola: {n}", { n: placar.trocas })] }), 1400);
         }
       } else hud.aviso(motivo + " · " + textoPontos(), 1500, time > 0 ? "bom" : "ruim");
@@ -287,15 +287,17 @@
           const contato = new T.Vector3(j.x - 0.55, 1.0, j.z + 0.4);
           if (b.viva && b.batedor > 0 && Math.sign(b.p.z) < 0 && b.quiques <= 1 && b.p.y < 2.4 && b.p.distanceTo(contato) < 1.0 && b.v.z < 0 && (b.quiques === 1 || Math.abs(b.p.z) < 6)) {
             const fora = b.previsto && b.previsto.pouso && (Math.abs(b.previsto.pouso.x) > larg + 0.05 || b.previsto.pouso.z < -L - 0.05);
-            if (fora && Math.random() < 0.85) continue; // deixa a bola ir para fora
+            const ia = ctx.ia, prec = ia ? ia.precisao : 0.6;
+            if (fora && Math.random() < 0.6 + 0.35 * prec) continue; // deixa a bola ir para fora (o fraco às vezes rebate)
             const veloz = limitar((b.v.length() - 14) / 14);
-            const acerta = Math.random() > 0.08 + veloz * 0.25;
+            const acerta = Math.random() > (0.08 + veloz * 0.25) * (1.6 - prec);
             animarGolpe(j, false);
-            rebater(j, acerta ? lerp(0.7, 0.95, Math.random()) : 0.15, lerp(-0.9, 0.9, Math.random()), lerp(0.35, 0.8, Math.random()));
+            const lado = ia ? limitar(lerp(-0.9, 0.9, Math.random()) + ia.lado * 0.25, -0.95, 0.95) : lerp(-0.9, 0.9, Math.random());
+            rebater(j, acerta ? lerp(0.55 + 0.2 * prec, 0.8 + 0.18 * prec, Math.random()) : 0.15, lado, lerp(0.3, 0.6 + 0.3 * (ia ? ia.potencia : 0.5), Math.random()));
           }
         }
         // anda até o alvo
-        const dx = j.alvo.x - j.x, dz = j.alvo.z - j.z, d = Math.hypot(dx, dz), vel = j.humano ? 7.5 : 6.2;
+        const dx = j.alvo.x - j.x, dz = j.alvo.z - j.z, d = Math.hypot(dx, dz), vel = j.humano ? 7.5 : 5.2 + 2 * (ctx.ia ? ctx.ia.velocidade : 0.5);
         const passo = Math.min(d, vel * dt);
         if (d > 0.01) { j.x += (dx / d) * passo; j.z += (dz / d) * passo; }
         j.b.andando = limitar(d / 1.2) * (passo > 0.001 ? 1 : 0);
@@ -592,21 +594,28 @@
     function contar() {
       let novos = 0;
       for (const p of pinos) if ((p.caido || p.fora) && !p.contado) { p.contado = true; novos++; }
+      // split (js/esportes-nucleo.js): só na 1ª bola de um jogo de pinos completo
+      const N = C.esportesNucleo, cheio = jogo.quadro < 9 ? jogo.bolaNoQuadro === 0 : decimoQuadro(pontosBoliche(jogo.jogadas).quadros[9].bolas).novos;
+      const resto = N ? N.mascara(pinos.map((p) => !p.caido && !p.fora)) : 0;
+      const split = !!(N && cheio && novos < 10 && N.ehSplit(resto));
+      if (split) jogo.splits = (jogo.splits || 0) + 1;
+      jogo.ultimoSplit = split ? N.nomeSplit(resto) : null;
+      const avisoPinos = () => hud.aviso(split ? t("Split {p}! {n} pinos", { p: jogo.ultimoSplit, n: novos }) : novos ? t("{n} pinos", { n: novos }) : t("Nenhum pino"), split ? 1500 : 1100);
       jogo.jogadas.push(novos);
       jogo.ultimo = novos;
       const q = jogo.quadro;
       let proximoQuadro = false, todos = false;
       if (q < 9) {
         if (jogo.bolaNoQuadro === 0 && novos === 10) { hud.aviso(t("STRIKE!"), 1800, "bom"); som("torcida"); proximoQuadro = true; }
-        else if (jogo.bolaNoQuadro === 1) { const soma = jogo.jogadas[jogo.jogadas.length - 2] + novos; if (soma === 10) { hud.aviso(t("SPARE!"), 1600, "bom"); som("ponto"); } else hud.aviso(novos ? t("{n} pinos", { n: novos }) : t("Nenhum pino"), 1100); proximoQuadro = true; }
-        else hud.aviso(novos ? t("{n} pinos", { n: novos }) : t("Nenhum pino"), 1100);
+        else if (jogo.bolaNoQuadro === 1) { const soma = jogo.jogadas[jogo.jogadas.length - 2] + novos; if (soma === 10) { hud.aviso(t("SPARE!"), 1600, "bom"); som("ponto"); } else avisoPinos(); proximoQuadro = true; }
+        else avisoPinos();
       } else {
         const f = pontosBoliche(jogo.jogadas).quadros[9], ultima = f.marcas[f.marcas.length - 1];
         const d = decimoQuadro(f.bolas);
         if (ultima === "X") { hud.aviso(t("STRIKE!"), 1600, "bom"); som("torcida"); }
         else if (ultima === "/") { hud.aviso(t("SPARE!"), 1600, "bom"); som("ponto"); }
-        else hud.aviso(novos ? t("{n} pinos", { n: novos }) : t("Nenhum pino"), 1100);
-        if (d.acabou) { jogo.fase = "fim"; const r = desenharPlacar(); setTimeout(() => ctx.fim({ vitoria: r.total >= 100, titulo: t("{n} pontos", { n: r.total }), subtitulo: r.total >= 200 ? t("Jogo incrível!") : r.total >= 120 ? t("Belo jogo!") : t("Fim das 10 rodadas"), linhas: [t("Strikes: {n}", { n: r.quadros.reduce((a, f) => a + f.marcas.filter((m) => m === "X").length, 0) }), t("Spares: {n}", { n: r.quadros.reduce((a, f) => a + f.marcas.filter((m) => m === "/").length, 0) })] }), 1600); return; }
+        else avisoPinos();
+        if (d.acabou) { jogo.fase = "fim"; const r = desenharPlacar(); setTimeout(() => ctx.fim({ vitoria: r.total >= 100, titulo: t("{n} pontos", { n: r.total }), recorde: { valor: r.total, melhor: "maior", rotulo: t("{n} pontos", { n: r.total }) }, subtitulo: r.total >= 200 ? t("Jogo incrível!") : r.total >= 120 ? t("Belo jogo!") : t("Fim das 10 rodadas"), linhas: [t("Strikes: {n}", { n: r.quadros.reduce((a, f) => a + f.marcas.filter((m) => m === "X").length, 0) }), t("Spares: {n}", { n: r.quadros.reduce((a, f) => a + f.marcas.filter((m) => m === "/").length, 0) }), t("Splits: {n}", { n: jogo.splits || 0 })] }), 1600); return; }
         todos = d.novos;
         jogo.bolaNoQuadro++;
         arrumarPinos(todos);
@@ -668,7 +677,7 @@
           seguir(new T.Vector3(b.x * 0.5, 1.3, z), new T.Vector3(b.x * 0.3, 0.2, Math.min(b.z - 4, BOLICHE.cabeca)), dt, 3);
         } else seguir(new T.Vector3(jogo.posX * 0.5 + 0.75, 2.1, 5.4), new T.Vector3(jogo.posX * 0.3, 0.2, -12), dt, 3); // por cima do ombro direito
       },
-      estado: () => ({ fase: jogo.fase, quadro: jogo.quadro + 1, bola: jogo.bolaNoQuadro + 1, jogadas: jogo.jogadas.slice(), total: pontosBoliche(jogo.jogadas).total, lancamentos: jogo.lancamentos,
+      estado: () => ({ fase: jogo.fase, quadro: jogo.quadro + 1, bola: jogo.bolaNoQuadro + 1, jogadas: jogo.jogadas.slice(), total: pontosBoliche(jogo.jogadas).total, lancamentos: jogo.lancamentos, splits: jogo.splits || 0, ultimoSplit: jogo.ultimoSplit || null,
         emPe: pinos.filter((p) => !p.caido && !p.fora && p.g.visible).length, ultimo: jogo.ultimo }),
       /** Para os testes: joga uma bola na hora (forca 0 a 1, curva -1 a 1). */
       lancar,
@@ -791,6 +800,11 @@
       return corridas;
     }
     function proximoRebatedor() { p.bolas = 0; p.strikes = 0; p.fase = "pronto"; p.espera = 1.5; }
+    /** O time da casa passou à frente no fim da última entrada (ou numa extra): o jogo acaba na hora (walk-off). */
+    function viradaFinal() {
+      if (p.topo || p.entrada < entradas || p.corridas[1] <= p.corridas[0]) return false;
+      desenharPlacar(); fimDeJogo(); return true;
+    }
     function eliminado(texto) {
       p.fora++;
       hud.aviso(texto, 1500, rebatendo() ? "ruim" : "bom");
@@ -803,8 +817,9 @@
       const tabela = el("table", { class: "mj-tabela" },
         el("tr", {}, el("th", {}, ""), ...Array.from({ length: p.entrada }, (_, i) => el("th", {}, String(i + 1))), el("th", {}, "R")),
         ...[[t("Você"), 0], [t("CPU"), 1]].map(([n, k]) => el("tr", {}, el("th", {}, n), ...Array.from({ length: p.entrada }, (_, i) => el("td", {}, p.porEntrada[k][i] === undefined ? (k === 1 && i === p.entrada - 1 && !p.jogouUltima ? "x" : "0") : String(p.porEntrada[k][i]))), el("td", {}, String(p.corridas[k])))));
-      setTimeout(() => ctx.fim({ vitoria: venceu, titulo: a === b ? t("Empate") : venceu ? t("Você venceu!") : t("O CPU venceu"), subtitulo: t("Você {a} × {b} CPU", { a, b }), tabela,
-        linhas: [t("Rebatidas válidas: {n}", { n: p.rebatidas }), t("Eliminações por strike: {n}", { n: p.eliminadosPorStrike })] }), 1500);
+      setTimeout(() => ctx.fim({ vitoria: venceu, empate: a === b, forcaCPU: ctx.forcaCPU, recorde: { valor: a, melhor: "maior", rotulo: t("{n} corridas", { n: a }) },
+        titulo: a === b ? t("Empate") : venceu ? t("Você venceu!") : t("O CPU venceu"), subtitulo: t("Você {a} × {b} CPU", { a, b }), tabela,
+        linhas: [t("Rebatidas válidas: {n}", { n: p.rebatidas }), t("Eliminações por strike: {n}", { n: p.eliminadosPorStrike }), t("Queimadas duplas: {n}", { n: p.duplas || 0 })] }), 1500);
     }
     function trocarLado() {
       p.fora = 0; p.bases = [false, false, false];
@@ -877,10 +892,11 @@
       let g = a.golpe;
       if (!rebatendo() && !a.decidiu) { // o CPU rebate (ou não)
         a.decidiu = true;
-        const quer = Math.random() < (a.naZona ? 0.74 : 0.28);
+        const prec = ctx.ia ? ctx.ia.precisao : 0.6; // o rebatedor melhor escolhe melhor
+        const quer = Math.random() < (a.naZona ? 0.6 + 0.25 * prec : 0.42 - 0.25 * prec);
         if (quer) {
           const dificil = (a.a.vel * (a.tempo ? a.de.distanceTo(a.para) / a.tempo / a.a.vel : 1) - 17) / 12;
-          const sigma = 0.035 + limitar(dificil) * 0.045 + Math.abs(a.a.quebra) * 0.02;
+          const sigma = (0.035 + limitar(dificil) * 0.045 + Math.abs(a.a.quebra) * 0.02) * (1.5 - (ctx.ia ? ctx.ia.precisao : 0.6));
           g = { atraso: (Math.random() + Math.random() + Math.random() - 1.5) * sigma * 2.2, forca: lerp(0.5, 0.95, Math.random()) };
           balancoTaco();
         }
@@ -896,7 +912,7 @@
       if (a.naZona) return strike(false);
       p.bolas++;
       hud.aviso(t("Bola {n}", { n: p.bolas }), 900);
-      if (p.bolas >= 4) { const c = avancar(1, true); anotar(c); hud.aviso(t("Base por bolas"), 1400, rebatendo() ? "bom" : "ruim"); proximoRebatedor(); }
+      if (p.bolas >= 4) { const c = avancar(1, true); anotar(c); hud.aviso(t("Base por bolas"), 1400, rebatendo() ? "bom" : "ruim"); if (viradaFinal()) return; proximoRebatedor(); }
       else { p.fase = "pronto"; p.espera = 1.1; }
       desenharPlacar();
     }
@@ -924,14 +940,20 @@
         p.fase = "pronto"; p.espera = 1.2; desenharPlacar();
         return;
       }
-      if (r.tipo === "eliminado") { eliminado(r.alta ? t("Pegou no ar! Eliminado") : t("Eliminado na base")); desenharPlacar(); return; }
+      if (r.tipo === "eliminado") {
+        // queimada dupla ou voo de sacrifício (js/esportes-nucleo.js)
+        const N = C.esportesNucleo, e = N ? N.eliminacao({ bases: p.bases, fora: p.fora, alta: !!r.alta, distancia: r.distancia || 0, defesa: rebatendo() ? (ctx.ia ? ctx.ia.precisao : 0.5) : 0.5 }) : { tipo: "simples" };
+        if (e.tipo === "dupla") { p.bases = e.bases; p.fora++; p.duplas = (p.duplas || 0) + 1; eliminado(t("Queimada dupla!")); desenharPlacar(); return; }
+        if (e.tipo === "sacrificio") { p.bases = e.bases; anotar(1); if (viradaFinal()) return; eliminado(t("Voo de sacrifício: +1 corrida")); desenharPlacar(); return; }
+        eliminado(r.alta ? t("Pegou no ar! Eliminado") : t("Eliminado na base")); desenharPlacar(); return;
+      }
       const bases = { simples: 1, dupla: 2, tripla: 3, homerun: 4 }[r.tipo];
       const c = avancar(bases);
       anotar(c);
       if (rebatendo()) p.rebatidas++;
       hud.aviso({ simples: t("Simples!"), dupla: t("Dupla!"), tripla: t("Tripla!"), homerun: t("HOME RUN!") }[r.tipo] + (c ? " " + t("+{n} corrida(s)", { n: c }) : ""), 1800, rebatendo() ? "bom" : "ruim");
       // o time da casa vira o jogo na última entrada: acaba na hora
-      if (!p.topo && p.entrada >= entradas && p.corridas[1] > p.corridas[0]) { desenharPlacar(); return fimDeJogo(); }
+      if (viradaFinal()) return;
       proximoRebatedor();
       desenharPlacar();
     }
@@ -949,7 +971,7 @@
           if (p.espera <= 0) {
             if (rebatendo()) {
               const tipos = ["rapida", "rapida", "curva", "lenta"], tipo = tipos[Math.floor(Math.random() * tipos.length)];
-              const naZona = Math.random() < 0.66;
+              const naZona = Math.random() < 0.55 + 0.2 * (ctx.ia ? ctx.ia.precisao : 0.6);
               const x = naZona ? lerp(-ZONA.x, ZONA.x, Math.random()) : (Math.random() < 0.5 ? -1 : 1) * lerp(ZONA.x + 0.08, ZONA.x + 0.3, Math.random());
               const y = naZona ? lerp(ZONA.baixo, ZONA.alto, Math.random()) : Math.random() < 0.5 ? lerp(0.2, ZONA.baixo - 0.06, Math.random()) : lerp(ZONA.alto + 0.06, 1.45, Math.random());
               arremessar(tipo, x, y);
@@ -994,7 +1016,7 @@
         receptor.grupo.visible = !(rebatendo() && p.fase !== "voo"); // rebatendo, a câmera fica atrás dele
         zona.visible = p.fase !== "voo";
       },
-      estado: () => ({ fase: p.fase, entrada: p.entrada, topo: p.topo, corridas: p.corridas.slice(), fora: p.fora, bolas: p.bolas, strikes: p.strikes, bases: p.bases.slice(), tipo: p.tipo, arremessos: p.arremessos, golpes: p.golpes, fim: p.fim }),
+      estado: () => ({ fase: p.fase, entrada: p.entrada, topo: p.topo, corridas: p.corridas.slice(), fora: p.fora, bolas: p.bolas, strikes: p.strikes, bases: p.bases.slice(), tipo: p.tipo, arremessos: p.arremessos, golpes: p.golpes, fim: p.fim, duplas: p.duplas || 0 }),
       /** Para os testes: pula a metade da entrada (como 3 eliminações). */
       trocarLado,
     };
@@ -1194,9 +1216,13 @@
       som(putt ? "quique" : "rebatida");
       if (putt) { const v = 6.7 * est.forca; est.vel.set(d.x * v, 0, d.z * v); est.fase = "rolando"; return; }
       const taco = TACOS[est.taco], carry = Math.max(4, taco.max * est.forca * (SAIDA[lie()] || 1)), th = (taco.loft * Math.PI) / 180;
-      const v0 = Math.sqrt((carry * G) / Math.sin(2 * th));
+      // a velocidade que, sem vento, leva a bola à distância do taco com o backspin dele (js/esportes-nucleo.js)
+      const N = C.esportesNucleo, giro = 220 + taco.loft * 6;
+      const v0 = N ? N.velocidadePara(carry, taco.loft, giro, N.BOLAS.golfe) : Math.sqrt((carry * G) / Math.sin(2 * th));
       est.vel.set(d.x * v0 * Math.cos(th), v0 * Math.sin(th), d.z * v0 * Math.cos(th));
-      est.curva = est.dx * 5;
+      const eixo = N ? N.eixoBackspin(d) : { x: 0, y: 0, z: 0 };
+      est.giro = { x: eixo.x * giro, y: -est.dx * 260, z: eixo.z * giro }; // efeito para o lado: puxar para a direita curva para a direita
+      est.curva = N ? 0 : est.dx * 5;
       est.y = 0.05;
       est.fase = "voo";
     }
@@ -1236,10 +1262,18 @@
       if (nv < 0.05) { est.fase = "parada"; est.espera = 0.7; est.vel.set(0, 0, 0); }
     }
     function voar(dt) {
-      est.vel.y -= G * dt;
-      est.vel.x += est.vento.x * 0.32 * dt; est.vel.z += est.vento.z * 0.32 * dt;
-      const d = est.direcaoVoo; est.vel.x += -d.z * est.curva * dt; est.vel.z += d.x * est.curva * dt; // efeito (gancho ou slice)
-      est.x += est.vel.x * dt; est.y += est.vel.y * dt; est.z += est.vel.z * dt;
+      const N = C.esportesNucleo;
+      if (N && est.giro) {
+        // gravidade, resistência do ar com o vento e o efeito Magnus, em passos pequenos
+        const pos = { x: est.x, y: est.y, z: est.z }, vento = { x: est.vento.x, y: 0, z: est.vento.z }, n = 4;
+        for (let i = 0; i < n; i++) N.passo(pos, est.vel, est.giro, vento, N.BOLAS.golfe, dt / n);
+        est.x = pos.x; est.y = pos.y; est.z = pos.z;
+      } else {
+        est.vel.y -= G * dt;
+        est.vel.x += est.vento.x * 0.32 * dt; est.vel.z += est.vento.z * 0.32 * dt;
+        const d = est.direcaoVoo; est.vel.x += -d.z * est.curva * dt; est.vel.z += d.x * est.curva * dt; // efeito (gancho ou slice)
+        est.x += est.vel.x * dt; est.y += est.vel.y * dt; est.z += est.vel.z * dt;
+      }
       if (est.y <= 0) {
         est.y = 0;
         const sup = lie();
@@ -1268,7 +1302,7 @@
         el("tr", {}, el("th", {}, t("Buraco")), ...est.cartao.map((_, i) => el("th", {}, String(i + 1))), el("th", {}, t("Total"))),
         el("tr", {}, el("th", {}, t("Par")), ...est.cartao.map((c) => el("td", {}, String(c.par))), el("td", {}, String(pares))),
         el("tr", {}, el("th", {}, t("Você")), ...est.cartao.map((c) => el("td", { class: c.tacadas < c.par ? "abaixo" : c.tacadas > c.par ? "acima" : "" }, String(c.tacadas))), el("td", {}, String(soma))));
-      ctx.fim({ vitoria: dif <= 0, titulo: dif === 0 ? t("No par!") : dif < 0 ? t("{n} abaixo do par!", { n: -dif }) : t("{n} acima do par", { n: dif }), subtitulo: t("{n} tacadas em {b} buracos", { n: soma, b: total }), tabela });
+      ctx.fim({ vitoria: dif <= 0, recorde: { valor: dif, melhor: "menor", variante: total, rotulo: t("{d} em {b} buracos", { d: dif > 0 ? "+" + dif : dif === 0 ? "par" : String(dif), b: total }) }, titulo: dif === 0 ? t("No par!") : dif < 0 ? t("{n} abaixo do par!", { n: -dif }) : t("{n} acima do par", { n: dif }), subtitulo: t("{n} tacadas em {b} buracos", { n: soma, b: total }), tabela });
     }
     function desenharPlacar() {
       const setas = ["↑", "↗", "→", "↘", "↓", "↙", "←", "↖"], va = Math.atan2(est.vento.x, -est.vento.z), vv = Math.hypot(est.vento.x, est.vento.z);
@@ -1347,9 +1381,16 @@
   const FOLEGO = { E: 16, D: 25, recupera: 15 }; // socar cansa: o jab gasta menos que o direto; o fôlego volta sozinho
   const ROUND = 60;
 
+  /** O adversário entre o fácil (força 0) e o difícil (força 1), passando pelo médio. */
+  function nivelPara(forca) {
+    const f = limitar(forca), [a, b, k] = f < 0.5 ? [NIVEIS.facil, NIVEIS.medio, f / 0.5] : [NIVEIS.medio, NIVEIS.dificil, (f - 0.5) / 0.5];
+    return Object.fromEntries(Object.keys(a).map((c) => [c, lerp(a[c], b[c], k)]));
+  }
   function criarBoxe(ctx) {
     const { T, cena, camera, entrada, hud, som } = ctx;
-    const nivel = NIVEIS[ctx.opcoes.nivel] || NIVEIS.medio;
+    const auto = ctx.opcoes.nivel === "auto";
+    const nivel = auto ? nivelPara(ctx.forcaCPU) : NIVEIS[ctx.opcoes.nivel] || NIVEIS.medio;
+    const forcaLuta = auto ? ctx.forcaCPU : { facil: 0.2, medio: 0.5, dificil: 0.85 }[ctx.opcoes.nivel] ?? 0.5;
     cena.background = new T.Color("#11131c");
     cena.fog = new T.Fog("#11131c", 12, 34);
     cena.add(new T.HemisphereLight("#cfd8ff", "#2a2233", 0.9));
@@ -1462,7 +1503,7 @@
     }
     function fimDaLuta(vitoria, titulo, sub) {
       luta.fase = "fim";
-      ctx.fim({ vitoria, titulo, subtitulo: sub, linhas: [t("Socos: {n} · acertos: {a}", { n: luta.socos, a: luta.acertos }), t("Defesas: {d} · esquivas: {e}", { d: luta.bloqueios, e: luta.esquivas }), t("Knockdowns: você {a} × {b} CPU", { a: luta.quedas[1], b: luta.quedas[0] })] });
+      ctx.fim({ vitoria, empate: titulo === t("Empate nos pontos"), forcaCPU: forcaLuta, recorde: { valor: luta.acertos, melhor: "maior", rotulo: t("{n} socos certos", { n: luta.acertos }) }, titulo, subtitulo: sub, linhas: [t("Socos: {n} · acertos: {a}", { n: luta.socos, a: luta.acertos }), t("Defesas: {d} · esquivas: {e}", { d: luta.bloqueios, e: luta.esquivas }), t("Knockdowns: você {a} × {b} CPU", { a: luta.quedas[1], b: luta.quedas[0] })] });
     }
     function contar(dt) {
       luta.espera -= dt;
@@ -1569,7 +1610,7 @@
     };
   }
 
-  C.esportes = { pontosBoliche, decimoQuadro, rebatida, buracoDe, superficie, criarTenis, criarBoliche, criarBeisebol, criarGolfe, criarBoxe };
+  C.esportes = { pontosBoliche, decimoQuadro, rebatida, buracoDe, superficie, nivelPara, criarTenis, criarBoliche, criarBeisebol, criarGolfe, criarBoxe };
 
   C.minijogos.registrar({
     id: "tenis", nome: "Tênis", cor: "#2c62c9", descricao: "Partidas de simples ou duplas, com saque, troca de bola e a contagem do tênis.",
@@ -1594,7 +1635,7 @@
   });
   C.minijogos.registrar({
     id: "boxe", nome: "Boxe", cor: "#f08a24", descricao: "Lutas de 3 rounds contra o adversário: soque, defenda e esquive.",
-    opcoes: [{ id: "nivel", rotulo: "Adversário", padrao: "medio", valores: [{ v: "facil", rotulo: "Fácil" }, { v: "medio", rotulo: "Médio" }, { v: "dificil", rotulo: "Difícil" }] }],
+    opcoes: [{ id: "nivel", rotulo: "Adversário", padrao: "auto", valores: [{ v: "auto", rotulo: "Pela habilidade" }, { v: "facil", rotulo: "Fácil" }, { v: "medio", rotulo: "Médio" }, { v: "dificil", rotulo: "Difícil" }] }],
     criar: (ctx) => C.esportes.criarBoxe(ctx),
   });
 })();

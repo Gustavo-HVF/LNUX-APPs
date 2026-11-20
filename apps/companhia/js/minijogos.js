@@ -589,6 +589,13 @@
     function fim(resultado = {}) {
       if (acabou) return;
       acabou = true;
+      const N = C.esportesNucleo, extras = [];
+      if (N && !resultado.semRegistro) {
+        const r = N.registrar(id, resultado);
+        if (r.novoRecorde && resultado.recorde) extras.push(el("li", { class: "mj-recorde" }, t("Novo recorde: {r}", { r: resultado.recorde.rotulo || String(resultado.recorde.valor) })));
+        if (Number.isFinite(resultado.forcaCPU)) extras.push(el("li", { class: "mj-habilidade", "data-delta": String(r.delta) }, t("Habilidade: {h} ({d})", { h: r.habilidade, d: (r.delta >= 0 ? "+" : "") + r.delta })));
+        sessao.registro = r;
+      }
       hud.barra(null);
       som(resultado.vitoria ? "torcida" : "apito");
       camadaPausa.hidden = false;
@@ -596,7 +603,7 @@
         el("h2", {}, resultado.titulo || t("Fim de jogo")),
         resultado.subtitulo ? el("p", { class: "mj-subtitulo" }, resultado.subtitulo) : null,
         resultado.tabela || null,
-        (resultado.linhas || []).length ? el("ul", { class: "mj-linhas" }, resultado.linhas.map((l) => el("li", {}, l))) : null,
+        (resultado.linhas || []).length || extras.length ? el("ul", { class: "mj-linhas" }, (resultado.linhas || []).map((l) => el("li", {}, l)), extras) : null,
         el("div", { class: "mj-acoes" },
           el("button", { type: "button", class: "lnux-botao primario", "data-acao": "de-novo", onclick: () => reiniciar() }, t("Jogar de novo")),
           el("button", { type: "button", class: "lnux-botao", "data-acao": "sair", onclick: () => sair() }, t("Escolher outro jogo")))));
@@ -623,8 +630,12 @@
       pausado = false;
       camadaPausa.hidden = true;
       sessao.resultado = null;
+      // o CPU acompanha a sua habilidade neste jogo (js/esportes-nucleo.js: pontos como no Elo)
+      const N = C.esportesNucleo, rec = N ? N.recordesDe(id) : null;
+      const forcaCPU = N ? N.forcaPara(rec.habilidade) : 0.5;
       const ctx = {
         T, cena, camera, entrada, hud, opcoes: { ...opcoes }, cor, som, fim, aleatorio, renderer, elemento: raiz,
+        forcaCPU, ia: N ? N.perfilIA(forcaCPU, "cpu-" + id + "-" + Math.floor(Math.random() * 1e6)) : null,
         mat: (c, op) => materialDe(T, c, op),
         malha: (geo, c, op) => malhaDe(T, geo, c, op),
         boneco: (op) => { const b = bonecoDe(T, op); cena.add(b.grupo); return b; },
@@ -713,6 +724,15 @@
         el("small", { class: "fraco" }, camera ? t("A câmera liga ao começar o jogo (a imagem não sai do aparelho). Fique de frente, com os ombros e as mãos à vista.") : t("Mire com o mouse; clique (ou Espaço) para golpear; segure para carregar a força.")));
     };
     desenharControle();
+    /** Partidas, vitórias, recorde e habilidade deste jogo (de quem está jogando, neste navegador). */
+    const resumoRecordes = (id) => {
+      const N = C.esportesNucleo;
+      if (!N) return null;
+      const r = N.recordesDe(id);
+      if (!r.partidas) return el("p", { class: "mj-recordes fraco pequeno", "data-recordes": id }, t("Ainda sem partidas"));
+      return el("p", { class: "mj-recordes fraco pequeno", "data-recordes": id },
+        [t("Partidas: {n}", { n: r.partidas }), t("Vitórias: {n}", { n: r.vitorias }), r.melhor !== null && r.melhor !== undefined ? t("Recorde: {r}", { r: r.rotulo || String(r.melhor) }) : null, t("Habilidade: {h}", { h: r.habilidade })].filter(Boolean).join(" · "));
+    };
     const cartao = (def) => {
       const minhas = { ...Object.fromEntries((def.opcoes || []).map((o) => [o.id, o.padrao])), ...(escolhas[def.id] || {}) };
       const linhaOpcoes = (def.opcoes || []).map((o) => el("div", { class: "mj-opcao", role: "radiogroup", "aria-label": t(o.rotulo), "data-opcao": o.id },
@@ -728,6 +748,7 @@
         el("div", { class: "mj-jogo-info" },
           el("h2", {}, t(def.nome)),
           el("p", { class: "fraco" }, t(def.descricao)),
+          resumoRecordes(def.id),
           ...linhaOpcoes,
           el("button", { type: "button", class: "lnux-botao primario mj-jogar", "data-jogar": def.id, onclick: () => abrir(def.id, { ...minhas }, { captura }).catch(LNUX.erro) }, t("Jogar"))));
       artigo.style.setProperty("--mj-cor", def.cor || "#2f7bff"); // a cor da capa de cada jogo

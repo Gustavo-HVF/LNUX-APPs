@@ -100,6 +100,29 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(["dupla", "eliminado", "falta", "homerun", "simples", "tripla"].every((x) => contas.tipos.includes(x)), `beisebol: as rebatidas dão falta, eliminado, simples, dupla, tripla e home run (${contas.tipos})`);
     ok(contas.mesmo && contas.tee === "tee" && contas.green === "green" && contas.par3 === 3, "golfe: o mesmo percurso para a mesma semente; o tee e o green no lugar certo");
 
+    // ── o núcleo (js/esportes-nucleo.js, readaptado do Linux Sports) ──
+    const nucleo = await ev(() => {
+      const N = C.esportesNucleo, m = (l) => l.reduce((a, p) => a | (1 << (p - 1)), 0);
+      const carry = (v, loft, giro) => { const a = (loft * Math.PI) / 180, e = N.eixoBackspin({ x: 0, z: 1 }); return N.preverQueda({ x: 0, y: 0, z: 0 }, { x: 0, y: Math.sin(a) * v, z: Math.cos(a) * v }, { x: e.x * giro, y: 0, z: e.z * giro }, null, N.BOLAS.golfe).z; };
+      const v150 = N.velocidadePara(150, 24, 364, N.BOLAS.golfe);
+      const sem = (() => { const a = (24 * Math.PI) / 180; return N.preverQueda({ x: 0, y: 0, z: 0 }, { x: 0, y: Math.sin(a) * v150, z: Math.cos(a) * v150 }, null, null, N.BOLAS.golfe).z; })();
+      const curva = (() => { const a = (24 * Math.PI) / 180, e = N.eixoBackspin({ x: 0, z: -1 }); return N.preverQueda({ x: 0, y: 0, z: 0 }, { x: 0, y: Math.sin(a) * 45, z: -Math.cos(a) * 45 }, { x: e.x * 300, y: -200, z: e.z * 300 }, null, N.BOLAS.golfe).x; })();
+      const q = N.quique({ x: 0, y: -10, z: 5 }, { x: 0, y: 1, z: 0 }, null, N.BOLAS.tenis);
+      const dp = N.eliminacao({ bases: [true, false, false], fora: 0, alta: false, defesa: 1, sorteio: () => 0 });
+      const sf = N.eliminacao({ bases: [false, false, true], fora: 1, alta: true, distancia: 80 });
+      const fraco = N.perfilIA(0.1, "a"), forte = N.perfilIA(0.9, "a");
+      const auto = C.esportes.nivelPara(0.5), dificil = C.esportes.nivelPara(1);
+      return { split710: N.ehSplit(m([7, 10])), baby: N.ehSplit(m([2, 7])), vizinhos: N.ehSplit(m([4, 5])), comUm: N.ehSplit(m([1, 7, 10])), nome: N.nomeSplit(m([7, 10])),
+        acerta150: Math.abs(carry(v150, 24, 364) - 150) < 1, sustenta: sem < 150, curva, quiqueY: q.y, quiqueZ: q.z, dp: dp.tipo + dp.fora + dp.bases.join(), sf: sf.tipo + sf.corridas + sf.fora,
+        elo: [N.deltaHabilidade(0, 0.5, 1), N.deltaHabilidade(1500, 0.2, 0), N.deltaHabilidade(1000, 0.5, 0.5)], ia: forte.precisao > fraco.precisao && forte.reacao < fraco.reacao,
+        hash: N.hash("cpu") === N.hash("cpu") && N.hash("a") !== N.hash("b"), auto: Math.abs(auto.vida - 120) < 1e-6 && Math.abs(dificil.vida - 150) < 1e-6 };
+    });
+    ok(nucleo.split710 && nucleo.baby && !nucleo.vizinhos && !nucleo.comUm && nucleo.nome === "7-10", "boliche: o split (7-10 e 2-7 sim; 4-5 e com o pino 1 em pé, não)");
+    ok(nucleo.acerta150 && nucleo.sustenta && nucleo.curva > 5, `golfe: a busca da velocidade acerta 150 m, o backspin sustenta a bola e o efeito curva (${nucleo.curva.toFixed(1)} m)`);
+    ok(Math.abs(nucleo.quiqueY - 7.5) < 1e-6 && nucleo.quiqueZ > 0 && nucleo.quiqueZ < 5, "o quique devolve 75% da tênis e perde velocidade no chão");
+    ok(nucleo.dp === "dupla2false,false,false" && nucleo.sf === "sacrificio12", `beisebol: queimada dupla e voo de sacrifício (${nucleo.dp}, ${nucleo.sf})`);
+    ok(nucleo.elo[0] > 0 && nucleo.elo[1] < 0 && nucleo.elo[2] === 0 && nucleo.ia && nucleo.hash && nucleo.auto, `habilidade como no Elo (${nucleo.elo.join(", ")}), a IA mais forte é mais precisa e o boxe "pela habilidade" vai do médio ao difícil`);
+
     // ── boliche ──
     await abrirJogo("boliche");
     ok((await cores()) > 6, "boliche: abre em tela cheia com a pista, os pinos e o placar dos 10 quadros");
@@ -235,6 +258,8 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     }
     await pagina.waitForSelector(".mj-fim [data-acao=de-novo]", { timeout: 15000 });
     ok(await ev(() => C.minijogos.atual.jogo.estado().round === 3 && /pontos|Empate/i.test(document.querySelector(".mj-fim h2").textContent)), "depois do 3º round, a luta vai para os pontos e mostra o resultado (Jogar de novo / Escolher outro jogo)");
+    ok(await ev(() => { const h = document.querySelector(".mj-fim .mj-habilidade"), r = C.esportesNucleo.recordesDe("boxe"); return !!h && r.partidas >= 1 && r.melhor !== null && !!document.querySelector(".mj-fim .mj-recorde"); }),
+      "o fim da luta registra a partida, o recorde (socos certos) e a habilidade, e mostra no cartão");
     await pagina.click(".mj-fim [data-acao=de-novo]");
     await esperar(400);
     e = await estado();
