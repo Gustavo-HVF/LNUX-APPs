@@ -1096,3 +1096,75 @@ html[data-reduzir] .pessoa-bolha, html[data-reduzir] .pessoa-bolha-texto { trans
 .privado-enviar:disabled { opacity: .45; cursor: default; }
 .privado-janela.minimizada .privado-estado, .privado-janela.minimizada .privado-mensagens, .privado-janela.minimizada .privado-escrever { display: none; }
 @media (max-width: 760px) { .privados { bottom: calc(150px * var(--webc-escala, 1)); } .privado-mensagens { height: 150px; } }
+
+/* ── Loja e Sala, layout novo: o título, as bolinhas pretas à direita e os cartões altos com o nome embaixo ── */
+.webc-loja .webc-painel-titulo { border-right: 0; padding-right: 0; }
+.webc-loja .webc-painel-topo { flex-wrap: nowrap; gap: 18px; padding-bottom: 18px !important; }
+.webc-bolhas { display: flex; align-items: center; justify-content: flex-end; gap: clamp(8px, 1.1vw, 18px); flex-wrap: wrap; min-width: 0; }
+.webc-bolha { --tam: clamp(46px, 4.6vw, 66px); position: relative; height: var(--tam); min-width: var(--tam); display: inline-flex; align-items: center; padding: 0; border: 0;
+  border-radius: calc(var(--tam) / 2); background: var(--text, #000); color: var(--panel, #fff); font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap;
+  transition: transform .15s ease, box-shadow .15s ease; }
+.webc-bolha[hidden] { display: none; }
+.webc-bolha-icone { flex: none; width: var(--tam); height: var(--tam); display: grid; place-items: center; padding: calc(var(--tam) * .26); }
+.webc-bolha-icone .webc-svg, .webc-bolha-icone svg { width: 100%; height: 100%; display: block; }
+.webc-bolha-texto { max-width: 0; overflow: hidden; opacity: 0; font-size: clamp(.95rem, 1.1vw, 1.15rem); transition: max-width .24s ease, opacity .18s ease, padding .24s ease; }
+.webc-bolha:hover .webc-bolha-texto, .webc-bolha:focus-visible .webc-bolha-texto { max-width: 240px; opacity: 1; padding-right: calc(var(--tam) * .38); }
+.webc-bolha:focus-visible { outline: 3px solid var(--panel, #fff); outline-offset: -6px; }
+.webc-bolha:hover { transform: translateY(-2px); box-shadow: 0 8px 18px rgba(0, 0, 0, .25); }
+.webc-bolha[aria-expanded="true"] { box-shadow: 0 0 0 3px var(--panel, #fff), 0 0 0 6px var(--text, #000); }
+/* pesquisar: a lupa se estica com a caixa de texto */
+.webc-bolha-busca { cursor: text; }
+.webc-bolha-busca .webc-bolha-campo { width: 0; min-width: 0; padding: 0; border: 0; outline: none; background: none; color: inherit; font: inherit; font-size: clamp(1rem, 1.2vw, 1.2rem); font-weight: 600;
+  transition: width .24s ease, padding .24s ease; }
+.webc-bolha-busca .webc-bolha-campo::placeholder { color: inherit; opacity: .65; }
+.webc-bolha-busca:hover .webc-bolha-campo, .webc-bolha-busca:focus-within .webc-bolha-campo, .webc-bolha-busca.com-texto .webc-bolha-campo { width: clamp(130px, 16vw, 250px); padding-right: calc(var(--tam) * .4); }
+.webc-bolha-busca:focus-within { box-shadow: 0 0 0 3px var(--panel, #fff), 0 0 0 6px var(--text, #000); }
+.webc-bolha-busca .webc-bolha-campo::-webkit-search-cancel-button { filter: invert(1); }
+/* os painéis que as bolinhas abrem (categoria, filtro, personagem, link) */
+.webc-bolha-painel { margin: 0 0 18px; }
+.webc-bolha-painel[hidden] { display: none !important; }
+.webc-abas.webc-bolha-painel .loja-aba .webc-svg { width: 20px; height: 20px; display: inline-flex; }
+.webc-conteudo .salas .salas-eu.webc-bolha-painel, .webc-conteudo .salas .salas-codigo.webc-bolha-painel { margin: 0 0 18px; padding: 0; }
+.salas-contagem { margin: 18px 0 0; text-align: right; }
+@media (hover: none) { .webc-bolha:hover { transform: none; box-shadow: none; } }
+html[data-reduzir] .webc-bolha, html[data-reduzir] .webc-bolha-texto, html[data-reduzir] .webc-bolha-campo { transition: none; }
+@media (prefers-reduced-motion: reduce) { .webc-bolha, .webc-bolha-texto, .webc-bolha-campo { transition: none; } }
+
+/* os cartões: altos, a imagem no cartão inteiro, o nome no canto de baixo à esquerda */
+.webc-grade { grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr)); gap: clamp(10px, 1vw, 16px); }
+.webc-grade.pequena { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; }
+.webc-item { position: relative; display: block; aspect-ratio: 2 / 3; border-radius: 18px; border: 2.5px solid var(--text, #000); background: color-mix(in srgb, var(--accent, #ff4545) 85%, #fff);
+  color: var(--text); overflow: hidden; padding: 0; cursor: pointer; transition: transform .16s ease, box-shadow .16s ease; }
+.webc-item:hover, .webc-item:focus-within, .webc-item:focus-visible { transform: translateY(-4px); box-shadow: 0 12px 26px rgba(0, 0, 0, .28); outline: none; }
+.webc-item:focus-visible, .webc-item:has(.entrar:focus-visible) { box-shadow: 0 0 0 3px var(--panel, #fff), 0 0 0 6px var(--text, #000); }
+.webc-item .capa { position: absolute; inset: 0; aspect-ratio: auto; border: 0; border-radius: 0; margin: 0; background: transparent; display: grid; place-items: center; }
+.webc-item .capa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.webc-item .capa .sem-miniatura { width: 42%; aspect-ratio: 1; color: var(--panel, #fff); opacity: .9; font-size: 3rem; display: grid; place-items: center; }
+.webc-item .capa .sem-miniatura svg, .webc-item .capa .sem-miniatura .webc-svg { width: 100%; height: 100%; }
+.webc-item::after { content: ""; position: absolute; inset: auto 0 0 0; height: 32%; pointer-events: none; background: linear-gradient(to top, rgba(255, 255, 255, .55), transparent); }
+.webc-item .selo-novo { position: absolute; top: 8px; left: 8px; right: auto; z-index: 2; padding: 3px 10px; border-radius: 999px; background: var(--text, #000); color: var(--panel, #fff); font-size: .8rem; font-weight: 700; }
+.webc-item .selo-novo.cheia { background: var(--perigo, #d33); color: #fff; }
+.webc-item-info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1; padding: 0 12px 10px; display: block; pointer-events: none; }
+.webc-item .nome { display: block; color: var(--webc-cartao-texto, var(--accent)); font-weight: 700; font-size: clamp(1rem, 1.25vw, 1.3rem); line-height: 1.2; text-align: left;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-shadow: 0 0 3px #fff, 0 0 8px rgba(255, 255, 255, .85); }
+.webc-item-numeros { position: absolute; top: 8px; right: 8px; z-index: 2; display: flex; gap: 6px; margin: 0; color: #fff; flex-wrap: wrap; justify-content: flex-end; }
+.webc-item-numeros > * { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: rgba(0, 0, 0, .62); color: #fff; font-size: .82rem; font-weight: 700; }
+.webc-item-numeros .webc-svg, .webc-item-numeros svg { width: 15px; height: 15px; }
+.webc-item-numeros .webc-curtir { border: 0; font: inherit; font-size: .82rem; cursor: pointer; }
+/* a sala: o cartão inteiro é o botão de entrar */
+.cartao-sala.webc-item { cursor: pointer; }
+.cartao-sala.webc-item:hover { transform: translateY(-4px); }
+.webc-item .entrar { position: absolute; inset: 0; z-index: 1; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: transparent; cursor: pointer; }
+.webc-item .entrar:focus-visible { outline: none; }
+.webc-item .entrar:disabled { cursor: not-allowed; }
+.webc-item .entrar-texto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.cartao-sala.cheia { filter: grayscale(.6); }
+.cartao-sala.destaque { box-shadow: 0 0 0 3px var(--panel, #fff), 0 0 0 6px var(--webc-cartao-texto, var(--accent)); }
+@media (max-width: 760px) {
+  .webc-loja .webc-painel-topo { flex-wrap: wrap; }
+  .webc-bolhas { width: 100%; justify-content: flex-start; }
+  .webc-grade { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+}
+/* cartões estreitos (celular): só as curtidas no alto, para não encostar no "Novo" */
+.webc-item { container-type: inline-size; }
+@container (max-width: 210px) { .webc-item-numeros .webc-baixados { display: none; } }

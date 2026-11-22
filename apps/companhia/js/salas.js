@@ -148,38 +148,38 @@
     const t = (x, v) => (C.t ? C.t(x, v) : x);
     const terminou = new Promise((ok) => (fechar = ok));
     const personagem = el("select", { class: "lnux-selecao", "aria-label": "Sua personagem" });
-    const grade = el("div", { class: "loja-grade salas-grade", role: "list", id: "salas-lista" });
+    const grade = el("div", { class: "loja-grade salas-grade webc-grade", role: "list", id: "salas-lista" });
     const vazio = el("div", { class: "loja-vazio", hidden: true });
     const dono = el("div", { class: "loja-dono", hidden: true });
     const convite = el("div", { class: "salas-convite", hidden: true });
     const codigoCampo = el("input", { class: "lnux-entrada", value: codigo, placeholder: "Tem o link de uma sala privada? Cole aqui", "aria-label": "Link ou código da sala", "data-enter-proprio": "1" });
-    const botaoCriar = el("button", { class: "lnux-botao primario", type: "button", id: "sala-criar", onclick: () => criar().catch(LNUX.erro) }, "＋ Criar sala");
-    const contagem = el("span", { class: "fraco pequeno" });
+    const botaoCriar = C.bolhaWebc({ id: "sala-criar", icone: "b-criar", rotulo: "Criar sala", acao: () => criar().catch(LNUX.erro) });
+    const contagem = el("p", { class: "fraco pequeno salas-contagem" });
     const barraConta = el("div", { class: "salas-conta" });
     const pedeConta = el("p", { class: "salas-pede-conta", hidden: true }, "Este servidor pede uma conta para jogar: entre na sua ou crie uma.");
-    const campoBusca = el("input", { type: "search", class: "webc-busca-campo", placeholder: "pesquisa", "aria-label": "Procurar sala" });
+    const campoBusca = el("input", { type: "search", class: "webc-busca-campo", placeholder: "pesquisar", "aria-label": "Procurar sala" });
     campoBusca.addEventListener("input", () => { busca = campoBusca.value.trim().toLowerCase(); desenharLista(); });
-    const filtro = el("div", { class: "webc-filtro-painel", hidden: true });
-    const botaoFiltro = el("button", { type: "button", class: "webc-filtro", "aria-expanded": "false", onclick: () => { filtro.hidden = !filtro.hidden; botaoFiltro.setAttribute("aria-expanded", String(!filtro.hidden)); desenharFiltro(); } },
-      el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
+    const filtro = el("div", { class: "webc-filtro-painel webc-bolha-painel", hidden: true });
+    // os painéis das bolinhas: a personagem (e a conta) e o link de uma sala privada
+    const painelEu = el("div", { class: "salas-eu webc-bolha-painel", hidden: true });
+    const painelLink = el("div", { class: "salas-codigo linha webc-bolha-painel", hidden: true });
+    // as bolinhas pretas no alto: pesquisar, o filtro, a personagem, entrar pelo link e criar sala
+    const botaoFiltro = C.bolhaWebc({ icone: "b-filtro", rotulo: "Filtro", classe: "webc-filtro", painel: filtro, acao: () => desenharFiltro() });
+    const botaoEu = C.bolhaWebc({ id: "sala-personagem", icone: "b-personagem", rotulo: "Sua personagem", painel: painelEu });
+    const botaoLink = C.bolhaWebc({ id: "sala-link", icone: "b-link", rotulo: "Entrar pelo link", painel: painelLink, acao: () => { if (!painelLink.hidden) codigoCampo.focus(); } });
     const caixa = el("div", { class: "loja salas webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Salas", "aria-modal": pagina ? undefined : "true" },
       el("header", { class: "loja-topo webc-painel-topo" },
         el("h1", { class: "webc-painel-titulo" }, "SALA"),
-        el("label", { class: "webc-busca" }, C.iconeWebc ? C.iconeWebc("busca") : "🔍", campoBusca),
         el("span", { class: "webc-espaco" }),
-        contagem,
-        el("button", { class: "lnux-botao", type: "button", title: "Atualizar a lista", "aria-label": "Atualizar a lista", onclick: () => atualizar().catch(LNUX.erro) }, "↻"),
-        botaoCriar, botaoFiltro,
+        el("div", { class: "webc-bolhas", role: "toolbar", "aria-label": "Opções das salas" }, C.bolhaBusca(campoBusca, "Pesquisar"), botaoFiltro, botaoEu, botaoLink, botaoCriar),
         pagina ? null : el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a lista de salas", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair(false) })),
-      filtro,
-      // o nome é dito na tela de entrar (ou é o da conta); aqui, só a personagem com que se entra
-      el("div", { class: "salas-eu" },
-        barraConta,
-        el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), personagem)),
+      filtro, painelEu, painelLink,
       pedeConta, dono, convite,
-      el("div", { class: "salas-codigo linha" }, el("label", { class: "lnux-campo" }, codigoCampo),
-        el("button", { class: "lnux-botao", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigoCampo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigoCampo.focus(); return; } entrarPeloCodigo(c).catch(LNUX.erro); } }, "Entrar pelo link")),
-      grade, vazio);
+      grade, vazio, contagem);
+    // o nome é dito na tela de entrar (ou é o da conta); aqui, só a personagem com que se entra
+    painelEu.append(barraConta, el("label", { class: "lnux-campo" }, el("span", {}, "Sua personagem"), personagem));
+    painelLink.append(el("label", { class: "lnux-campo" }, codigoCampo),
+      el("button", { class: "lnux-botao primario", type: "button", id: "sala-entrar", onclick: () => { const c = codigoDe(codigoCampo.value); if (!c) { LNUX.aviso("Cole o link (ou o código) da sala.", "alerta"); codigoCampo.focus(); return; } entrarPeloCodigo(c).catch(LNUX.erro); } }, "Entrar pelo link"));
     (dentro || document.body).append(caixa);
     codigoCampo.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); caixa.querySelector("#sala-entrar").click(); } });
     const teclas = (e) => { if (!pagina && e.key === "Escape" && !document.querySelector(".lnux-fundo-modal") && !document.querySelector(".loja:not(.salas)")) { e.preventDefault(); sair(false); } };
@@ -234,24 +234,27 @@
       if (!n.trim()) return null;
       return { nome: n.trim(), personagem: personagem.value };
     }
+    /**
+     * O cartão de uma sala, como os da loja: a miniatura ocupa o cartão e o nome fica no canto de baixo, à esquerda; no
+     * alto, quantas pessoas, o cadeado (com senha) e "Sua" ou "Cheia". Um clique no cartão entra.
+     */
     function cartao(s, destaque) {
-      const minha = !!C.Sala.minhas()[s.codigo], cheia = s.pessoas >= s.max;
-      const capa = el("div", { class: "capa" }, s.miniatura ? el("img", { src: `/api/sala/${s.codigo}/miniatura?v=${s.miniatura}`, alt: "", loading: "lazy" }) : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, s.mapa ? "🗺️" : "🌱"),
-        el("span", { class: "selo-tipo" }, `👥 ${s.pessoas}/${s.max}`));
-      if (s.senha) capa.append(el("span", { class: "selo-cadeado", title: "Tem senha" }, "🔒"));
-      if (minha) capa.append(el("span", { class: "selo-novo" }, "Sua"));
-      else if (cheia) capa.append(el("span", { class: "selo-novo cheia" }, "Cheia"));
-      const detalhes = [s.mapa ? s.mapa.nome : t("chão simples"), s.bate_papo ? "" : t("sem bate-papo"), s.publica ? "" : t("privada")].filter(Boolean).join(" · ");
-      return el("article", { class: "cartao-loja cartao-sala webc-item" + (destaque ? " destaque" : ""), role: "listitem", "data-codigo": s.codigo },
+      const minha = !!C.Sala.minhas()[s.codigo], cheia = s.pessoas >= s.max, fechada = cheia && !minha;
+      const capa = el("div", { class: "capa" }, s.miniatura ? el("img", { src: `/api/sala/${s.codigo}/miniatura?v=${s.miniatura}`, alt: "", loading: "lazy" })
+        : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, C.iconeWebc(s.mapa ? "b-mundo" : "b-sala")));
+      const selo = minha ? el("span", { class: "selo-novo" }, t("Sua")) : cheia ? el("span", { class: "selo-novo cheia" }, t("Cheia")) : null;
+      if (selo) capa.append(selo);
+      const detalhes = [s.criador ? t("por {autor}", { autor: s.criador }) : "", s.mapa ? s.mapa.nome : t("chão simples"), s.bate_papo ? "" : t("sem bate-papo"), s.publica ? "" : t("privada")].filter(Boolean).join(" · ");
+      const dica = [s.nome, s.descricao, detalhes].filter(Boolean).join("\n");
+      return el("article", { class: "cartao-loja cartao-sala webc-item" + (destaque ? " destaque" : "") + (fechada ? " cheia" : ""), role: "listitem", "data-codigo": s.codigo, title: dica },
         capa,
-        el("div", { class: "webc-item-info" },
-          el("span", { class: "nome", translate: "no" }, s.nome),
-          el("span", { class: "autor" }, s.criador ? t("por {autor}", { autor: s.criador }) : t("sala aberta")),
-          s.descricao ? el("span", { class: "descricao pequeno", translate: "no" }, s.descricao) : null,
-          el("span", { class: "detalhes pequeno" }, detalhes),
-          el("div", { class: "webc-item-numeros" },
-            el("span", { class: "webc-pessoas", title: "Pessoas" }, C.iconeWebc ? C.iconeWebc("perfil") : "👥", el("span", { class: "numero" }, `${s.pessoas}/${s.max}`)),
-            el("button", { class: "lnux-botao primario entrar", type: "button", "data-ctx": "sala", disabled: cheia && !minha, onclick: () => entrarNa(s).catch(LNUX.erro) }, cheia && !minha ? "Cheia" : "Entrar"))));
+        el("div", { class: "webc-item-numeros" },
+          s.senha ? el("span", { class: "webc-chip-cartao selo-cadeado", title: t("Tem senha"), "aria-label": t("Tem senha") }, C.iconeWebc("b-cadeado")) : null,
+          el("span", { class: "webc-chip-cartao webc-pessoas", title: t("Pessoas") }, C.iconeWebc("b-pessoas"), el("span", { class: "numero" }, `${s.pessoas}/${s.max}`))),
+        el("div", { class: "webc-item-info" }, el("span", { class: "nome", translate: "no" }, s.nome)),
+        // o cartão inteiro é o botão de entrar
+        el("button", { class: "entrar", type: "button", "data-ctx": "sala", disabled: fechada, "aria-label": fechada ? t("{nome}: cheia", { nome: s.nome }) : t("Entrar na sala {nome}", { nome: s.nome }),
+          onclick: () => entrarNa(s).catch(LNUX.erro) }, el("span", { class: "entrar-texto" }, fechada ? t("Cheia") : t("Entrar"))));
     }
     /** A lista com a busca e o filtro (com vagas, sem senha, a ordem). */
     function filtradas() {
@@ -264,7 +267,7 @@
       grade.replaceChildren(...l.map((s) => cartao(s)));
       vazio.hidden = !!l.length;
       vazio.replaceChildren(el("p", { style: { margin: 0 } }, lista.salas.length ? "Nenhuma sala com esse filtro." : "Nenhuma sala pública aberta agora."),
-        el("p", { class: "fraco", style: { margin: 0 } }, lista.criar ? "Crie a sua: ＋ Criar sala." : "Peça o link de uma sala a quem criou."));
+        el("p", { class: "fraco", style: { margin: 0 } }, lista.criar ? "Crie a sua no ＋ do alto (Criar sala)." : "Peça o link de uma sala a quem criou."));
     }
     function desenharFiltro() {
       if (filtro.hidden) return;
@@ -302,7 +305,7 @@
       try {
         const s = await C.Sala.consultar(c);
         convite.hidden = false;
-        convite.replaceChildren(el("div", { class: "lnux-rotulo" }, "A sala do seu link"), el("div", { class: "salas-grade" }, cartao(s, true)));
+        convite.replaceChildren(el("div", { class: "lnux-rotulo" }, "A sala do seu link"), el("div", { class: "salas-grade webc-grade" }, cartao(s, true)));
       } catch (e) {
         convite.hidden = false;
         convite.replaceChildren(el("p", { class: "fraco", style: { margin: 0 } }, "A sala do seu link não está mais aberta (quem criou fechou, ou o servidor foi reiniciado). Veja as outras abaixo."));

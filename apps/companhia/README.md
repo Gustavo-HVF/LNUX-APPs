@@ -55,9 +55,13 @@ pisca na tela).
 - **Widgets**: a pessoa escolhe o que fica no seu início — relógio, salas abertas, novos na loja, amigos, meus salvos
   e um bloco de notas. ✕ tira, as setas mudam a ordem; ficam guardados neste navegador (`js/widgets.js`).
 - **Novidades**: o que chegou na loja, as salas novas e o que mudou no WEBC.
-- **Loja** e **Sala**: o mesmo molde — o título grande, a **pesquisa**, o **filtro** (a ordem e as opções) e os
-  cartões. A Sala tem ainda a personagem com que você entra, o link de uma sala privada e **＋ Criar sala** (o nome
-  vem da tela de entrar; a loja fica na página Loja).
+- **Loja** e **Sala**: o mesmo molde — o título grande à esquerda e, à direita, **cinco bolinhas pretas**, cada uma
+  com um desenho; passando o mouse, a bolinha se estica e diz o nome. Na Loja: **Pesquisar** (a lupa vira a caixa de
+  texto), **Categoria** (personagens, mapas ou animações), **Filtro** (a ordem, os salvos e os #), **Sketchfab** e
+  **Publicar**. Na Sala: **Pesquisar**, **Filtro**, **Sua personagem** (com que você entra), **Entrar pelo link** (de
+  uma sala privada) e **Criar sala** (o nome vem da tela de entrar). Embaixo, os **cartões altos**: a imagem (a
+  personagem, o mapa ou a miniatura da sala) ocupa o cartão e o **nome** fica no canto de baixo, à esquerda; no alto,
+  as curtidas e os downloads (na loja) ou quantas pessoas e o cadeado (na sala). Na sala, um clique no cartão entra.
 - **Perfil**: a **capa** (o banner) e a **foto** redonda em cima; descendo, a **bio**, os **salvos** (os mapas,
   personagens e animações que a pessoa salvou na loja) e os **amigos**. No seu perfil, *Editar perfil* e os pedidos
   de amizade; no dos outros, *Adicionar amigo* (pedido → aceitar → amigos; dá para desfazer).

@@ -122,6 +122,8 @@ function png(w, h, [r, g, b]) {
 
     // ── a Ana cria a conta pela lista de salas ──
     await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
+    await ana.pagina.waitForSelector(".salas #sala-personagem", { timeout: 30000 });
+    if (await ana.ev(() => document.querySelector(".salas #sala-personagem").getAttribute("aria-expanded") !== "true")) await ana.pagina.click(".salas #sala-personagem"); // a bolinha "Sua personagem" abre a conta e a personagem
     await ana.pagina.waitForSelector(".salas #conta-abrir-criar", { timeout: 30000 });
     await ana.pagina.click("#conta-abrir-criar");
     await ana.pagina.waitForSelector("#conta-criar");
@@ -215,7 +217,7 @@ function png(w, h, [r, g, b]) {
     const codigoSala = await ana.ev(() => window.Companhia.sala.codigo);
     await dono.ev(() => { window.Companhia.janelaSala(); }); // (sem esperar a lista fechar)
     await dono.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigoSala}"]`, { timeout: 30000 });
-    ok(await dono.ev((c) => /por Ana Clara/.test(document.querySelector(`.cartao-sala[data-codigo="${c}"]`).textContent), codigoSala), "na lista, a sala aparece como criada pela conta (\"por Ana Clara\")");
+    ok(await dono.ev((c) => /por Ana Clara/.test((document.querySelector(`.cartao-sala[data-codigo="${c}"]`).textContent + " " + document.querySelector(`.cartao-sala[data-codigo="${c}"]`).title)), codigoSala), "na lista, a sala aparece como criada pela conta (\"por Ana Clara\")");
     await dono.pagina.click(`.cartao-sala[data-codigo="${codigoSala}"] .entrar`);
     await dono.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     await dono.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].conta, null, { timeout: 20000 });
@@ -267,6 +269,8 @@ function png(w, h, [r, g, b]) {
     await ana.ev(() => window.Companhia.sala.fechar()); // quem criou fecha a sala (para os outros testes começarem sem ela)
     await ana.ev(() => C.contas.sair());
     await ana.ev(() => { window.Companhia.janelaSala(); });
+    await ana.pagina.waitForSelector(".salas #sala-personagem", { timeout: 30000 });
+    if (await ana.ev(() => document.querySelector(".salas #sala-personagem").getAttribute("aria-expanded") !== "true")) await ana.pagina.click(".salas #sala-personagem"); // a bolinha "Sua personagem" abre a conta e a personagem
     await ana.pagina.waitForSelector(".salas #conta-abrir-entrar");
     await ana.pagina.click("#conta-abrir-entrar");
     await ana.pagina.fill('.janela-conta input[aria-label="E-mail"]', "ana@exemplo.com");
