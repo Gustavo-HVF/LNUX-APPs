@@ -51,10 +51,12 @@
     const idioma = el("button", { type: "button", class: "webc-icone webc-idioma", id: "webc-idioma", "aria-label": "Idioma", title: "Idioma", onclick: (e) => menuIdioma(e.currentTarget) },
       C.iconeWebc("globo"), el("span", { class: "webc-idioma-curto" }));
     const eu = el("button", { type: "button", class: "webc-eu", id: "webc-eu", "aria-haspopup": "true", onclick: (e) => menuEu(e.currentTarget) });
+    const buscar = el("button", { type: "button", class: "webc-icone", id: "webc-buscar", title: "Pesquisar por alguém", "aria-label": "Pesquisar por alguém", "aria-haspopup": "dialog",
+      onclick: (e) => buscaDePessoas(e.currentTarget) }, C.iconeWebc("busca"));
     return el("header", { class: "webc-topo" },
       el("button", { type: "button", class: "webc-logo", "aria-label": "WEBC — início", title: "Início", onclick: () => ir("inicio") }, C.logoWebc(46)),
       el("nav", { class: "webc-nav", "aria-label": "Páginas" }, ["loja", "sala", "perfil"].map((p) => el("button", { type: "button", "data-ir": p, onclick: () => ir(p) }, { loja: "Loja", sala: "Sala", perfil: "Perfil" }[p]))),
-      el("div", { class: "webc-acoes" }, tema, el("span", { class: "webc-separador", "aria-hidden": "true" }), idioma, eu));
+      el("div", { class: "webc-acoes" }, buscar, tema, el("span", { class: "webc-separador", "aria-hidden": "true" }), idioma, eu));
   }
   function desenharEu() {
     if (!estado.raiz) return;
@@ -99,6 +101,66 @@
       conta ? "-" : null,
       conta ? { id: "sair", rotulo: t("Sair da conta"), perigo: true, acao: () => C.contas.sair() } : null,
     ]);
+  }
+
+  // ── pesquisar por alguém ─────────────────────────────────────────────
+
+  /**
+   * O cartão preto de pesquisar por alguém (embaixo do botão da lupa): a pesquisa com a linha embaixo e a lista com a foto
+   * redonda e o nome. Um clique na pessoa abre o perfil dela; o botão ao lado manda o pedido de amizade.
+   */
+  function buscaDePessoas(botao) {
+    const velho = document.querySelector(".busca-pessoas");
+    if (velho) { velho.fechar(); if (velho.dono === botao) return; }
+    const campo = el("input", { type: "search", class: "busca-pessoas-campo", id: "busca-pessoas-campo", placeholder: t("pesquisa por alguém"), "aria-label": t("Pesquisar por alguém"),
+      autocomplete: "off", spellcheck: "false", maxlength: 30 });
+    const lista = el("div", { class: "busca-pessoas-lista", role: "list", "aria-live": "polite" });
+    const caixa = el("div", { class: "busca-pessoas", role: "dialog", "aria-label": t("Pesquisar por alguém") },
+      el("label", { class: "busca-pessoas-linha" }, C.iconeWebc("busca"), campo), lista);
+    caixa.dono = botao;
+    let espera = 0, controle = 0;
+    const dica = (texto) => lista.replaceChildren(el("p", { class: "busca-pessoas-dica" }, texto));
+    const amizade = (p) => {
+      const eu = C.contas && C.contas.eu;
+      if (!eu || p.relacao === "eu") return null;
+      const [rotulo, acao] = { amigo: [t("Já são amigos"), null], enviado: [t("Pedido enviado"), null], recebido: [t("Aceitar amizade"), "aceitar"] }[p.relacao] || [t("Adicionar amigo"), "pedir"];
+      const b = el("button", { type: "button", class: "busca-pessoas-amigo", "data-relacao": p.relacao || "", "aria-label": `${rotulo}: ${p.nome}`, title: rotulo, disabled: !acao,
+        onclick: async (e) => {
+          e.stopPropagation();
+          try { const r = await C.contas.amizade(acao, p.id); p.relacao = r.relacao; b.replaceWith(amizade(p) || ""); LNUX.aviso(r.relacao === "amigo" ? t("Agora você e {nome} são amigos.", { nome: p.nome }) : t("Pedido de amizade enviado para {nome}.", { nome: p.nome }), "ok"); }
+          catch (err) { LNUX.erro(err); }
+        } });
+      b.innerHTML = p.relacao === "amigo" ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></svg>'
+        : p.relacao === "enviado" ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" d="M12 7.5V12l3 2"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>';
+      return b;
+    };
+    async function procurar() {
+      const q = campo.value.trim(), minha = ++controle;
+      if (!q) { dica(t("Digite o nome de alguém.")); return; }
+      let r;
+      try { r = await C.contas.buscar(q); } catch (e) { if (minha === controle) dica(e.message); return; }
+      if (minha !== controle) return; // já digitou outra coisa
+      if (!r.pessoas.length) { dica(t("Ninguém com esse nome.")); return; }
+      lista.replaceChildren(...r.pessoas.map((p) => el("div", { class: "busca-pessoas-pessoa", role: "listitem", "data-id": p.id },
+        el("button", { type: "button", class: "busca-pessoas-abrir", onclick: () => { caixa.fechar(); ir("perfil", { id: p.id }); } },
+          C.fotoDaConta(p, 56), el("span", { class: "busca-pessoas-nome", translate: "no" }, p.nome), C.selosDeTitulos ? C.selosDeTitulos(p.titulos, true) : null),
+        amizade(p))), r.mais ? el("p", { class: "busca-pessoas-dica" }, t("Tem mais gente: digite mais letras do nome.")) : null);
+    }
+    campo.addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(procurar, 250); });
+    campo.addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(espera); procurar(); } });
+    const fora = (e) => { if (!caixa.contains(e.target) && !botao.contains(e.target)) caixa.fechar(); };
+    const tecla = (e) => { if (e.key === "Escape") { e.stopPropagation(); caixa.fechar(); botao.focus(); } };
+    caixa.fechar = () => { clearTimeout(espera); controle++; caixa.remove(); botao.setAttribute("aria-expanded", "false"); document.removeEventListener("pointerdown", fora, true); document.removeEventListener("keydown", tecla, true); };
+    document.body.append(caixa);
+    botao.setAttribute("aria-expanded", "true");
+    const r = botao.getBoundingClientRect();
+    caixa.style.top = Math.round(r.bottom + 10) + "px";
+    caixa.style.right = "clamp(12px, 2.5vw, 32px)"; // no lado direito da tela, como no desenho
+    setTimeout(() => { document.addEventListener("pointerdown", fora, true); document.addEventListener("keydown", tecla, true); }, 0);
+    if (!(C.contas && C.contas.publico && C.contas.publico.contas)) { dica(t("Este servidor não tem contas.")); campo.disabled = true; return; }
+    dica(t("Digite o nome de alguém."));
+    campo.focus();
   }
 
   // ── as páginas e as transições ───────────────────────────────────────
@@ -169,6 +231,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Pesquisar por alguém e as bolinhas em cima das personagens: adicionar amigo, ver perfil e chat privado.",
     "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.",
     "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.",
     "Mapas do Sketchfab na loja (com o crédito de quem fez) e mapas com movimento que tocam dentro do jogo.",
@@ -374,7 +437,7 @@
       C.aoMudarIdioma(() => { desenharEu(); desenharFaixa(); if (estado.pagina) ir(estado.pagina, { ...estado.opcoes, semTransicao: true }); });
       desenharEu();
     },
-    ir, mostrar, esconder, desenharFaixa, menuIdioma,
+    ir, mostrar, esconder, desenharFaixa, menuIdioma, buscaDePessoas,
     get pagina() { return estado.pagina; },
     get visivel() { return !!(estado.raiz && !estado.raiz.hidden); },
     verPerfil: (id) => ir("perfil", { id }),

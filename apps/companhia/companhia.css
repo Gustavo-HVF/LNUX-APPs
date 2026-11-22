@@ -1026,3 +1026,73 @@
   .sketchfab-versao-acoes { grid-column: 1 / -1; justify-content: stretch; }
   .sketchfab-versao-acoes .lnux-botao { flex: 1 1 auto; }
 }
+
+/* ── Pesquisar por alguém (o cartão preto embaixo da lupa do cabeçalho) ── */
+.busca-pessoas { position: fixed; z-index: 1800; width: min(400px, calc(100vw - 24px)); max-height: min(72vh, 560px); display: flex; flex-direction: column; gap: 14px;
+  padding: 22px 20px 18px; border-radius: 24px; background: #000; color: #fff; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); animation: lnux-aparecer .14s ease-out; }
+.busca-pessoas-linha { display: flex; align-items: center; gap: 10px; margin: 0 6px; padding: 4px 2px 8px; border-bottom: 2.5px solid #fff; color: #9a9a9a; }
+.busca-pessoas-linha .webc-svg { display: inline-flex; flex: none; }
+.busca-pessoas-campo { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #fff; font: inherit; font-size: 1.25rem; padding: 2px 0; }
+.busca-pessoas-campo::placeholder { color: #9a9a9a; }
+.busca-pessoas-campo::-webkit-search-cancel-button { filter: invert(1); }
+.busca-pessoas-lista { overflow-y: auto; display: grid; gap: 4px; padding: 2px; }
+.busca-pessoas-dica { margin: 6px 8px; color: #9a9a9a; font-size: .92rem; }
+.busca-pessoas-pessoa { display: flex; align-items: center; gap: 8px; border-radius: 18px; }
+.busca-pessoas-pessoa:hover, .busca-pessoas-pessoa:focus-within { background: rgba(255, 255, 255, .09); }
+.busca-pessoas-abrir { flex: 1; min-width: 0; display: flex; align-items: center; gap: 16px; background: none; border: 0; color: #fff; font: inherit; text-align: left; padding: 8px; border-radius: 18px; cursor: pointer; }
+.busca-pessoas-abrir:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.busca-pessoas-abrir .foto-conta { flex: none; }
+.busca-pessoas-nome { font-size: 1.3rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.busca-pessoas-amigo { flex: none; width: 38px; height: 38px; margin-right: 8px; display: grid; place-items: center; padding: 8px; border-radius: 50%; background: #fff; color: #000; border: 2px solid #fff; cursor: pointer; }
+.busca-pessoas-amigo svg { width: 100%; height: 100%; }
+.busca-pessoas-amigo:hover:not(:disabled), .busca-pessoas-amigo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.busca-pessoas-amigo:disabled { background: transparent; color: #fff; cursor: default; opacity: .75; }
+
+/* ── As três bolinhas em cima da personagem de alguém (clicar nela, dentro do jogo) ── */
+.pessoa-bolhas { position: fixed; left: 0; top: 0; z-index: 30; width: 0; height: 0; pointer-events: none; }
+html[data-webc="site"] .pessoa-bolhas, html[data-webc="site"] .privados { display: none; }
+.pessoa-bolha { --tam: calc(46px * var(--webc-escala, 1)); position: absolute; pointer-events: auto; height: var(--tam); min-width: var(--tam); margin: calc(var(--tam) / -2) 0 0 calc(var(--tam) / -2);
+  display: flex; align-items: center; padding: 0; border-radius: calc(var(--tam) / 2); background: #fff; color: #000; border: 2.5px solid #000; box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+  font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; transition: transform .18s ease, opacity .18s ease; transform-origin: calc(var(--tam) / 2) 50%; }
+.pessoa-bolhas.entrando .pessoa-bolha { transform: scale(.3); opacity: 0; }
+.pessoa-bolha-icone { flex: none; width: calc(var(--tam) - 5px); height: calc(var(--tam) - 5px); display: grid; place-items: center; padding: calc(var(--tam) * .2); }
+.pessoa-bolha-texto { max-width: 0; overflow: hidden; opacity: 0; font-size: calc(.95rem * var(--webc-escala, 1)); transition: max-width .22s ease, opacity .18s ease, padding .22s ease; }
+.pessoa-bolha:hover, .pessoa-bolha:focus-visible { z-index: 2; outline: none; }
+.pessoa-bolha:focus-visible { box-shadow: 0 0 0 3px #fff, 0 0 0 5.5px #000; }
+.pessoa-bolha:hover .pessoa-bolha-texto, .pessoa-bolha:focus-visible .pessoa-bolha-texto { max-width: 220px; opacity: 1; padding-right: 16px; }
+.pessoa-bolha[aria-disabled="true"] { color: #8a8a8a; border-color: #8a8a8a; cursor: not-allowed; }
+@media (hover: none) { /* no celular não há "passar por cima": os nomes já aparecem */
+  .pessoa-bolha .pessoa-bolha-texto { max-width: 220px; opacity: 1; padding-right: 14px; }
+}
+html[data-reduzir] .pessoa-bolha, html[data-reduzir] .pessoa-bolha-texto { transition: none; }
+@media (prefers-reduced-motion: reduce) { .pessoa-bolha, .pessoa-bolha-texto { transition: none; } }
+
+/* ── O chat privado (as janelinhas embaixo à direita, acima do bate-papo) ── */
+.privados { position: fixed; z-index: 20; right: clamp(10px, 2vw, 24px); bottom: calc(96px * var(--webc-escala, 1)); display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  max-height: calc(100vh - 170px); pointer-events: none; }
+.privados > * { pointer-events: auto; }
+.privado-pedido { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: min(330px, calc(100vw - 24px)); padding: 12px 14px; border-radius: 18px;
+  background: #000; color: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); animation: lnux-aparecer .16s ease-out; }
+.privado-pedido p { flex: 1; min-width: 150px; margin: 0; }
+.privado-pedido-botoes { display: flex; gap: 8px; margin-left: auto; }
+.privado-janela { width: min(320px, calc(100vw - 24px)); display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: var(--panel, #fff); color: var(--text, #111);
+  border: 2px solid #000; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font-size: calc(1rem * var(--webc-papo-escala, 1)); }
+.privado-topo { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 8px; background: #000; color: #fff; }
+.privado-quem { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; background: none; border: 0; color: inherit; font: inherit; font-weight: 700; cursor: pointer; padding: 2px; text-align: left; }
+.privado-quem > span:not(.foto-conta) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.privado-contador { min-width: 20px; padding: 1px 6px; border-radius: 10px; background: #fff; color: #000; font-size: .8rem; text-align: center; }
+.privado-botao { flex: none; width: 30px; height: 30px; padding: 6px; display: grid; place-items: center; border-radius: 50%; border: 0; background: none; color: #fff; cursor: pointer; }
+.privado-botao:hover, .privado-botao:focus-visible, .privado-quem:focus-visible { background: rgba(255, 255, 255, .16); outline: none; }
+.privado-botao .pessoa-bolha-icone, .privado-enviar .pessoa-bolha-icone { width: 100%; height: 100%; padding: 0; }
+.privado-estado { margin: 0; padding: 8px 12px; font-size: .9em; opacity: .75; border-bottom: 1px solid var(--border, #ddd); }
+.privado-mensagens { height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.privado-msg { max-width: 85%; padding: 7px 11px; border-radius: 14px; overflow-wrap: anywhere; line-height: 1.35; }
+.privado-msg.eu { align-self: flex-end; background: #000; color: #fff; border-bottom-right-radius: 4px; }
+.privado-msg.ela { align-self: flex-start; background: var(--hover, #eee); border-bottom-left-radius: 4px; }
+.privado-msg.sistema { align-self: center; max-width: 100%; text-align: center; font-size: .85em; opacity: .7; padding: 2px 6px; }
+.privado-escrever { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border, #ddd); }
+.privado-campo { flex: 1; min-width: 0; }
+.privado-enviar { flex: none; width: 38px; height: 38px; padding: 9px; display: grid; place-items: center; border-radius: 50%; border: 2px solid #000; background: #fff; color: #000; cursor: pointer; }
+.privado-enviar:disabled { opacity: .45; cursor: default; }
+.privado-janela.minimizada .privado-estado, .privado-janela.minimizada .privado-mensagens, .privado-janela.minimizada .privado-escrever { display: none; }
+@media (max-width: 760px) { .privados { bottom: calc(150px * var(--webc-escala, 1)); } .privado-mensagens { height: 150px; } }

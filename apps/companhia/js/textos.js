@@ -927,3 +927,35 @@
     "Para as pessoas criarem conta, configure o e-mail do servidor (Conta › Contas e e-mail do servidor).": ["For people to create accounts, set up the server's e-mail (Account › Server accounts and e-mail).", "みんながアカウントを作れるように、サーバーのメールを設定してください（アカウント › サーバーのアカウントとメール）。"],
   });
 })();
+
+// Pesquisar por alguém, as bolinhas em cima das personagens e o chat privado
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Pesquisar por alguém": ["Search for someone", "誰かを検索"], "pesquisa por alguém": ["search for someone", "誰かを検索"],
+    "Digite o nome de alguém.": ["Type someone's name.", "名前を入力してください。"], "Ninguém com esse nome.": ["No one with that name.", "その名前の人はいません。"],
+    "Tem mais gente: digite mais letras do nome.": ["There are more people: type more of the name.", "ほかにもいます。名前をもっと入力してください。"],
+    "Adicionar amigo": ["Add friend", "フレンドに追加"], "Já são amigos": ["Already friends", "フレンドです"], "Pedido enviado": ["Request sent", "申請済み"],
+    "Aceitar amizade": ["Accept friendship", "フレンド申請を承認"], "É você": ["That's you", "あなたです"], "Ver perfil": ["View profile", "プロフィールを見る"],
+    "Chat privado": ["Private chat", "プライベートチャット"], "Abrir o chat privado": ["Open the private chat", "プライベートチャットを開く"],
+    "Chat privado pedido": ["Private chat requested", "プライベートチャットを申請済み"], "Aceitar o chat privado": ["Accept the private chat", "プライベートチャットを承認"],
+    "Opções para {nome}": ["Options for {nome}", "{nome} へのオプション"], "{nome} está jogando sem conta.": ["{nome} is playing without an account.", "{nome} はアカウントなしで遊んでいます。"],
+    "Entre na sua conta para adicionar amigos.": ["Sign in to add friends.", "フレンドを追加するにはログインしてください。"], "Vocês já são amigos.": ["You're already friends.", "すでにフレンドです。"],
+    "O pedido já foi enviado. Espere {nome} aceitar.": ["The request was already sent. Wait for {nome} to accept.", "申請は送信済みです。{nome} の承認を待ってください。"],
+    "Agora você e {nome} são amigos.": ["You and {nome} are now friends.", "{nome} とフレンドになりました。"],
+    "Pedido de amizade enviado para {nome}.": ["Friend request sent to {nome}.", "{nome} にフレンド申請を送りました。"],
+    "Pedido de chat privado enviado para {nome}.": ["Private chat request sent to {nome}.", "{nome} にプライベートチャットを申請しました。"],
+    "Pedido de chat privado": ["Private chat request", "プライベートチャットの申請"], "quer conversar no privado.": ["wants to chat privately.", "がプライベートで話したがっています。"],
+    "Alguém": ["Someone", "誰か"],
+    "Chat privado com {nome}": ["Private chat with {nome}", "{nome} とのプライベートチャット"],
+    "Chat privado com {nome}: só você e {nome} veem estas mensagens.": ["Private chat with {nome}: only you and {nome} see these messages.", "{nome} とのプライベートチャット: このメッセージはあなたと {nome} だけが見られます。"],
+    "Mensagens do chat privado": ["Private chat messages", "プライベートチャットのメッセージ"], "Escreva no privado...": ["Write privately...", "プライベートで書く..."],
+    "Mensagem para {nome}": ["Message to {nome}", "{nome} へのメッセージ"], "Minimizar": ["Minimize", "最小化"],
+    "Fechar o chat privado": ["Close the private chat", "プライベートチャットを閉じる"], "Esperando {nome} aceitar...": ["Waiting for {nome} to accept...", "{nome} の承認を待っています..."],
+    "{nome} fechou o chat privado.": ["{nome} closed the private chat.", "{nome} がプライベートチャットを閉じました。"],
+    "{nome} não aceitou o chat privado.": ["{nome} didn't accept the private chat.", "{nome} はプライベートチャットを承認しませんでした。"],
+    "{nome} saiu da sala.": ["{nome} left the room.", "{nome} がルームを出ました。"],
+    "Pesquisar por alguém e as bolinhas em cima das personagens: adicionar amigo, ver perfil e chat privado.": ["Search for someone, and bubbles over characters: add friend, view profile and private chat.", "誰かを検索、キャラクターの上のバブル: フレンド追加、プロフィール、プライベートチャット。"],
+  });
+})();

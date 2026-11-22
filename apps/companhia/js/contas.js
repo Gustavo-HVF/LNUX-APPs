@@ -85,6 +85,8 @@
     async redefinir(email, codigo, senha) { return C.contas.entrou(await pedir("POST", "redefinir", { json: { email, codigo, senha } })); },
     async apagar(senha) { await pedir("POST", "apagar", { json: { senha } }); this.guardarSessao(""); this.eu = null; this.avisar(); },
     perfil: (id) => pedir("GET", "perfil/" + encodeURIComponent(id)),
+    /** Pesquisar por alguém pelo nome: {pessoas: [{id, nome, foto, cor, titulos, relacao}], mais}. */
+    buscar: (q) => pedir("GET", "buscar", { parametros: { q } }),
     /** O nome está livre? (nenhuma outra conta tem esse nome, sem diferença de acentos e maiúsculas). Sem servidor: livre. */
     async nomeLivre(nome) {
       if (!(await this.disponivel())) return true;

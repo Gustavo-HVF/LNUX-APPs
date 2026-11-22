@@ -399,16 +399,21 @@
   class Sala {
     /**
      * palco: o palco 3D; captura: a captura de movimento (para mandar a pose); aoMudar(), aoMensagem({de, nome, texto, meu});
+     * aoPrivado(estado, anterior) (o chat privado mudou: {recebidos, enviados, abertos} com os ids) e
+     * aoMensagemPrivada({de, para, nome, texto, meu}) (uma mensagem do chat privado: só as duas pessoas a recebem);
      * aparencia(): como estou agora ({avatar: Blob do .vrm vestido, ajuste, ocultas, texturas: {peça: Blob}}), conferido a
      * cada segundo: o que mudou vai para os outros.
      */
-    constructor({ palco, captura, aoMudar, aoMensagem, aparencia }) {
+    constructor({ palco, captura, aoMudar, aoMensagem, aoPrivado, aoMensagemPrivada, aparencia }) {
       this.palco = palco;
       this.captura = captura;
       this.obterAparencia = aparencia || null;
       this.enviando = false;
       this.aoMudar = aoMudar || (() => {});
       this.aoMensagem = aoMensagem || (() => {});
+      this.aoPrivado = aoPrivado || (() => {});
+      this.aoMensagemPrivada = aoMensagemPrivada || (() => {});
+      this.privado = { recebidos: [], enviados: [], abertos: [] }; // o chat privado (os ids de quem)
       this.codigo = null;
       this.info = null;         // {nome, mapa}
       this.eu = null;           // {id, segredo, nome}
@@ -603,9 +608,11 @@
           rem.receber(j);
         }
         for (const [id, rem] of this.remotos) if (!vivos.has(id)) { this.aoMensagem({ sistema: true, texto: C.t("{nome} saiu.", { nome: rem.nome }) }); rem.descartar(); this.remotos.delete(id); this.aoMudar(); }
+        if (r.privado) this.receberPrivado(r.privado);
         for (const m of r.mensagens || []) {
           this.visto = Math.max(this.visto, m.n);
           const meu = m.de === eu.id, rem = this.remotos.get(m.de);
+          if (m.para) { this.aoMensagemPrivada({ de: m.de, para: m.para, nome: m.nome, texto: m.texto, meu }); continue; } // no chat privado: sem balão
           if (rem && !(C.batePapo && C.batePapo.ler().baloes === false)) rem.falar(m.texto); // Opções › Bate-papo: os balões
           this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu, titulo: m.titulo || null });
         }
@@ -658,6 +665,55 @@
       if (!texto || !this.dentro) return;
       await pedir("POST", `${this.codigo}/falar`, { json: { id: this.eu.id, segredo: this.eu.segredo, texto } });
     }
+    /** O chat privado mudou (veio na troca de estado ou na resposta de um pedido): avisa só se mudou. */
+    receberPrivado(p) {
+      const novo = { recebidos: p.recebidos || [], enviados: p.enviados || [], abertos: p.abertos || [] };
+      if (JSON.stringify(novo) === JSON.stringify(this.privado)) return;
+      const anterior = this.privado;
+      this.privado = novo;
+      this.aoPrivado(novo, anterior);
+    }
+    /** O chat privado com alguém da sala: acao = pedir | aceitar | recusar | fechar (fechar também cancela o meu pedido). */
+    async pedirPrivado(acao, para) {
+      if (!this.dentro) throw new Error("Você não está numa sala.");
+      const vez = this.vez, r = await pedir("POST", `${this.codigo}/privado`, { json: { id: this.eu.id, segredo: this.eu.segredo, para, acao } });
+      if (vez === this.vez) this.receberPrivado(r);
+      return r;
+    }
+    /** Uma mensagem no chat privado (só as duas pessoas veem). */
+    async falarPrivado(para, texto) {
+      texto = String(texto || "").trim().slice(0, 300);
+      if (!texto || !this.dentro) return;
+      await pedir("POST", `${this.codigo}/falar`, { json: { id: this.eu.id, segredo: this.eu.segredo, texto, para } });
+    }
+    /**
+     * Quem está neste ponto da tela (x, y em pixels da página): a personagem de outra pessoa mais perto da câmera, ou null.
+     * Confere o retângulo do corpo dela na tela (dos pés à cabeça), que vale para qualquer avatar (até os bem grandes).
+     */
+    pessoaNaTela(x, y) {
+      const p = this.palco;
+      if (!this.dentro || !p || !p.camera) return null;
+      const T = window.THREE, caixa = p.view.getBoundingClientRect(), v = new T.Vector3();
+      let achada = null, perto = Infinity;
+      for (const r of this.remotos.values()) {
+        const pe = this.naTela(r, 0, caixa, v), topo = this.naTela(r, r.altura + 0.1, caixa, v);
+        if (!pe || !topo) continue;
+        const alto = Math.max(12, pe.y - topo.y), largo = Math.max(18, alto * 0.42);
+        if (x < topo.x - largo / 2 || x > topo.x + largo / 2 || y < topo.y || y > pe.y) continue;
+        if (pe.d < perto) { perto = pe.d; achada = r; }
+      }
+      return achada;
+    }
+    /** Onde fica, na página, um ponto da personagem de alguém (a altura em metros acima dos pés). null: atrás da câmera. */
+    naTela(r, altura, caixa = this.palco.view.getBoundingClientRect(), v = new window.THREE.Vector3()) {
+      const cam = this.palco.camera;
+      v.copy(r.grupo.position);
+      v.y += altura;
+      const d = v.distanceTo(cam.position);
+      v.project(cam);
+      if (v.z > 1 || v.z < -1) return null;
+      return { x: caixa.left + (v.x + 1) / 2 * caixa.width, y: caixa.top + (1 - v.y) / 2 * caixa.height, d };
+    }
     /** O meu vídeo na tela: acao = abrir | lugar | pausar | continuar | pular | fechar. Devolve o estado (com "agora", o relógio do servidor). */
     async mandarVideo(acao, dados = {}) {
       if (!this.dentro) throw new Error("Você não está numa sala.");
@@ -673,6 +729,7 @@
       this.codigo = null;
       this.eu = null;
       this.ajusteEnviado = undefined;
+      this.receberPrivado({}); // os chats privados fecham
       for (const r of this.remotos.values()) r.descartar();
       this.remotos.clear();
       if (codigo && eu && !caiu) pedir("POST", `${codigo}/sair`, { json: { id: eu.id, segredo: eu.segredo } }).catch(() => {});

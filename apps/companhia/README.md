@@ -61,6 +61,9 @@ pisca na tela).
 - **Perfil**: a **capa** (o banner) e a **foto** redonda em cima; descendo, a **bio**, os **salvos** (os mapas,
   personagens e animações que a pessoa salvou na loja) e os **amigos**. No seu perfil, *Editar perfil* e os pedidos
   de amizade; no dos outros, *Adicionar amigo* (pedido → aceitar → amigos; dá para desfazer).
+- **Pesquisar por alguém**: a lupa no alto abre um cartão preto à direita, com "pesquisa por alguém" e uma linha
+  embaixo. Digitando parte do nome (sem diferença de acentos e maiúsculas), aparecem as contas: a **foto redonda** e o
+  **nome**. Um clique abre o perfil da pessoa; o botão redondo ao lado manda o pedido de amizade (ou aceita o dela).
 - **Transições**: cada troca de página (entrar numa sala, ir ao perfil, à loja) tem uma transição; e ao entrar numa
   sala aparece a **tela de carregamento** (o logo, o nome da sala e o que está acontecendo: procurando a sala,
   baixando o mapa, preparando a personagem). Com "reduzir movimento" no sistema, as animações somem.
@@ -78,6 +81,13 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
   de uns segundos ela volta ao normal sozinha), e os outros na sala veem. Os desenhos são próprios (SVG, sem emoji).
 - **No canto**, o **bate-papo** (abre e fecha a conversa da sala por cima do jogo; um número mostra as mensagens novas;
   Enter abre, Esc fecha) e o **vídeo numa tela**.
+- **Clicar na personagem de alguém** abre **três bolinhas** em cima dela (do alto para o lado): **Adicionar amigo**,
+  **Ver perfil** e **Chat privado**. São brancas com a borda preta e mostram um desenho; passando o mouse (ou com o
+  foco do teclado), a bolinha se estica e diz o nome da opção (no celular, os nomes já aparecem). Quem joga sem conta
+  não tem perfil nem amigos (essas duas ficam apagadas). Esc ou um clique fora fecha.
+- **Chat privado**: a outra pessoa recebe o pedido ("… quer conversar no privado", Aceitar ou Recusar). Aceito, abre
+  uma janelinha embaixo à direita para cada conversa (minimizar e fechar no alto); as mensagens chegam só às duas
+  pessoas, sem balão em cima da personagem e fora do bate-papo da sala. Fechar (ou sair da sala) encerra a conversa.
 - **Opções** (o ☰ ou o **Esc**): no computador, as categorias numa coluna à esquerda e a escolhida à direita (abre na
   última vista); no celular, os quadrados das categorias e, tocando num, a categoria, com o voltar (o Esc volta aos
   quadrados). Onze categorias em quatro grupos:
