@@ -122,6 +122,8 @@ function png(w, h, [r, g, b]) {
 
     // ── a Ana cria a conta pela lista de salas ──
     await ana.pagina.goto(`${BASE}/apps/companhia/#modo=jogar&pagina=sala`);
+    await ana.pagina.waitForSelector(".salas #sala-personagem", { timeout: 30000 });
+    if (await ana.ev(() => document.querySelector(".salas #sala-personagem").getAttribute("aria-expanded") !== "true")) await ana.pagina.click(".salas #sala-personagem"); // a bolinha "Sua personagem" abre a conta e a personagem
     await ana.pagina.waitForSelector(".salas #conta-abrir-criar", { timeout: 30000 });
     await ana.pagina.click("#conta-abrir-criar");
     await ana.pagina.waitForSelector("#conta-criar");
@@ -267,6 +269,8 @@ function png(w, h, [r, g, b]) {
     await ana.ev(() => window.Companhia.sala.fechar()); // quem criou fecha a sala (para os outros testes começarem sem ela)
     await ana.ev(() => C.contas.sair());
     await ana.ev(() => { window.Companhia.janelaSala(); });
+    await ana.pagina.waitForSelector(".salas #sala-personagem", { timeout: 30000 });
+    if (await ana.ev(() => document.querySelector(".salas #sala-personagem").getAttribute("aria-expanded") !== "true")) await ana.pagina.click(".salas #sala-personagem"); // a bolinha "Sua personagem" abre a conta e a personagem
     await ana.pagina.waitForSelector(".salas #conta-abrir-entrar");
     await ana.pagina.click("#conta-abrir-entrar");
     await ana.pagina.fill('.janela-conta input[aria-label="E-mail"]', "ana@exemplo.com");

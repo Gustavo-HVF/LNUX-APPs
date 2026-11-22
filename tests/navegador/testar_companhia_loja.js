@@ -128,6 +128,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     // o mundo e a animação
     await visita.ev(() => { window.Companhia.abrirLoja(); });
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
+    await visita.pagina.click(".loja:not(.salas) .webc-bolha-busca"); // a lupa (a bolinha) abre a caixa de texto
     await visita.pagina.fill(".loja:not(.salas) .loja-busca", "praça");
     ok(await visita.ev(() => [...document.querySelectorAll(".loja:not(.salas) .cartao-loja .nome")].map((n) => n.textContent).join() === "Praça de teste" && document.querySelector(".loja:not(.salas) .loja-aba.ativa").dataset.tipo === "mundo"), "a busca acha o mapa pelo nome (e vai sozinha para a aba Mapas)");
     await visita.pagina.click(".loja:not(.salas) .cartao-loja");

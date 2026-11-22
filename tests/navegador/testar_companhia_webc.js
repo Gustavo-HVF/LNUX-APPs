@@ -154,6 +154,7 @@ function lerEmail(bruto) {
     // ── a loja: as três categorias, a pesquisa pelo # e curtir só com conta ──
     const loja = await visita.ev(() => ({ titulo: document.querySelector(".webc-loja .webc-painel-titulo").textContent, abas: [...document.querySelectorAll(".webc-loja .loja-aba")].map((a) => a.dataset.tipo).join() }));
     ok(loja.titulo === "STORE" && loja.abas.split(",").sort().join() === "animacao,mundo,personagem", `a loja tem as três categorias: mapas, personagens e animações (título "${loja.titulo}")`);
+    await visita.pagina.click(".webc-loja .webc-bolha-busca"); // a lupa (a bolinha) abre a caixa de texto
     await visita.pagina.fill(".webc-loja .loja-busca", "fnaf");
     const fnaf = await visita.ev(() => [...document.querySelectorAll(".webc-loja .cartao-loja .nome")].map((n) => n.textContent));
     ok(fnaf.join() === "Urso animatrônico", "quem pesquisa \"fnaf\" acha o urso (que tem #fnaf, mesmo sem fnaf no nome)");
@@ -191,6 +192,7 @@ function lerEmail(bruto) {
     ok(await ana.ev((id) => C.contas.salvou(id), urso.id), "\"Salvar no perfil\" guarda o urso na conta da Ana");
     // baixar: a animação (usar conta como baixar); a mesma conta não conta duas vezes
     await ana.pagina.click(".webc-loja .loja-voltar");
+    await ana.pagina.click(".webc-loja #loja-categoria"); // a bolinha da categoria abre as três
     await ana.pagina.click('.webc-loja .loja-aba[data-tipo="animacao"]');
     await ana.pagina.click(`.webc-loja .cartao-loja[data-id="${aceno.id}"]`);
     await ana.pagina.waitForSelector("#loja-usar", { timeout: 20000 });

@@ -156,7 +156,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await bia.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     await bia.pagina.click('.webc-cartao[data-ir="sala"]');
     await bia.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigo}"]`, { timeout: 30000 });
-    const naLista = await bia.ev((c) => { const k = document.querySelector(`.cartao-sala[data-codigo="${c}"]`); return { texto: k.textContent, cadeado: !!k.querySelector(".selo-cadeado"), img: !!k.querySelector(".capa img"),
+    const naLista = await bia.ev((c) => { const k = document.querySelector(`.cartao-sala[data-codigo="${c}"]`); return { texto: k.textContent + " " + k.title, cadeado: !!k.querySelector(".selo-cadeado"), img: !!k.querySelector(".capa img"),
       criar: !!document.querySelector("#sala-criar") && !document.querySelector("#sala-criar").hidden, ponte: LNUX.ponte.disponivel, dono: !document.querySelector(".salas .loja-dono").hidden }; }, codigo);
     ok(/Praça da Ana/.test(naLista.texto) && /Venha passear/.test(naLista.texto) && /1\/4/.test(naLista.texto) && /por Ana/.test(naLista.texto) && naLista.cadeado && naLista.img,
       "a Bia vê a sala na lista: nome, descrição, quem criou, 1/4 pessoas, o cadeado da senha e a miniatura do cenário");
