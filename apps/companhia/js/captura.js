@@ -124,8 +124,6 @@
      * imagem}]}, no formato do Worker. Serve para os testes e para ligar outro rastreador. desligar() encerra.
      */
     simular(resultado) { this.simulando = true; this.processar(resultado); }
-    /** Quem mais quer os pontos crus de cada quadro (os minijogos): f(resultado). Devolve a função que para de ouvir. */
-    ouvir(f) { (this.ouvintes = this.ouvintes || new Set()).add(f); return () => this.ouvintes.delete(f); }
 
     // ── ligar e desligar ────────────────────────────────────────────
     async ligar() {
@@ -300,7 +298,6 @@
         if (r.maos && r.maos.length) { this.resolverMaos(r.maos, r.corpo); this.visto.maos = agora; }
         if (r.rosto) { this.resolverRosto(r.rosto); this.visto.rosto = agora; }
       }
-      if (this.ouvintes) for (const f of this.ouvintes) { try { f(r); } catch (e) { console.error(e); } }
       this.achados = { rosto: !!r.rosto, corpo: !!r.corpo, maos: (r.maos || []).length };
       if (this.rotulo) this.rotulo.textContent = C.t("{n} qps", { n: m.fps || "…" }) + (r.rosto ? " · " + C.t("rosto") : "") + (r.corpo ? " · " + C.t("corpo") : "") + (r.maos && r.maos.length ? " · " + C.t(r.maos.length > 1 ? "{n} mãos" : "{n} mão", { n: r.maos.length }) : "");
       this.desenharPrevia(r);

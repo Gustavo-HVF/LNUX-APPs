@@ -542,7 +542,7 @@
 @media (prefers-reduced-motion: reduce) { .webc-pagina, .webc-pagina.webc-entra, .webc-pagina.webc-sai { transition: none; transform: none; } }
 
 /* ── o início: três cartões ── */
-.webc-cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(14px, 2vw, 28px); min-height: calc(100vh - 170px); min-height: calc(100dvh - 170px); }
+.webc-cartoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(14px, 2vw, 28px); min-height: calc(100vh - 170px); min-height: calc(100dvh - 170px); }
 .webc-cartao { display: grid; align-content: center; justify-items: center; gap: 14px; padding: 28px 18px; border-radius: 48px; border: 0; background: var(--panel); color: var(--text); cursor: pointer;
   font: inherit; box-shadow: var(--shadow); transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s; position: relative; overflow: hidden; }
 .webc-cartao::after { content: ""; position: absolute; inset: auto -20% -60% -20%; height: 70%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent); opacity: 0; transition: opacity .3s; }
@@ -550,9 +550,8 @@
 .webc-cartao:hover::after, .webc-cartao:focus-visible::after { opacity: 1; }
 .webc-cartao:active { transform: scale(.98); }
 .webc-cartao-icone svg { width: clamp(56px, 7vw, 88px); height: auto; }
-.webc-cartao-titulo { font-weight: 800; font-size: clamp(2.1rem, 4.4vw, 4.4rem); letter-spacing: .01em; line-height: 1; }
+.webc-cartao-titulo { font-weight: 800; font-size: clamp(2.4rem, 6vw, 5.2rem); letter-spacing: .01em; line-height: 1; }
 .webc-cartao-sub { color: var(--muted); font-size: clamp(.95rem, 1.2vw, 1.15rem); text-align: center; }
-@media (max-width: 1100px) { .webc-cartoes { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .webc-cartoes { grid-template-columns: 1fr; min-height: 0; } .webc-cartao { border-radius: 32px; min-height: 30vh; } }
 
 /* ── a loja e a sala (o painel branco grande) ── */
@@ -1028,82 +1027,72 @@
   .sketchfab-versao-acoes .lnux-botao { flex: 1 1 auto; }
 }
 
-/* ── JOGOS: a página dos minijogos ── */
-.mj-pagina { display: grid; gap: 16px; align-content: start; padding: clamp(18px, 3vw, 44px) clamp(18px, 3vw, 48px) 60px; }
-.mj-controle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 4px; }
-.mj-controle small { flex-basis: 100%; }
-.mj-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.mj-jogo { display: grid; grid-template-rows: auto 1fr; border-radius: 26px; overflow: hidden; background: var(--panel); border: 2px solid var(--borda); }
-.mj-jogo-capa { display: grid; place-items: center; height: 120px; color: #fff; background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mj-cor) 60%, #fff), var(--mj-cor) 60%, color-mix(in srgb, var(--mj-cor) 70%, #000)); }
-.mj-jogo-capa svg { width: 76px; height: 76px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .25)); }
-.mj-jogo-info { display: grid; align-content: start; gap: 10px; padding: 14px 16px 16px; }
-.mj-jogo-info h2 { margin: 0; font-size: 1.35rem; }
-.mj-jogo-info p { margin: 0; }
-.mj-opcao { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.mj-opcao > span { min-width: 74px; }
-.mj-jogar { justify-self: start; min-width: 120px; }
+/* ── Pesquisar por alguém (o cartão preto embaixo da lupa do cabeçalho) ── */
+.busca-pessoas { position: fixed; z-index: 1800; width: min(400px, calc(100vw - 24px)); max-height: min(72vh, 560px); display: flex; flex-direction: column; gap: 14px;
+  padding: 22px 20px 18px; border-radius: 24px; background: #000; color: #fff; box-shadow: 0 18px 50px rgba(0, 0, 0, .45); animation: lnux-aparecer .14s ease-out; }
+.busca-pessoas-linha { display: flex; align-items: center; gap: 10px; margin: 0 6px; padding: 4px 2px 8px; border-bottom: 2.5px solid #fff; color: #9a9a9a; }
+.busca-pessoas-linha .webc-svg { display: inline-flex; flex: none; }
+.busca-pessoas-campo { flex: 1; min-width: 0; background: none; border: 0; outline: none; color: #fff; font: inherit; font-size: 1.25rem; padding: 2px 0; }
+.busca-pessoas-campo::placeholder { color: #9a9a9a; }
+.busca-pessoas-campo::-webkit-search-cancel-button { filter: invert(1); }
+.busca-pessoas-lista { overflow-y: auto; display: grid; gap: 4px; padding: 2px; }
+.busca-pessoas-dica { margin: 6px 8px; color: #9a9a9a; font-size: .92rem; }
+.busca-pessoas-pessoa { display: flex; align-items: center; gap: 8px; border-radius: 18px; }
+.busca-pessoas-pessoa:hover, .busca-pessoas-pessoa:focus-within { background: rgba(255, 255, 255, .09); }
+.busca-pessoas-abrir { flex: 1; min-width: 0; display: flex; align-items: center; gap: 16px; background: none; border: 0; color: #fff; font: inherit; text-align: left; padding: 8px; border-radius: 18px; cursor: pointer; }
+.busca-pessoas-abrir:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.busca-pessoas-abrir .foto-conta { flex: none; }
+.busca-pessoas-nome { font-size: 1.3rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.busca-pessoas-amigo { flex: none; width: 38px; height: 38px; margin-right: 8px; display: grid; place-items: center; padding: 8px; border-radius: 50%; background: #fff; color: #000; border: 2px solid #fff; cursor: pointer; }
+.busca-pessoas-amigo svg { width: 100%; height: 100%; }
+.busca-pessoas-amigo:hover:not(:disabled), .busca-pessoas-amigo:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.busca-pessoas-amigo:disabled { background: transparent; color: #fff; cursor: default; opacity: .75; }
 
-/* ── a tela de um minijogo (por cima de tudo) ── */
-html.com-minijogo, html.com-minijogo body { overflow: hidden; }
-.minijogo { position: fixed; inset: 0; z-index: 1700; /* acima do site e da loja; abaixo das janelas e avisos do LNUX (2000+) */ background: #0d1020; color: #fff; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
-.mj-tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: crosshair; }
-.mj-topo { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(rgba(10, 14, 30, .72), rgba(10, 14, 30, 0)); pointer-events: none; }
-.mj-topo > * { pointer-events: auto; }
-.mj-nome { font-size: 1.05rem; letter-spacing: .02em; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
-.mj-espaco { flex: 1; }
-.mj-placar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.mj-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .16); backdrop-filter: blur(4px); font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mj-chip.forte { background: #ffd23f; color: #2a2100; }
-.mj-camera-estado { font-size: .85rem; opacity: .9; max-width: 34ch; }
-.mj-botao-camera[aria-pressed="true"] { background: #22c55e; color: #04220f; border-color: transparent; }
-.mj-aviso { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%) scale(.8); padding: 10px 26px; border-radius: 22px; font-size: clamp(1.4rem, 4.2vw, 3rem); font-weight: 900; letter-spacing: .02em; text-align: center; color: #fff; background: rgba(15, 20, 40, .55); text-shadow: 0 3px 0 rgba(0, 0, 0, .35); opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; max-width: 90vw; }
-.mj-aviso.visivel { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-.mj-aviso.bom { background: rgba(22, 163, 74, .78); }
-.mj-aviso.ruim { background: rgba(220, 38, 38, .72); }
-.mj-dica { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(820px, calc(100% - 24px)); padding: 8px 14px; border-radius: 14px; background: rgba(10, 14, 30, .62); font-size: .9rem; line-height: 1.35; text-align: center; pointer-events: none; }
-.mj-barra { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); width: min(360px, 70vw); height: 18px; border-radius: 999px; background: rgba(255, 255, 255, .2); border: 2px solid rgba(255, 255, 255, .7); overflow: hidden; pointer-events: none; }
-.mj-barra > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #22c55e, #facc15 70%, #ef4444); }
-.mj-barra::after { content: attr(data-rotulo); position: absolute; inset: 0; display: grid; place-items: center; font-size: .72rem; font-weight: 800; color: #111; mix-blend-mode: screen; }
-.mj-pausa { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 24, .6); padding: 16px; }
-.mj-pausa[hidden] { display: none; }
-.mj-cartao { width: min(560px, 100%); max-height: calc(100% - 20px); overflow: auto; padding: 22px; border-radius: 26px; background: var(--panel, #1c2033); color: var(--text, #fff); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); display: grid; gap: 12px; }
-.mj-cartao h2 { margin: 0; font-size: 1.8rem; }
-.mj-fim[data-vitoria="1"] h2 { color: #16a34a; }
-.mj-subtitulo { margin: 0; font-weight: 700; }
-.mj-linhas { margin: 0; padding-left: 18px; }
-.mj-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
-.mj-tabela { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; overflow-x: auto; display: block; }
-.mj-tabela th, .mj-tabela td { padding: 4px 7px; border: 1px solid var(--borda, rgba(255, 255, 255, .2)); text-align: center; }
-.mj-tabela td.abaixo { color: #dc2626; font-weight: 800; }
-.mj-tabela td.acima { color: #2563eb; }
-/* o placar do boliche: os 10 quadros */
-.mj-boliche { display: flex; gap: 2px; background: rgba(255, 255, 255, .92); color: #1b1f33; padding: 3px; border-radius: 10px; }
-.mj-quadro { display: grid; grid-template-rows: auto auto auto; min-width: 38px; text-align: center; border: 1px solid #c9cde0; border-radius: 6px; font-variant-numeric: tabular-nums; }
-.mj-quadro.atual { outline: 2px solid #ffb020; }
-.mj-quadro-n { font-size: .62rem; background: #e7e9f3; }
-.mj-quadro-bolas { display: flex; justify-content: flex-end; }
-.mj-quadro-bolas i { font-style: normal; min-width: 13px; font-size: .74rem; font-weight: 800; border-left: 1px solid #e0e2ec; }
-.mj-quadro-total { font-size: .86rem; min-height: 1.1em; }
-/* o boxe: as barras de vida e o vermelho quando você apanha */
-.mj-vidas { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; min-width: min(640px, 80vw); }
-.mj-vida { display: grid; gap: 3px; }
-.mj-vida.cpu { text-align: right; }
-.mj-vida .barra { height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .2); overflow: hidden; display: flex; }
-.mj-vida.cpu .barra { justify-content: flex-end; }
-.mj-vida .barra i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #22c55e, #a3e635); transition: width .15s; }
-.mj-vida.cpu .barra i { background: linear-gradient(270deg, #ef4444, #fb923c); }
-.mj-vida .barra.folego { height: 6px; }
-.mj-vida .barra.folego i { background: #38bdf8; transition: width .1s; }
-.mj-round { display: grid; text-align: center; font-variant-numeric: tabular-nums; }
-.mj-flash { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px 40px rgba(255, 0, 0, .0); transition: box-shadow .4s; }
-.mj-flash.ativo { animation: mj-flash .45s ease-out; }
-@keyframes mj-flash { from { box-shadow: inset 0 0 160px 60px rgba(255, 0, 0, .7); } to { box-shadow: inset 0 0 160px 40px rgba(255, 0, 0, 0); } }
-.minijogo .captura-previa { left: auto; right: 12px; top: auto; bottom: 64px; width: 200px; z-index: 3; }
-@media (max-width: 640px) {
-  .mj-chip { font-size: .78rem; padding: 3px 8px; }
-  .mj-dica { font-size: .8rem; bottom: 8px; }
-  .mj-quadro { min-width: 26px; }
-  .mj-vidas { min-width: 0; width: 100%; }
-  .minijogo .captura-previa { width: 130px; bottom: 90px; }
+/* ── As três bolinhas em cima da personagem de alguém (clicar nela, dentro do jogo) ── */
+.pessoa-bolhas { position: fixed; left: 0; top: 0; z-index: 30; width: 0; height: 0; pointer-events: none; }
+html[data-webc="site"] .pessoa-bolhas, html[data-webc="site"] .privados { display: none; }
+.pessoa-bolha { --tam: calc(46px * var(--webc-escala, 1)); position: absolute; pointer-events: auto; height: var(--tam); min-width: var(--tam); margin: calc(var(--tam) / -2) 0 0 calc(var(--tam) / -2);
+  display: flex; align-items: center; padding: 0; border-radius: calc(var(--tam) / 2); background: #fff; color: #000; border: 2.5px solid #000; box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+  font: inherit; font-weight: 700; cursor: pointer; white-space: nowrap; transition: transform .18s ease, opacity .18s ease; transform-origin: calc(var(--tam) / 2) 50%; }
+.pessoa-bolhas.entrando .pessoa-bolha { transform: scale(.3); opacity: 0; }
+.pessoa-bolha-icone { flex: none; width: calc(var(--tam) - 5px); height: calc(var(--tam) - 5px); display: grid; place-items: center; padding: calc(var(--tam) * .2); }
+.pessoa-bolha-texto { max-width: 0; overflow: hidden; opacity: 0; font-size: calc(.95rem * var(--webc-escala, 1)); transition: max-width .22s ease, opacity .18s ease, padding .22s ease; }
+.pessoa-bolha:hover, .pessoa-bolha:focus-visible { z-index: 2; outline: none; }
+.pessoa-bolha:focus-visible { box-shadow: 0 0 0 3px #fff, 0 0 0 5.5px #000; }
+.pessoa-bolha:hover .pessoa-bolha-texto, .pessoa-bolha:focus-visible .pessoa-bolha-texto { max-width: 220px; opacity: 1; padding-right: 16px; }
+.pessoa-bolha[aria-disabled="true"] { color: #8a8a8a; border-color: #8a8a8a; cursor: not-allowed; }
+@media (hover: none) { /* no celular não há "passar por cima": os nomes já aparecem */
+  .pessoa-bolha .pessoa-bolha-texto { max-width: 220px; opacity: 1; padding-right: 14px; }
 }
-@media (prefers-reduced-motion: reduce) { .mj-aviso { transition: none; } .mj-flash.ativo { animation: none; } }
+html[data-reduzir] .pessoa-bolha, html[data-reduzir] .pessoa-bolha-texto { transition: none; }
+@media (prefers-reduced-motion: reduce) { .pessoa-bolha, .pessoa-bolha-texto { transition: none; } }
+
+/* ── O chat privado (as janelinhas embaixo à direita, acima do bate-papo) ── */
+.privados { position: fixed; z-index: 20; right: clamp(10px, 2vw, 24px); bottom: calc(96px * var(--webc-escala, 1)); display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+  max-height: calc(100vh - 170px); pointer-events: none; }
+.privados > * { pointer-events: auto; }
+.privado-pedido { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; width: min(330px, calc(100vw - 24px)); padding: 12px 14px; border-radius: 18px;
+  background: #000; color: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .4); animation: lnux-aparecer .16s ease-out; }
+.privado-pedido p { flex: 1; min-width: 150px; margin: 0; }
+.privado-pedido-botoes { display: flex; gap: 8px; margin-left: auto; }
+.privado-janela { width: min(320px, calc(100vw - 24px)); display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: var(--panel, #fff); color: var(--text, #111);
+  border: 2px solid #000; box-shadow: 0 10px 30px rgba(0, 0, 0, .35); font-size: calc(1rem * var(--webc-papo-escala, 1)); }
+.privado-topo { display: flex; align-items: center; gap: 4px; padding: 6px 6px 6px 8px; background: #000; color: #fff; }
+.privado-quem { flex: 1; min-width: 0; display: flex; align-items: center; gap: 9px; background: none; border: 0; color: inherit; font: inherit; font-weight: 700; cursor: pointer; padding: 2px; text-align: left; }
+.privado-quem > span:not(.foto-conta) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.privado-contador { min-width: 20px; padding: 1px 6px; border-radius: 10px; background: #fff; color: #000; font-size: .8rem; text-align: center; }
+.privado-botao { flex: none; width: 30px; height: 30px; padding: 6px; display: grid; place-items: center; border-radius: 50%; border: 0; background: none; color: #fff; cursor: pointer; }
+.privado-botao:hover, .privado-botao:focus-visible, .privado-quem:focus-visible { background: rgba(255, 255, 255, .16); outline: none; }
+.privado-botao .pessoa-bolha-icone, .privado-enviar .pessoa-bolha-icone { width: 100%; height: 100%; padding: 0; }
+.privado-estado { margin: 0; padding: 8px 12px; font-size: .9em; opacity: .75; border-bottom: 1px solid var(--border, #ddd); }
+.privado-mensagens { height: 210px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; padding: 10px; }
+.privado-msg { max-width: 85%; padding: 7px 11px; border-radius: 14px; overflow-wrap: anywhere; line-height: 1.35; }
+.privado-msg.eu { align-self: flex-end; background: #000; color: #fff; border-bottom-right-radius: 4px; }
+.privado-msg.ela { align-self: flex-start; background: var(--hover, #eee); border-bottom-left-radius: 4px; }
+.privado-msg.sistema { align-self: center; max-width: 100%; text-align: center; font-size: .85em; opacity: .7; padding: 2px 6px; }
+.privado-escrever { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border, #ddd); }
+.privado-campo { flex: 1; min-width: 0; }
+.privado-enviar { flex: none; width: 38px; height: 38px; padding: 9px; display: grid; place-items: center; border-radius: 50%; border: 2px solid #000; background: #fff; color: #000; cursor: pointer; }
+.privado-enviar:disabled { opacity: .45; cursor: default; }
+.privado-janela.minimizada .privado-estado, .privado-janela.minimizada .privado-mensagens, .privado-janela.minimizada .privado-escrever { display: none; }
+@media (max-width: 760px) { .privados { bottom: calc(150px * var(--webc-escala, 1)); } .privado-mensagens { height: 150px; } }

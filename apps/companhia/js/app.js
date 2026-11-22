@@ -1484,7 +1484,9 @@
     LNUX.aviso("Link copiado.", "ok");
   };
   function garantirSala() {
-    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala, aparencia: minhaAparencia });
+    if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala, aparencia: minhaAparencia,
+      aoPrivado: (p, antes) => { if (privados) privados.aoMudar(p, antes); }, aoMensagemPrivada: (m) => { if (privados) privados.mensagem(m); } });
+    if (menuDePessoa) menuDePessoa.ligar(); // clicar na personagem de alguém: as bolinhas (amigo, perfil, chat privado)
     return sala;
   }
   function mensagemDaSala(m) {
@@ -1498,6 +1500,7 @@
   function atualizarSala() {
     const dentro = !!(sala && sala.dentro);
     if (palco3d) palco3d.mundo.conferirVoo(); // entrou numa sala dos outros: para de voar
+    if (!dentro) { if (privados) privados.limpar(); if (menuDePessoa) menuDePessoa.fechar(); } // fora da sala: sem chats privados nem bolinhas
     // o painel do cenário muda quando entra, sai ou vira dono (e, para quem visita, mostra o ajuste que o dono mandou)
     const estadoSala = dentro ? (sala.chave ? "dono" : "visita") : "fora", mudou = estadoSala !== ultimoEstadoSala;
     if (mudou || estadoSala === "visita") { ultimoEstadoSala = estadoSala; estudio.atualizar(); }
@@ -1696,8 +1699,10 @@
   }
   /** Gestos e expressões que os outros veem. */
   /** A tela de quem joga (js/jogo.js): as expressões de 1 a 9, o bate-papo e o vídeo no canto, e a janela Opções (o ☰). */
-  let jogo = null;
+  let jogo = null, privados = null, menuDePessoa = null;
   function montarTelaDoJogo() {
+    privados = C.Privados({ sala: () => sala });
+    menuDePessoa = C.MenuDePessoa({ sala: () => sala, palco: () => palco3d, privados: () => privados });
     jogo = C.Jogo({
       palco: () => palco3d,
       emocao: (nome) => palco.definirEmocao(nome),
@@ -1725,12 +1730,12 @@
     live2d = null;
     montarTelaDoJogo();
     await mostrarVazio();
-    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false), captura,
+    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false),
       conversar: () => { if (sala && sala.dentro) sala.sair(); history.replaceState(null, "", location.pathname + location.search + "#modo=conversa"); location.reload(); } });
     ligarCabecalhoDoJogo();
     atualizarSala();
     const codigo = fragmento.get("sala") || "", pagina = fragmento.get("pagina"); // #pagina=loja|sala|perfil|novidades: abre direto nela
-    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "jogos", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
+    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
   }
   /** No jogo (dentro de uma sala), o alto: o logo do WEBC leva ao site; o ☰ (a janela Opções) no lugar dos botões do LNUX. */
   function ligarCabecalhoDoJogo() {

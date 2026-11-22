@@ -588,6 +588,26 @@ def _():
     _, r, _ = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=0), **visita)
     assert len(r["mensagens"]) == 1 and r["mensagens"][0]["nome"] == "Ana" and r["mensagens"][0]["texto"].startswith("Oi, Bia!") and len(r["mensagens"][0]["texto"]) == 300
     assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=1), **visita)[1]["mensagens"] == []
+    # chat privado: a Ana pede, a Bia vê o pedido e aceita; só as duas veem as mensagens; fechar
+    privado = lambda j, **mais: S.json("POST", f"/api/sala/{c}/privado", json_corpo=eu(j, **mais), **visita)
+    assert privado(ana, para=ana["id"], acao="pedir")[0] == 400 and privado(ana, para="naoexiste", acao="pedir")[0] == 404
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo=eu(ana, texto="segredo", para=bia["id"]), **visita)[0] == 403
+    assert privado(ana, para=bia["id"], acao="pedir")[1]["enviados"] == [bia["id"]]
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=1), **visita)[1]["privado"]["recebidos"] == [ana["id"]]
+    assert privado(bia, para=ana["id"], acao="aceitar")[1]["abertos"] == [ana["id"]]
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(ana, desde=1), **visita)[1]["privado"] == {"recebidos": [], "enviados": [], "abertos": [bia["id"]]}
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo=eu(ana, texto="só pra você", para=bia["id"]), **visita)[1]["n"] == 2
+    msgs = S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=1), **visita)[1]["mensagens"]
+    assert [(x["texto"], x["para"]) for x in msgs] == [("só pra você", bia["id"])]
+    _, caio, _ = S.json("POST", f"/api/sala/{c}/entrar", json_corpo={"nome": "Caio"}, **visita)
+    assert S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(caio, desde=1), **visita)[1]["mensagens"] == []  # o Caio não vê
+    assert privado(caio, para=ana["id"], acao="aceitar")[0] == 404
+    privado(caio, para=ana["id"], acao="pedir")
+    assert privado(ana, para=caio["id"], acao="recusar")[1]["recebidos"] == []
+    S.json("POST", f"/api/sala/{c}/sair", json_corpo=eu(caio), **visita)
+    assert privado(bia, para=ana["id"], acao="fechar")[1]["abertos"] == []
+    assert S.json("POST", f"/api/sala/{c}/falar", json_corpo=eu(bia, texto="volta", para=ana["id"]), **visita)[0] == 403
+    S.json("POST", f"/api/sala/{c}/estado", json_corpo=eu(bia, desde=2), **visita)
     # avatar: cada um manda o seu; os outros pegam pelo id
     assert S.pedir("PUT", f"/api/sala/{c}/avatar?id={ana['id']}&segredo=errado", corpo=b"vrm", **visita)[0] == 403
     assert S.pedir("PUT", f"/api/sala/{c}/avatar?id={ana['id']}&segredo={ana['segredo']}", corpo=b"vrm-da-ana", **visita)[0] == 201
@@ -1322,6 +1342,14 @@ def _():
         assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "pedir", "id": bia}, cabecalhos=eu_caio, **visita)[1]["relacao"] == "amigo"
         assert S.json("POST", "/api/contas/amigos", json_corpo={"acao": "desfazer", "id": bia}, cabecalhos=eu_ana, **visita)[1]["amigos"] == []
         assert [x["nome"] for x in S.json("GET", f"/api/contas/perfil/{bia}", **visita)[1]["amigos"]] == ["Caio"]
+        # pesquisar por alguém: o nome e a foto das contas (sem e-mail), quem começa com o digitado primeiro, e a relação comigo
+        assert S.json("GET", "/api/contas/buscar?q=", **visita)[1]["pessoas"] == []
+        r = S.json("GET", "/api/contas/buscar?q=BI", cabecalhos=eu_caio, **visita)[1]
+        assert [x["nome"] for x in r["pessoas"]] == ["Bia"] and r["pessoas"][0]["relacao"] == "amigo" and "email" not in json.dumps(r)
+        assert set(r["pessoas"][0]) >= {"id", "nome", "foto", "cor"}
+        assert [x["nome"] for x in S.json("GET", "/api/contas/buscar?q=a", **visita)[1]["pessoas"]][:1] == ["Ana"]
+        assert S.json("GET", "/api/contas/buscar?q=%C3%81NA", cabecalhos=eu_ana, **visita)[1]["pessoas"][0]["relacao"] == "eu"
+        assert S.json("GET", "/api/contas/buscar?q=ninguem-assim", **visita)[1]["pessoas"] == []
         # apagar uma conta: some dos amigos dos outros
         with lnux_apps.CONTAS_TRAVA:
             lnux_apps.Manipulador.apagar_conta(cadastro, caio)

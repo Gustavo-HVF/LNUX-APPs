@@ -182,6 +182,7 @@ SALAS_TRAVA = threading.Lock()
 SALA_MAXIMO = 12           # salas ao mesmo tempo
 SALA_POR_PESSOA = 3        # salas abertas ao mesmo tempo por quem não é o dono (pelo endereço de quem criou)
 SALA_PESSOAS = 16          # pessoas por sala (no máximo; quem cria pode pôr menos)
+PRIVADO_PEDIDOS = 5        # pedidos de chat privado esperando resposta, por pessoa
 RESERVA_DISCO = 300 * 1024 * 1024  # envios (cenário, personagens, loja) não podem deixar o aparelho com menos que isto livre
 # segundos sem notícia de uma pessoa: ela saiu (quem fecha a aba avisa na hora; isto é para quem some). Os testes no
 # navegador sem placa de vídeo pedem mais (LNUX_SALA_SUMIU): lá, desenhar o cenário pela primeira vez trava a página.
@@ -524,6 +525,7 @@ class Sala:
         self.pessoas: dict = {}                  # id → {nome, segredo, visto, estado, avatar}
         self.mensagens: list = []
         self.n = 0
+        self.privados: dict = {}                 # (de, para) → "pedido"; frozenset({a, b}) → "aberto" (o chat privado)
         self.mapa: dict | None = None            # {nome, tamanho, versao, ajuste}
         self.versao_mapa = 0
         self.videos = "todos"                    # quem pode pôr um vídeo na tela: "todos" ou "dono" (só quem criou)
@@ -573,7 +575,25 @@ class Sala:
         for pid in [i for i, j in self.pessoas.items() if agora - j["visto"] > SALA_SUMIU]:
             self.tirar(pid)
 
+    def privado_aberto(self, a: str, b: str) -> bool:
+        return self.privados.get(frozenset((a, b))) == "aberto"
+
+    def privados_de(self, pid: str) -> dict:
+        """O chat privado visto por uma pessoa: quem pediu a ela, a quem ela pediu e com quem está aberto."""
+        saida = {"recebidos": [], "enviados": [], "abertos": []}
+        for k in self.privados:
+            if isinstance(k, frozenset):
+                if pid in k:
+                    saida["abertos"].append(next(iter(k - {pid}), pid))
+            elif k[1] == pid:
+                saida["recebidos"].append(k[0])
+            elif k[0] == pid:
+                saida["enviados"].append(k[1])
+        return saida
+
     def tirar(self, pid: str):
+        for k in [k for k in self.privados if pid in k]:  # quem sai fecha os chats privados dele
+            self.privados.pop(k, None)
         if self.pessoas.pop(pid, None) is not None:
             (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
             (self.pasta / f"aparencia-{pid}.json").unlink(missing_ok=True)
@@ -638,6 +658,7 @@ def nome_normalizado(nome: str) -> str:
     return " ".join(sem_acento.casefold().split())
 
 
+BUSCA_MAXIMO = 20  # pessoas por busca (Pesquisar por alguém)
 TITULO_MAXIMO = 4  # títulos por conta (Admin, Criador, Moderador, VIP...)
 CARGOS = ("dono", "admin")  # quem pode dar títulos: o dono (também dá o cargo de admin) e os admins
 
@@ -2277,7 +2298,7 @@ class Manipulador(BaseHTTPRequestHandler):
             if partes[2] not in sala.pessoas or not arquivo.is_file():
                 raise ErroPonte(404, "Essa pessoa não mandou o avatar.")
             return self.enviar_arquivo(arquivo, "model/gltf-binary")
-        if m != "POST" or acao not in ("estado", "falar", "sair"):
+        if m != "POST" or acao not in ("estado", "falar", "sair", "privado"):
             raise ErroPonte(404, f"A sala não conhece /{acao} ({m}).")
         if int(self.headers.get("Content-Length") or 0) > 24 * 1024:
             raise ErroPonte(413, "Pedido grande demais para a sala.")
@@ -2287,14 +2308,49 @@ class Manipulador(BaseHTTPRequestHandler):
             if acao == "sair":
                 sala.tirar(str(d["id"]))
                 return self.responder_json({"ok": True})
+            eu_id = str(d["id"])
+            # o chat privado entre duas pessoas da sala: pedir, aceitar, recusar e fechar (fechar também cancela um pedido)
+            if acao == "privado":
+                outro = str(d.get("para") or "")
+                if outro not in sala.pessoas:
+                    raise ErroPonte(404, "Essa pessoa não está mais na sala.")
+                if outro == eu_id:
+                    raise ErroPonte(400, "Você não pode abrir um chat privado consigo mesmo.")
+                op, par = str(d.get("acao") or ""), frozenset((eu_id, outro))
+                if op == "pedir":
+                    if (outro, eu_id) in sala.privados:  # a pessoa já tinha pedido: abre
+                        op = "aceitar"
+                    elif not sala.privado_aberto(eu_id, outro):
+                        if sum(1 for k in sala.privados if not isinstance(k, frozenset) and k[0] == eu_id) >= PRIVADO_PEDIDOS:
+                            raise ErroPonte(429, "Você já tem pedidos de chat privado demais esperando resposta.")
+                        sala.privados[(eu_id, outro)] = "pedido"
+                if op == "aceitar":
+                    if (outro, eu_id) not in sala.privados and not sala.privado_aberto(eu_id, outro):
+                        raise ErroPonte(404, "Essa pessoa não pediu um chat privado com você.")
+                    sala.privados.pop((outro, eu_id), None)
+                    sala.privados.pop((eu_id, outro), None)
+                    sala.privados[par] = "aberto"
+                elif op == "recusar":
+                    sala.privados.pop((outro, eu_id), None)
+                elif op == "fechar":
+                    for k in ((eu_id, outro), (outro, eu_id), par):
+                        sala.privados.pop(k, None)
+                elif op != "pedir":
+                    raise ErroPonte(400, "Ação desconhecida (pedir, aceitar, recusar ou fechar).")
+                return self.responder_json(sala.privados_de(eu_id))
             if acao == "falar":
-                if not sala.bate_papo:
-                    raise ErroPonte(403, "O bate-papo desta sala está desligado.")
                 texto = sala_texto(d.get("texto"), 300)
                 if not texto:
                     raise ErroPonte(400, "Faltou o texto.")
+                para = str(d.get("para") or "")
+                if para:  # no chat privado: só as duas pessoas veem (vale mesmo com o bate-papo da sala desligado)
+                    if not sala.privado_aberto(eu_id, para):
+                        raise ErroPonte(403, "O chat privado com essa pessoa não está aberto.")
+                elif not sala.bate_papo:
+                    raise ErroPonte(403, "O bate-papo desta sala está desligado.")
                 sala.n += 1
-                sala.mensagens.append({"n": sala.n, "de": str(d["id"]), "nome": j["nome"], "texto": texto, **({"titulo": j["titulos"][0]} if j.get("titulos") else {})})
+                sala.mensagens.append({"n": sala.n, "de": eu_id, "nome": j["nome"], "texto": texto, **({"para": para} if para else {}),
+                                       **({"titulo": j["titulos"][0]} if j.get("titulos") else {})})
                 del sala.mensagens[:-200]
                 return self.responder_json({"n": sala.n})
             if isinstance(d.get("estado"), dict):
@@ -2308,7 +2364,8 @@ class Manipulador(BaseHTTPRequestHandler):
                 "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"],
                              "video": (x.get("video") or {}).get("n", 0), "titulos": x.get("titulos", [])}
                             for i, x in sala.pessoas.items()],
-                "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde][-50:],
+                "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde and (not msg.get("para") or eu_id in (msg["de"], msg["para"]))][-50:],
+                "privado": sala.privados_de(eu_id),
                 "mapa": sala.versao_mapa if sala.mapa else 0, "nome": sala.nome, "bate_papo": sala.bate_papo, "videos": sala.videos,
                 "agora": round(time.time(), 3)})  # o relógio do servidor: as animações do mapa tocam no mesmo ponto para todos
 
@@ -2865,6 +2922,28 @@ class Manipulador(BaseHTTPRequestHandler):
                     alvo["cargo"] = cargo
                 cadastro.gravar()
                 return self.responder_json({**cadastro.perfil_publico(alvo), "cargo": alvo.get("cargo", "")})
+            # buscar alguém pelo nome (para achar e adicionar amigos): o nome e a foto das contas confirmadas
+            if acao == "buscar" and m == "GET":
+                contar_tentativa("buscar:" + origem, 120, 60)
+                busca = nome_normalizado(sala_texto(self.parametros().get("q"), 30))
+                if not busca:
+                    return self.responder_json({"pessoas": []})
+                achadas = []
+                for c in d["contas"].values():
+                    if not c.get("verificada"):
+                        continue
+                    nome = nome_normalizado(c.get("nome", ""))
+                    if busca not in nome:
+                        continue
+                    # quem começa com o que foi digitado vem primeiro; depois, em ordem alfabética
+                    achadas.append((0 if nome.startswith(busca) else 1, nome, c))
+                achadas.sort(key=lambda x: (x[0], x[1]))
+                pessoas = []
+                for _, _, c in achadas[:BUSCA_MAXIMO]:
+                    relacao = "" if not eu else "eu" if eu["id"] == c["id"] else "amigo" if c["id"] in eu.get("amigos", []) else \
+                        "enviado" if eu["id"] in c.get("pedidos", []) else "recebido" if c["id"] in eu.get("pedidos", []) else ""
+                    pessoas.append({**cadastro.resumo(c), "relacao": relacao})
+                return self.responder_json({"pessoas": pessoas, "mais": len(achadas) > BUSCA_MAXIMO})
             if acao == "cadastro" and m == "POST":
                 contar_tentativa("cadastro:" + origem, 10, 3600)
                 b = corpo()
