@@ -331,55 +331,6 @@ todo mundo vê a mesma peça no mesmo lugar ao mesmo tempo. As partes que se mex
 fica preso numa pá girando) e fora da luz calculada por raios. A vitrine da loja já mostra o mapa se mexendo e
 avisa quantas animações ele tem.
 
-### Jogos: tênis, beisebol, boliche, golfe e boxe
-
-A página **JOGOS** (no menu do alto e no cartão do início) tem cinco minijogos de esporte, em tela cheia, com
-cenários e bonecos feitos aqui (formas simples e cores vivas; nada copiado de outros jogos). Cada um tem as suas
-opções:
-
-- **Tênis**: simples ou duplas (o seu parceiro é controlado junto com você), partida de 1 game, melhor de 3 ou de 5.
-  Contagem de verdade (15, 30, 40, iguais, vantagem), saque com segunda bola e dupla falta, bola na rede ou fora.
-  Seus jogadores correm sozinhos até a bola: você acerta o tempo do golpe e mira (cedo puxa para um lado, tarde para
-  o outro).
-- **Beisebol**: 1, 3 ou 9 entradas. Na metade de cima você rebate (o CPU arremessa rápida, curva ou lenta, dentro ou
-  fora da zona); na de baixo você arremessa (mira na zona e escolhe o arremesso; o CPU rebate ou deixa passar). Bolas,
-  strikes, faltas, eliminações, base por bolas, simples, dupla, tripla, home run, corredores nas bases e entradas
-  extras.
-- **Boliche**: as 10 rodadas, com strike, spare e a 10ª com bola extra (a contagem de verdade). Os pinos se derrubam
-  uns aos outros; a bola pode ir para a canaleta e pegar efeito no fim da pista. Bola leve, média ou pesada.
-- **Golfe**: percursos de 3, 9 ou 18 buracos sorteados (par 3, 4 e 5), com fairway, rough, areia, água, árvores,
-  vento e o green com caída (a linha do putt mostra o caminho). Os tacos (Driver a Putter) são escolhidos pela
-  distância e trocam com Q/E. Água e fora dos limites custam uma tacada. No fim, o cartão com os pares.
-- **Boxe**: 3 rounds de 1 minuto contra o adversário (fácil, médio ou difícil). Jab e direto, no rosto ou no corpo;
-  guarda; esquiva; quando a luva dele pisca, ele vai socar: defenda ou esquive e contra-ataque. Knockdowns com
-  contagem (você levanta apertando várias vezes), nocaute, nocaute técnico com 3 quedas ou decisão por pontos.
-
-**O núcleo dos esportes** (`js/esportes-nucleo.js`, readaptado do Linux Sports, um projeto Unity do mesmo autor;
-só a lógica, sem arte nem dados de outros jogos):
-
-- **A bola no ar** no golfe tem resistência do ar e **efeito Magnus**: o backspin de cada taco sustenta a bola, puxar
-  para o lado ao soltar dá efeito (curva para esse lado) e o vento entra de verdade no voo. A força ainda leva a bola
-  à distância do taco (a velocidade de saída é calculada para isso).
-- **Boliche**: avisa o **split** (o pino 1 caiu e sobraram grupos separados, como 7-10) e conta os splits no fim.
-- **Beisebol**: **queimada dupla** (rasteira com corredor na 1ª) e **voo de sacrifício** (bola alta funda com corredor
-  na 3ª: ele marca); o time da casa que passa à frente na última entrada vence na hora, também por base por bolas.
-- **O CPU acompanha você**: cada jogo guarda a sua **habilidade** (0 a 2000 pontos, ajustados como no xadrez, o Elo,
-  pela força do adversário que você venceu ou perdeu). A força do CPU vem dela, com um estilo próprio a cada partida
-  (precisão, reação, força, velocidade e lado preferido). No boxe, o adversário padrão é **Pela habilidade** (vai do
-  fácil ao difícil); fácil, médio e difícil continuam.
-- **Recordes**: por pessoa (a conta, ou o nome de quem joga sem conta) e por jogo, guardados neste navegador:
-  partidas, vitórias, a melhor marca (pontos no boliche, o resultado no golfe para 3, 9 e 18 buracos, a maior troca de
-  bola no tênis, corridas no beisebol, socos certos no boxe) e a habilidade. O fim da partida mostra **Novo recorde**
-  e quanto a habilidade mudou; a página JOGOS mostra o resumo em cada jogo.
-
-**Controles.** Com o **mouse e o teclado**: o mouse mira; clique (ou Espaço) para golpear; segure para carregar a
-força e solte para jogar (boliche, golfe, arremesso). No boxe, botão esquerdo/K = direto, direito/J = jab, S/Shift =
-guarda, A/D = esquivar. Com a **câmera de movimento** (escolha na página ou no botão do jogo): o mesmo rastreamento
-da captura de movimento, só do corpo, no próprio aparelho. O golpe é o movimento rápido do braço (a velocidade do
-pulso vira a força; para que lado o braço termina dá o efeito ou a direção), a mão direita mira, inclinar o corpo
-esquiva (boxe) ou ajusta a mira (golfe, boliche) e as duas mãos na frente do rosto são a guarda. Esc pausa (continuar,
-recomeçar, som e sair).
-
 ### Site publicado só com o WEBC
 
 O servidor pode publicar **só o WEBC** (`python3 servidor/lnux_apps.py --so-app companhia`; no LNUX, *🧩 Apps
@@ -847,11 +798,6 @@ js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esquele
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
 js/video.js        vídeo numa tela do cenário (YouTube, Vimeo, Twitch, arquivo): segue a personagem ou fica parada, igual para todos da sala
 js/webc.js         o site do WEBC: cabeçalho, início (cartões, quadrados), novidades, perfil, transições e tela de carregamento
-js/minijogos.js    a página JOGOS e o motor dos minijogos: tela cheia, placar, pausa, os controles (mouse/teclado e câmera
-                   de movimento), os bonecos, o céu, as luzes e a torcida
-js/esportes.js     os cinco minijogos: tênis, beisebol, boliche, golfe e boxe (e as contas de cada um)
-js/esportes-nucleo.js  o núcleo dos esportes (sem tela): voo com arrasto e Magnus, quique, split, queimada dupla e voo de
-                   sacrifício, perfil da IA, habilidade (Elo) e recordes por pessoa
 js/inicio.js       a tela de entrar (conta ou só o nome) e o nome de quem joga sem conta
 js/jogo.js         a tela do jogo: a barra do alto com o ☰, as expressões de 1 a 9, o bate-papo e o vídeo no canto, a janela Opções
 js/widgets.js      os widgets do início (relógio, salas, loja, amigos, salvos, notas)
@@ -896,7 +842,6 @@ python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
 python3 tests/testar_navegador.py companhia_sketchfab  # Sketchfab de mentira: buscar, licenças, trazer para a loja, mapa com movimento numa sala
 python3 tests/testar_navegador.py companhia_ik  # IK das pernas: um pé no degrau e o outro no piso, a rampa e a opção de desligar
-python3 tests/testar_navegador.py companhia_minijogos  # os 5 minijogos: as contas, uma jogada de cada, mouse/teclado e a câmera (simulada), pausa e fim
 ```
 
 O `companhia_sala` abre dois navegadores: um cria a sala com um cenário, o outro entra pelo link, e os dois se

@@ -1,7 +1,6 @@
 /*
- * WEBC (web chat) — o site: o cabeçalho (o logo, a paleta de temas, o idioma e você), o início com os quatro cartões
- * (LOJA, SALA, JOGOS, PERFIL), as páginas (a loja e as salas, de js/loja.js e js/salas.js, os minijogos, de
- * js/minijogos.js, e o perfil, daqui), as transições
+ * WEBC (web chat) — o site: o cabeçalho (o logo, a paleta de temas, o idioma e você), o início com os três cartões
+ * (LOJA, SALA, PERFIL), as páginas (a loja e as salas, de js/loja.js e js/salas.js, e o perfil, daqui), as transições
  * entre elas e a tela de carregamento ao entrar numa sala. Dentro de uma sala, o site some e fica o jogo; o logo do
  * WEBC no alto traz o site de volta (a sala continua, e uma faixa avisa "você está na sala").
  */
@@ -26,7 +25,6 @@
   const ICONES = {
     loja: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M12 22h40l-3 32H15z"/><path d="M23 22v-4a9 9 0 0 1 18 0v4"/><path d="M24 33c2 4 14 4 16 0"/></svg>',
     sala: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M10 54h44"/><path d="M16 54V14h22v40"/><circle cx="32" cy="35" r="1.8" fill="currentColor"/><path d="M38 20l10 4v30"/></svg>',
-    jogos: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M14 22h36c6 0 10 6 10 16s-4 14-8 14c-5 0-7-6-11-6H23c-4 0-6 6-11 6-4 0-8-4-8-14s4-16 10-16z"/><path d="M18 31v10M13 36h10"/><circle cx="44" cy="33" r="2.4" fill="currentColor"/><circle cx="50" cy="39" r="2.4" fill="currentColor"/></svg>',
     perfil: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><circle cx="32" cy="24" r="10"/><path d="M14 54c2-11 9-16 18-16s16 5 18 16"/></svg>',
     globo: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9S14.6 18.4 12 21c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3Z"/></svg>',
     busca: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="m15 15 6 6"/></svg>',
@@ -55,7 +53,7 @@
     const eu = el("button", { type: "button", class: "webc-eu", id: "webc-eu", "aria-haspopup": "true", onclick: (e) => menuEu(e.currentTarget) });
     return el("header", { class: "webc-topo" },
       el("button", { type: "button", class: "webc-logo", "aria-label": "WEBC — início", title: "Início", onclick: () => ir("inicio") }, C.logoWebc(46)),
-      el("nav", { class: "webc-nav", "aria-label": "Páginas" }, ["loja", "sala", "jogos", "perfil"].map((p) => el("button", { type: "button", "data-ir": p, onclick: () => ir(p) }, { loja: "Loja", sala: "Sala", jogos: "Jogos", perfil: "Perfil" }[p]))),
+      el("nav", { class: "webc-nav", "aria-label": "Páginas" }, ["loja", "sala", "perfil"].map((p) => el("button", { type: "button", "data-ir": p, onclick: () => ir(p) }, { loja: "Loja", sala: "Sala", perfil: "Perfil" }[p]))),
       el("div", { class: "webc-acoes" }, tema, el("span", { class: "webc-separador", "aria-hidden": "true" }), idioma, eu));
   }
   function desenharEu() {
@@ -110,7 +108,6 @@
     novidades: paginaNovidades,
     loja: (pag, op) => paginaDeOverlay(pag, () => C.abrirLoja(estado.ctx.loja, { dentro: pag, pagina: true, tipo: op.tipo || "personagem", item: op.item, busca: op.busca })),
     sala: (pag, op) => paginaDeOverlay(pag, () => C.abrirSalas(estado.ctx.salas, { dentro: pag, pagina: true, codigo: op.codigo || "" })),
-    jogos: (pag) => C.minijogos.pagina(pag, { captura: estado.ctx && estado.ctx.captura }),
     perfil: paginaPerfil,
   };
   /** A loja e as salas: os mesmos de antes, agora dentro da página (sem o botão de fechar). */
@@ -159,7 +156,6 @@
       el("div", { class: "webc-cartoes" },
         cartao("loja", "LOJA", "Personagens, mapas e animações"),
         cartao("sala", "SALA", "Entre numa sala ou crie a sua"),
-        cartao("jogos", "JOGOS", "Tênis, beisebol, boliche, golfe e boxe"),
         cartao("perfil", "PERFIL", "Sua foto, bio, salvos e amigos")),
       el("div", { class: "webc-quadrados" },
         ctx && ctx.conversar ? quadrado("chatbot", "Chat bot", "Converse com a personagem", () => ctx.conversar()) : null,
@@ -173,7 +169,6 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
-    "JOGOS: tênis, beisebol, boliche, golfe e boxe, com o mouse e o teclado ou com a câmera de movimento.",
     "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.",
     "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.",
     "Mapas do Sketchfab na loja (com o crédito de quem fez) e mapas com movimento que tocam dentro do jogo.",

@@ -542,7 +542,7 @@
 @media (prefers-reduced-motion: reduce) { .webc-pagina, .webc-pagina.webc-entra, .webc-pagina.webc-sai { transition: none; transform: none; } }
 
 /* ── o início: três cartões ── */
-.webc-cartoes { display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(14px, 2vw, 28px); min-height: calc(100vh - 170px); min-height: calc(100dvh - 170px); }
+.webc-cartoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: clamp(14px, 2vw, 28px); min-height: calc(100vh - 170px); min-height: calc(100dvh - 170px); }
 .webc-cartao { display: grid; align-content: center; justify-items: center; gap: 14px; padding: 28px 18px; border-radius: 48px; border: 0; background: var(--panel); color: var(--text); cursor: pointer;
   font: inherit; box-shadow: var(--shadow); transition: transform .25s cubic-bezier(.2, .8, .2, 1), box-shadow .25s; position: relative; overflow: hidden; }
 .webc-cartao::after { content: ""; position: absolute; inset: auto -20% -60% -20%; height: 70%; background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 22%, transparent), transparent); opacity: 0; transition: opacity .3s; }
@@ -550,9 +550,8 @@
 .webc-cartao:hover::after, .webc-cartao:focus-visible::after { opacity: 1; }
 .webc-cartao:active { transform: scale(.98); }
 .webc-cartao-icone svg { width: clamp(56px, 7vw, 88px); height: auto; }
-.webc-cartao-titulo { font-weight: 800; font-size: clamp(2.1rem, 4.4vw, 4.4rem); letter-spacing: .01em; line-height: 1; }
+.webc-cartao-titulo { font-weight: 800; font-size: clamp(2.4rem, 6vw, 5.2rem); letter-spacing: .01em; line-height: 1; }
 .webc-cartao-sub { color: var(--muted); font-size: clamp(.95rem, 1.2vw, 1.15rem); text-align: center; }
-@media (max-width: 1100px) { .webc-cartoes { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 760px) { .webc-cartoes { grid-template-columns: 1fr; min-height: 0; } .webc-cartao { border-radius: 32px; min-height: 30vh; } }
 
 /* ── a loja e a sala (o painel branco grande) ── */
@@ -1027,83 +1026,3 @@
   .sketchfab-versao-acoes { grid-column: 1 / -1; justify-content: stretch; }
   .sketchfab-versao-acoes .lnux-botao { flex: 1 1 auto; }
 }
-
-/* ── JOGOS: a página dos minijogos ── */
-.mj-pagina { display: grid; gap: 16px; align-content: start; padding: clamp(18px, 3vw, 44px) clamp(18px, 3vw, 48px) 60px; }
-.mj-controle { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 4px; }
-.mj-controle small { flex-basis: 100%; }
-.mj-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; }
-.mj-jogo { display: grid; grid-template-rows: auto 1fr; border-radius: 26px; overflow: hidden; background: var(--panel); border: 2px solid var(--borda); }
-.mj-jogo-capa { display: grid; place-items: center; height: 120px; color: #fff; background: radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--mj-cor) 60%, #fff), var(--mj-cor) 60%, color-mix(in srgb, var(--mj-cor) 70%, #000)); }
-.mj-jogo-capa svg { width: 76px; height: 76px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .25)); }
-.mj-jogo-info { display: grid; align-content: start; gap: 10px; padding: 14px 16px 16px; }
-.mj-jogo-info h2 { margin: 0; font-size: 1.35rem; }
-.mj-jogo-info p { margin: 0; }
-.mj-opcao { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-.mj-opcao > span { min-width: 74px; }
-.mj-jogar { justify-self: start; min-width: 120px; }
-
-/* ── a tela de um minijogo (por cima de tudo) ── */
-html.com-minijogo, html.com-minijogo body { overflow: hidden; }
-.minijogo { position: fixed; inset: 0; z-index: 1700; /* acima do site e da loja; abaixo das janelas e avisos do LNUX (2000+) */ background: #0d1020; color: #fff; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
-.mj-tela { position: absolute; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: crosshair; }
-.mj-topo { position: absolute; top: 0; left: 0; right: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; background: linear-gradient(rgba(10, 14, 30, .72), rgba(10, 14, 30, 0)); pointer-events: none; }
-.mj-topo > * { pointer-events: auto; }
-.mj-nome { font-size: 1.05rem; letter-spacing: .02em; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
-.mj-espaco { flex: 1; }
-.mj-placar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.mj-chip { display: inline-block; padding: 4px 10px; border-radius: 999px; background: rgba(255, 255, 255, .16); backdrop-filter: blur(4px); font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.mj-chip.forte { background: #ffd23f; color: #2a2100; }
-.mj-camera-estado { font-size: .85rem; opacity: .9; max-width: 34ch; }
-.mj-botao-camera[aria-pressed="true"] { background: #22c55e; color: #04220f; border-color: transparent; }
-.mj-aviso { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%) scale(.8); padding: 10px 26px; border-radius: 22px; font-size: clamp(1.4rem, 4.2vw, 3rem); font-weight: 900; letter-spacing: .02em; text-align: center; color: #fff; background: rgba(15, 20, 40, .55); text-shadow: 0 3px 0 rgba(0, 0, 0, .35); opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; max-width: 90vw; }
-.mj-aviso.visivel { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-.mj-aviso.bom { background: rgba(22, 163, 74, .78); }
-.mj-aviso.ruim { background: rgba(220, 38, 38, .72); }
-.mj-dica { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); width: min(820px, calc(100% - 24px)); padding: 8px 14px; border-radius: 14px; background: rgba(10, 14, 30, .62); font-size: .9rem; line-height: 1.35; text-align: center; pointer-events: none; }
-.mj-barra { position: absolute; left: 50%; bottom: 74px; transform: translateX(-50%); width: min(360px, 70vw); height: 18px; border-radius: 999px; background: rgba(255, 255, 255, .2); border: 2px solid rgba(255, 255, 255, .7); overflow: hidden; pointer-events: none; }
-.mj-barra > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #22c55e, #facc15 70%, #ef4444); }
-.mj-barra::after { content: attr(data-rotulo); position: absolute; inset: 0; display: grid; place-items: center; font-size: .72rem; font-weight: 800; color: #111; mix-blend-mode: screen; }
-.mj-pausa { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(8, 10, 24, .6); padding: 16px; }
-.mj-pausa[hidden] { display: none; }
-.mj-cartao { width: min(560px, 100%); max-height: calc(100% - 20px); overflow: auto; padding: 22px; border-radius: 26px; background: var(--panel, #1c2033); color: var(--text, #fff); box-shadow: 0 20px 60px rgba(0, 0, 0, .5); display: grid; gap: 12px; }
-.mj-cartao h2 { margin: 0; font-size: 1.8rem; }
-.mj-fim[data-vitoria="1"] h2 { color: #16a34a; }
-.mj-subtitulo { margin: 0; font-weight: 700; }
-.mj-linhas { margin: 0; padding-left: 18px; }
-.mj-acoes { display: flex; flex-wrap: wrap; gap: 8px; }
-.mj-tabela { border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .9rem; overflow-x: auto; display: block; }
-.mj-tabela th, .mj-tabela td { padding: 4px 7px; border: 1px solid var(--borda, rgba(255, 255, 255, .2)); text-align: center; }
-.mj-tabela td.abaixo { color: #dc2626; font-weight: 800; }
-.mj-tabela td.acima { color: #2563eb; }
-/* o placar do boliche: os 10 quadros */
-.mj-boliche { display: flex; gap: 2px; background: rgba(255, 255, 255, .92); color: #1b1f33; padding: 3px; border-radius: 10px; }
-.mj-quadro { display: grid; grid-template-rows: auto auto auto; min-width: 38px; text-align: center; border: 1px solid #c9cde0; border-radius: 6px; font-variant-numeric: tabular-nums; }
-.mj-quadro.atual { outline: 2px solid #ffb020; }
-.mj-quadro-n { font-size: .62rem; background: #e7e9f3; }
-.mj-quadro-bolas { display: flex; justify-content: flex-end; }
-.mj-quadro-bolas i { font-style: normal; min-width: 13px; font-size: .74rem; font-weight: 800; border-left: 1px solid #e0e2ec; }
-.mj-quadro-total { font-size: .86rem; min-height: 1.1em; }
-/* o boxe: as barras de vida e o vermelho quando você apanha */
-.mj-vidas { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; min-width: min(640px, 80vw); }
-.mj-vida { display: grid; gap: 3px; }
-.mj-vida.cpu { text-align: right; }
-.mj-vida .barra { height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .2); overflow: hidden; display: flex; }
-.mj-vida.cpu .barra { justify-content: flex-end; }
-.mj-vida .barra i { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #22c55e, #a3e635); transition: width .15s; }
-.mj-vida.cpu .barra i { background: linear-gradient(270deg, #ef4444, #fb923c); }
-.mj-vida .barra.folego { height: 6px; }
-.mj-vida .barra.folego i { background: #38bdf8; transition: width .1s; }
-.mj-round { display: grid; text-align: center; font-variant-numeric: tabular-nums; }
-.mj-flash { position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px 40px rgba(255, 0, 0, .0); transition: box-shadow .4s; }
-.mj-flash.ativo { animation: mj-flash .45s ease-out; }
-@keyframes mj-flash { from { box-shadow: inset 0 0 160px 60px rgba(255, 0, 0, .7); } to { box-shadow: inset 0 0 160px 40px rgba(255, 0, 0, 0); } }
-.minijogo .captura-previa { left: auto; right: 12px; top: auto; bottom: 64px; width: 200px; z-index: 3; }
-@media (max-width: 640px) {
-  .mj-chip { font-size: .78rem; padding: 3px 8px; }
-  .mj-dica { font-size: .8rem; bottom: 8px; }
-  .mj-quadro { min-width: 26px; }
-  .mj-vidas { min-width: 0; width: 100%; }
-  .minijogo .captura-previa { width: 130px; bottom: 90px; }
-}
-@media (prefers-reduced-motion: reduce) { .mj-aviso { transition: none; } .mj-flash.ativo { animation: none; } }

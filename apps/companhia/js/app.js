@@ -1725,12 +1725,12 @@
     live2d = null;
     montarTelaDoJogo();
     await mostrarVazio();
-    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false), captura,
+    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false),
       conversar: () => { if (sala && sala.dentro) sala.sair(); history.replaceState(null, "", location.pathname + location.search + "#modo=conversa"); location.reload(); } });
     ligarCabecalhoDoJogo();
     atualizarSala();
     const codigo = fragmento.get("sala") || "", pagina = fragmento.get("pagina"); // #pagina=loja|sala|perfil|novidades: abre direto nela
-    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "jogos", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
+    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
   }
   /** No jogo (dentro de uma sala), o alto: o logo do WEBC leva ao site; o ☰ (a janela Opções) no lugar dos botões do LNUX. */
   function ligarCabecalhoDoJogo() {
