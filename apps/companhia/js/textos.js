@@ -93,7 +93,7 @@
     "sala|Entrar": ["Join", "入室"], "Entrar na sala": ["Join the room", "ルームに入る"], "Cheia": ["Full", "満員"], "Sua": ["Yours", "あなたの"], "Tem senha": ["Has a password", "パスワードあり"],
     "chão simples": ["plain floor", "シンプルな床"], "sem bate-papo": ["no chat", "チャットなし"], "privada": ["private", "非公開"], "sala aberta": ["open room", "公開ルーム"], "Pessoas": ["People", "人数"],
     "Nenhuma sala pública aberta agora.": ["No public rooms open right now.", "今は公開ルームがありません。"], "Nenhuma sala com esse filtro.": ["No rooms match this filter.", "この条件のルームはありません。"],
-    "Crie a sua: ＋ Criar sala.": ["Create yours: ＋ Create room.", "自分で作ろう: ＋ ルームを作成"], "Peça o link de uma sala a quem criou.": ["Ask the creator for a room link.", "作った人にルームのリンクをもらってください。"],
+    "Crie a sua no ＋ do alto (Criar sala).": ["Create yours with the ＋ at the top (Create room).", "上の ＋（ルームを作成）で自分のルームを作ろう。"], "Peça o link de uma sala a quem criou.": ["Ask the creator for a room link.", "作った人にルームのリンクをもらってください。"],
     "Só com vagas": ["Only with free spots", "空きがあるルームだけ"], "Sem senha": ["No password", "パスワードなし"], "Mais pessoas": ["Most people", "人数が多い順"], "Mais novas": ["Newest", "新しい順"],
     "{n} de {max} salas abertas": ["{n} of {max} rooms open", "{max} 室中 {n} 室が開いています"], "Deixar quem entra pelo link criar salas": ["Let people who come through the link create rooms", "リンクから来た人もルームを作れるようにする"],
     "Quem entra pelo link pode criar salas.": ["People who come through the link can create rooms.", "リンクから来た人もルームを作れます。"], "Só você cria salas agora.": ["Only you can create rooms now.", "今はあなただけがルームを作れます。"],
@@ -957,5 +957,17 @@
     "{nome} não aceitou o chat privado.": ["{nome} didn't accept the private chat.", "{nome} はプライベートチャットを承認しませんでした。"],
     "{nome} saiu da sala.": ["{nome} left the room.", "{nome} がルームを出ました。"],
     "Pesquisar por alguém e as bolinhas em cima das personagens: adicionar amigo, ver perfil e chat privado.": ["Search for someone, and bubbles over characters: add friend, view profile and private chat.", "誰かを検索、キャラクターの上のバブル: フレンド追加、プロフィール、プライベートチャット。"],
+  });
+})();
+
+// O layout novo da Loja e da Sala (as bolinhas pretas no alto)
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Pesquisar": ["Search", "検索"], "pesquisar": ["search", "検索"], "Filtro": ["Filter", "フィルター"], "Criar sala": ["Create room", "ルームを作成"],
+    "Opções da loja": ["Store options", "ストアのオプション"], "Opções das salas": ["Room options", "ルームのオプション"],
+    "{nome}: cheia": ["{nome}: full", "{nome}: 満員"], "Entrar na sala {nome}": ["Join the room {nome}", "ルーム {nome} に入る"],
+    "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).": ["The new store and room layout: tall cards with the name at the bottom and the bubbles at the top (search, filter and more).", "ストアとルームの新しいレイアウト: 名前が下にある縦長のカードと、上のバブル（検索、フィルターなど）。"],
   });
 })();

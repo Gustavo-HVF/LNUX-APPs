@@ -17,9 +17,9 @@
   const C = (window.C = window.C || {});
   const { el } = LNUX;
   const TIPOS = {
-    personagem: { nome: "Personagens", um: "Personagem", icone: "🧍", usar: "Usar esta personagem" },
-    mundo: { nome: "Mapas", um: "Mapa", icone: "🗺️", usar: "Usar este mapa" },
-    animacao: { nome: "Animações", um: "Animação", icone: "💃", usar: "Usar esta animação" },
+    personagem: { nome: "Personagens", um: "Personagem", icone: "🧍", desenho: "b-personagem", usar: "Usar esta personagem" },
+    mundo: { nome: "Mapas", um: "Mapa", icone: "🗺️", desenho: "b-mundo", usar: "Usar este mapa" },
+    animacao: { nome: "Animações", um: "Animação", icone: "💃", desenho: "b-animacao", usar: "Usar esta animação" },
   };
   const t = (s, v) => (C.t ? C.t(s, v) : s);
   const SEGREDOS = "companhia.loja.segredos";
@@ -570,21 +570,24 @@
     return resolvido || (r && r.id ? r : null);
   };
 
+  /**
+   * O cartão de um item: a imagem ocupa o cartão inteiro e o nome fica no canto de baixo, à esquerda; no alto, as
+   * curtidas e quantos baixaram (e o selo "Novo").
+   */
   C.cartaoDaLoja = function (item, { aoAbrir = () => {}, aoCurtir = null } = {}) {
     const tp = TIPOS[item.tipo];
-    const capa = el("div", { class: "capa" }, item.miniatura ? el("img", { src: C.loja.miniatura(item), alt: "", loading: "lazy" }) : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, tp.icone),
+    const capa = el("div", { class: "capa" }, item.miniatura ? el("img", { src: C.loja.miniatura(item), alt: "", loading: "lazy" })
+      : el("span", { class: "sem-miniatura", "aria-hidden": "true" }, C.iconeWebc ? C.iconeWebc(tp.desenho) : tp.icone),
       el("span", { class: "selo-tipo" }, tp.um));
     if (Date.now() / 1000 - item.criado < 3 * 86400) capa.append(el("span", { class: "selo-novo" }, "Novo"));
     const curtir = el("button", { type: "button", class: "webc-curtir" + (item.curti ? " curti" : ""), "aria-pressed": String(!!item.curti), title: item.curti ? "Descurtir" : "Curtir", "aria-label": item.curti ? "Descurtir" : "Curtir",
       onclick: (e) => { e.stopPropagation(); if (aoCurtir) aoCurtir(item); } }, C.iconeWebc ? C.iconeWebc("coracao") : "♥", el("span", { class: "numero" }, String(item.curtidas || 0)));
-    const cartao = el("article", { class: "cartao-loja webc-item", role: "listitem", tabindex: 0, "data-id": item.id, "data-tipo": item.tipo, onclick: () => aoAbrir(item),
+    const dica = [item.nome, item.autor ? t("por {autor}", { autor: item.autor }) : "", (item.tags || []).slice(0, 3).map((x) => "#" + x).join(" ")].filter(Boolean).join(" · ");
+    const cartao = el("article", { class: "cartao-loja webc-item", role: "listitem", tabindex: 0, "data-id": item.id, "data-tipo": item.tipo, title: dica, "aria-label": item.nome, onclick: () => aoAbrir(item),
       onkeydown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); aoAbrir(item); } } },
       capa,
-      el("div", { class: "webc-item-info" },
-        el("span", { class: "nome", translate: "no" }, item.nome),
-        el("span", { class: "autor" }, item.autor ? t("por {autor}", { autor: item.autor }) : t("sem autor")),
-        item.tags && item.tags.length ? el("span", { class: "webc-tags", translate: "no" }, item.tags.slice(0, 3).map((x) => "#" + x).join(" ")) : null,
-        el("div", { class: "webc-item-numeros" }, curtir, el("span", { class: "webc-baixados", title: "Quantas pessoas baixaram" }, C.iconeWebc ? C.iconeWebc("baixar") : "⤓", el("span", { class: "numero" }, String(item.baixados || 0))))));
+      el("div", { class: "webc-item-numeros" }, curtir, el("span", { class: "webc-baixados", title: "Quantas pessoas baixaram" }, C.iconeWebc ? C.iconeWebc("baixar") : "⤓", el("span", { class: "numero" }, String(item.baixados || 0)))),
+      el("div", { class: "webc-item-info" }, el("span", { class: "nome", translate: "no" }, item.nome)));
     return cartao;
   };
 
@@ -602,15 +605,16 @@
     let dados = { itens: [], publicar: false, dono: false }, aba = TIPOS[tipo] ? tipo : "personagem", busca = "", vitrine = null, aberto = null, miniaturas = null;
     let ordem = "curtidos", soSalvos = false;
     const grade = el("div", { class: "loja-grade webc-grade", role: "list" });
-    const abas = el("nav", { class: "loja-abas webc-abas", role: "tablist" });
-    const campo = el("input", { type: "search", class: "loja-busca webc-busca-campo", placeholder: "pesquisa", "aria-label": "Procurar na loja", value: buscaInicial });
+    const abas = el("nav", { class: "loja-abas webc-abas webc-bolha-painel", role: "tablist", hidden: true, "aria-label": "Categorias" });
+    const campo = el("input", { type: "search", class: "loja-busca webc-busca-campo", placeholder: "pesquisar", "aria-label": "Procurar na loja", value: buscaInicial });
     const dono = el("div", { class: "loja-dono", hidden: true });
     const detalhe = el("section", { class: "loja-detalhe", hidden: true, "aria-live": "polite" });
     const vazio = el("div", { class: "loja-vazio", hidden: true });
-    const filtro = el("div", { class: "webc-filtro-painel", hidden: true });
-    const botaoFiltro = el("button", { type: "button", class: "webc-filtro", "aria-expanded": "false", onclick: () => { filtro.hidden = !filtro.hidden; botaoFiltro.setAttribute("aria-expanded", String(!filtro.hidden)); desenharFiltro(); } },
-      el("span", {}, "filtro"), C.iconeWebc ? C.iconeWebc("filtro") : "⏷");
-    const publicar = el("button", { class: "lnux-botao primario", type: "button", id: "loja-publicar", onclick: () => comecarAPublicar().catch(LNUX.erro) }, "＋ Publicar");
+    const filtro = el("div", { class: "webc-filtro-painel webc-bolha-painel", hidden: true });
+    // as bolinhas pretas no alto: pesquisar, a categoria, o filtro, o Sketchfab e publicar
+    const botaoFiltro = C.bolhaWebc({ icone: "b-filtro", rotulo: "Filtro", classe: "webc-filtro", painel: filtro, acao: () => desenharFiltro() });
+    const botaoCategoria = C.bolhaWebc({ id: "loja-categoria", icone: TIPOS[aba].desenho, rotulo: TIPOS[aba].nome, classe: "webc-categoria", painel: abas });
+    const publicar = C.bolhaWebc({ id: "loja-publicar", icone: "b-publicar", rotulo: "Publicar", acao: () => comecarAPublicar().catch(LNUX.erro) });
     /** ＋ Publicar: quem não tem conta entra primeiro (só quem tem conta publica; o dono também sem conta). */
     async function comecarAPublicar() {
       if (!dados.pode_publicar) {
@@ -621,14 +625,13 @@
       const item = await janelaPublicar(ctx, { tipo: aba || "personagem" });
       if (item) { await recarregar(); abrirItem(item.id); }
     }
-    const botaoSketchfab = el("button", { class: "lnux-botao", type: "button", id: "loja-sketchfab", hidden: true, title: "Trazer mapas do Sketchfab",
-      onclick: () => C.janelaSketchfab({ usarMapa: (nome, arquivo, blob) => (aoUsar || ctx.usar)({ tipo: "mundo", nome, arquivo }, blob) }).then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) }, "Sketchfab");
+    const botaoSketchfab = C.bolhaWebc({ id: "loja-sketchfab", icone: "b-sketchfab", rotulo: "Sketchfab", hidden: true,
+      acao: () => C.janelaSketchfab({ usarMapa: (nome, arquivo, blob) => (aoUsar || ctx.usar)({ tipo: "mundo", nome, arquivo }, blob) }).then((item) => { if (item) { aba = "mundo"; recarregar().then(() => abrirItem(item.id)); } }).catch(LNUX.erro) });
     const caixa = el("div", { class: "loja webc-loja" + (pagina ? " em-pagina" : ""), role: pagina ? "region" : "dialog", "aria-label": "Loja", "aria-modal": pagina ? undefined : "true" },
       el("header", { class: "loja-topo webc-painel-topo" },
         el("h1", { class: "webc-painel-titulo" }, "LOJA"),
-        el("label", { class: "webc-busca" }, C.iconeWebc ? C.iconeWebc("busca") : "🔍", campo),
         el("span", { class: "webc-espaco" }),
-        botaoSketchfab, publicar, botaoFiltro,
+        el("div", { class: "webc-bolhas", role: "toolbar", "aria-label": "Opções da loja" }, C.bolhaBusca(campo, "Pesquisar"), botaoCategoria, botaoFiltro, botaoSketchfab, publicar),
         pagina ? null : el("button", { class: "lnux-botao icone plano", type: "button", "aria-label": "Fechar a loja", title: "Fechar", html: LNUX.icone("fechar"), onclick: () => sair() })),
       filtro, abas, dono, grade, vazio, detalhe);
     (dentro || document.body).append(caixa);
@@ -658,10 +661,11 @@
     });
 
     function desenharAbas() {
+      botaoCategoria.trocar(TIPOS[aba].desenho, t(TIPOS[aba].nome));
       const conta = (tp) => dados.itens.filter((i) => i.tipo === tp && passa(i)).length; // com uma pesquisa: quantos acharam em cada categoria
       abas.replaceChildren(...Object.entries(TIPOS).map(([tp, x]) =>
         el("button", { type: "button", role: "tab", class: "loja-aba" + (aba === tp ? " ativa" : ""), "aria-selected": String(aba === tp), "data-tipo": tp,
-          onclick: () => { aba = tp; voltar(); desenharAbas(); desenharGrade(); desenharFiltro(); } }, x.nome, el("span", { class: "conta" }, String(conta(tp))))));
+          onclick: () => { aba = tp; voltar(); desenharAbas(); desenharGrade(); desenharFiltro(); botaoCategoria.fecharPainel(); } }, C.iconeWebc(x.desenho), x.nome, el("span", { class: "conta" }, String(conta(tp))))));
     }
     /** O filtro: a ordem, só os salvos e os # mais usados nesta categoria. */
     function desenharFiltro() {

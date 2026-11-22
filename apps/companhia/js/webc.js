@@ -40,7 +40,60 @@
     fechar: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
     foto: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4Z"/><circle cx="12" cy="13" r="3.6"/></svg>',
   };
+  // os desenhos das bolinhas pretas no alto da loja e da sala (brancos, em 24 × 24)
+  const b24 = (corpo) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${corpo}</svg>`;
+  Object.assign(ICONES, {
+    "b-busca": b24('<circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>'),
+    "b-filtro": b24('<path d="M3.5 5h17l-6.5 7.8V19l-4 2v-8.2Z" fill="currentColor"/>'),
+    "b-personagem": b24('<circle cx="12" cy="7.5" r="3.8"/><path d="M5 21c.6-4.8 3.3-7.4 7-7.4s6.4 2.6 7 7.4"/>'),
+    "b-mundo": b24('<path d="M9 4 3.5 6v14L9 18l6 2 5.5-2V4L15 6Z"/><path d="M9 4v14M15 6v14"/>'),
+    "b-animacao": b24('<circle cx="14" cy="4.5" r="2.2"/><path d="m7 10 4-2.5 3 1.5 1.5 3.5 3 1"/><path d="m11 7.5-1.5 6 3.5 3V21"/><path d="m9.5 13.5-3 2.5-3 .5"/>'),
+    "b-publicar": b24('<path d="M12 16V4m-5 5 5-5 5 5"/><path d="M4 15v4a1.5 1.5 0 0 0 1.5 1.5h13A1.5 1.5 0 0 0 20 19v-4"/>'),
+    "b-sketchfab": b24('<path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4Z"/><path d="M4 7.4 12 12l8-4.6M12 12v9.2"/>'),
+    "b-criar": b24('<path d="M12 5v14M5 12h14" stroke-width="2.8"/>'),
+    "b-link": b24('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>'),
+    "b-pessoas": b24('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c.5-4 3-6.3 6.5-6.3s6 2.3 6.5 6.3"/><path d="M16 4.8a3.4 3.4 0 0 1 0 6.4M18.5 14.2c1.8.9 2.8 2.9 3 5.8"/>'),
+    "b-cadeado": b24('<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'),
+    "b-sala": b24('<path d="M4 21V5.5L13 3v18"/><path d="M13 5h4.5a1.5 1.5 0 0 1 1.5 1.5V21M2.5 21h19"/><circle cx="10" cy="12.5" r=".9" fill="currentColor"/>'),
+  });
   C.iconeWebc = (nome) => svg(ICONES[nome] || "");
+
+  /**
+   * Uma bolinha preta do alto da loja e da sala: o desenho e, ao passar o mouse (ou com o foco do teclado), ela se
+   * estica e mostra o nome. Com painel (um elemento), ela abre e fecha esse painel (aria-expanded).
+   * opcoes: {id, icone (nome em C.iconeWebc), rotulo, acao, classe, painel, hidden}.
+   */
+  C.bolhaWebc = function ({ id, icone, rotulo, acao, classe = "", painel = null, hidden = false } = {}) {
+    const texto = el("span", { class: "webc-bolha-texto" }, rotulo);
+    const b = el("button", { type: "button", class: "webc-bolha " + classe, id, title: rotulo, "aria-label": rotulo, hidden,
+      "aria-expanded": painel ? "false" : undefined,
+      onclick: () => {
+        if (painel) {
+          const abrir = painel.hidden;
+          // só um painel aberto por vez
+          for (const outro of (b.parentElement ? b.parentElement.querySelectorAll(".webc-bolha[aria-expanded=\"true\"]") : [])) if (outro !== b) outro.fecharPainel();
+          painel.hidden = !abrir;
+          b.setAttribute("aria-expanded", String(abrir));
+        }
+        if (acao) acao();
+      } }, el("span", { class: "webc-bolha-icone" }, C.iconeWebc(icone)), texto);
+    b.fecharPainel = () => { if (painel) { painel.hidden = true; b.setAttribute("aria-expanded", "false"); } };
+    b.trocar = (novoIcone, novoRotulo) => {
+      b.querySelector(".webc-bolha-icone").replaceChildren(C.iconeWebc(novoIcone));
+      texto.textContent = novoRotulo; b.title = novoRotulo; b.setAttribute("aria-label", novoRotulo);
+    };
+    return b;
+  };
+  /** A bolinha de pesquisar: a lupa que se estica com a caixa de texto (ao passar o mouse, ao clicar ou com algo escrito). */
+  C.bolhaBusca = function (campo, rotulo = "Pesquisar") {
+    campo.classList.add("webc-bolha-campo");
+    if (!campo.placeholder || campo.placeholder === "pesquisa") campo.placeholder = rotulo.toLowerCase();
+    const caixa = el("label", { class: "webc-bolha webc-bolha-busca", title: rotulo }, el("span", { class: "webc-bolha-icone" }, C.iconeWebc("b-busca")), campo);
+    const marcar = () => caixa.classList.toggle("com-texto", !!campo.value);
+    campo.addEventListener("input", marcar);
+    marcar();
+    return caixa;
+  };
 
   const estado = { raiz: null, conteudo: null, pagina: "", opcoes: {}, atual: null, ctx: null, trocando: null };
 
@@ -231,6 +284,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).",
     "Pesquisar por alguém e as bolinhas em cima das personagens: adicionar amigo, ver perfil e chat privado.",
     "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.",
     "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.",
