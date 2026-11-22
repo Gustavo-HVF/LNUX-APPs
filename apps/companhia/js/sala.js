@@ -34,26 +34,48 @@
   const PRESETS_ROSTO = ["happy", "sad", "angry", "relaxed", "surprised", "aa", "ih", "ou", "ee", "oh", "blink", "blinkLeft", "blinkRight"];
 
   /** Pede à sala (o código da sala é o que dá acesso; a chave da ponte só vai se houver: é o dono do servidor). */
-  async function pedir(metodo, rota, { json, corpo, como = "json", chave, base = "/api/sala" } = {}) {
+  /**
+   * Um pedido ao servidor da sala. tempo: desiste depois de tantos ms (uma resposta que nunca chega não pode travar a
+   * sala para sempre); sinal: o AbortSignal da vez na sala (sair cancela o que ainda estava a caminho). Quem desistiu
+   * recebe um erro com .cancelado (e .saiu, se foi porque a pessoa saiu da sala).
+   */
+  async function pedir(metodo, rota, { json, corpo, como = "json", chave, base = "/api/sala", tempo = 0, sinal = null } = {}) {
     const cabecalhos = {};
     if (json !== undefined) cabecalhos["Content-Type"] = "application/json";
     if (chave) cabecalhos["X-Sala-Chave"] = chave;
     if (LNUX.ponte && LNUX.ponte._token) cabecalhos["X-Ponte-Token"] = LNUX.ponte._token;
     const sessao = C.contas && C.contas.sessao();
     if (sessao) cabecalhos["X-Conta-Sessao"] = sessao; // quem entrou na conta aparece com o nome e o perfil dela
-    let r;
-    try { r = await fetch(base + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo }); }
-    catch (e) { throw new Error("O servidor da sala não respondeu. O link ainda vale? (quem criou a sala precisa estar com ela aberta)"); }
-    if (!r.ok) {
-      let msg = "A sala respondeu " + r.status, campo = "";
-      try { const j = await r.json(); if (j.erro) msg = j.erro; campo = j.campo || ""; } catch (e) { /* sem corpo */ }
-      const erro = new Error(msg);
-      erro.status = r.status;
-      erro.campo = campo; // "nome": o nome é de uma conta (quem joga sem conta escolhe outro)
-      throw erro;
+    const controle = new AbortController(), desistir = () => controle.abort();
+    const relogio = tempo ? setTimeout(desistir, tempo) : 0;
+    if (sinal) { if (sinal.aborted) desistir(); else sinal.addEventListener("abort", desistir, { once: true }); }
+    const cancelado = () => Object.assign(new Error(sinal && sinal.aborted ? "Você saiu da sala." : "A sala demorou demais para responder."),
+      { cancelado: true, saiu: !!(sinal && sinal.aborted) });
+    try {
+      let r;
+      try { r = await fetch(base + (rota ? "/" + rota : ""), { method: metodo, headers: cabecalhos, body: json !== undefined ? JSON.stringify(json) : corpo, signal: controle.signal }); }
+      catch (e) {
+        if (controle.signal.aborted) throw cancelado();
+        throw new Error("O servidor da sala não respondeu. O link ainda vale? (quem criou a sala precisa estar com ela aberta)");
+      }
+      if (!r.ok) {
+        let msg = "A sala respondeu " + r.status, campo = "";
+        try { const j = await r.json(); if (j.erro) msg = j.erro; campo = j.campo || ""; } catch (e) { /* sem corpo */ }
+        const erro = new Error(msg);
+        erro.status = r.status;
+        erro.campo = campo; // "nome": o nome é de uma conta (quem joga sem conta escolhe outro)
+        throw erro;
+      }
+      try { return await (como === "blob" ? r.blob() : r.json()); }
+      catch (e) { if (controle.signal.aborted) throw cancelado(); throw e; }
+    } finally {
+      clearTimeout(relogio);
+      if (sinal) sinal.removeEventListener("abort", desistir);
     }
-    return como === "blob" ? r.blob() : r.json();
   }
+  // quanto esperar os pedidos pequenos antes de desistir (e tentar de novo na próxima volta). Os arquivos (avatar,
+  // texturas) não têm limite (num celular lento, um avatar grande leva minutos): só sair da sala os cancela.
+  const ESPERA = { estado: 10000, pequeno: 20000 };
 
   /** Uma placa de texto que sempre olha para a câmera (o nome em cima da cabeça, o balão da fala). */
   function placa(texto, { fundo = "rgba(20,24,36,.78)", cor = "#fff", tamanho = 30, largura = 420, titulo = null } = {}) {
@@ -258,7 +280,7 @@
       const versao = this.videoVersao;
       if (!versao) { this.video = null; return; }
       try {
-        const v = await pedir("GET", `${this.sala.codigo}/video/${this.id}?v=${versao}`);
+        const v = await pedir("GET", `${this.sala.codigo}/video/${this.id}?v=${versao}`, { tempo: ESPERA.pequeno, sinal: this.sala.sinal() });
         if (versao === this.videoVersao) this.video = { ...v, desvio: v.agora - Date.now() / 1000 };
       } catch (e) { if (versao === this.videoVersao) this.video = null; }
     }
@@ -266,16 +288,16 @@
       const versao = this.aparenciaVersao;
       if (!versao) return;
       try {
-        const ap = await pedir("GET", `${this.sala.codigo}/aparencia/${this.id}?v=${versao}`);
+        const ap = await pedir("GET", `${this.sala.codigo}/aparencia/${this.id}?v=${versao}`, { tempo: ESPERA.pequeno, sinal: this.sala.sinal() });
         const texturas = {};
         for (const [peca, n] of Object.entries(ap.texturas || {})) {
-          if (!this.texturas.has(n)) this.texturas.set(n, await pedir("GET", `${this.sala.codigo}/textura/${this.id}/${n}`, { como: "blob" }));
+          if (!this.texturas.has(n)) this.texturas.set(n, await pedir("GET", `${this.sala.codigo}/textura/${this.id}/${n}`, { como: "blob", sinal: this.sala.sinal() }));
           texturas[peca] = this.texturas.get(n);
         }
         if (versao !== this.aparenciaVersao) return;
         this.aparencia = { ajuste: ap.ajuste || null, ocultas: ap.ocultas || [], texturas };
         if (this.avatar) { await aplicarAparencia(this.avatar, this.aparencia); this.medirAltura(); }
-      } catch (e) { console.warn("sala: a aparência de " + this.nome + " não chegou", e); }
+      } catch (e) { if (!e.saiu) console.warn("sala: a aparência de " + this.nome + " não chegou", e); }
     }
     medirAltura() {
       const av = this.avatar;
@@ -286,12 +308,12 @@
       const versao = this.avatarVersao;
       if (!versao) { this.trocarAvatar(null); return; }
       try {
-        const blob = await pedir("GET", `${this.sala.codigo}/avatar/${this.id}?v=${versao}`, { como: "blob" });
+        const blob = await pedir("GET", `${this.sala.codigo}/avatar/${this.id}?v=${versao}`, { como: "blob", sinal: this.sala.sinal() });
         const av = await abrirAvatar(blob, 1024);
         if (versao !== this.avatarVersao || !this.grupo.parent) { window.CompanhiaVRM.VRMUtils.deepDispose(av.vrm.scene); return; }
         if (this.aparencia) await aplicarAparencia(av, this.aparencia);
         this.trocarAvatar(av);
-      } catch (e) { console.warn("sala: o avatar de " + this.nome + " não abriu", e); }
+      } catch (e) { if (!e.saiu) console.warn("sala: o avatar de " + this.nome + " não abriu", e); }
     }
     trocarAvatar(av) {
       if (this.avatar) { this.grupo.remove(this.avatar.vrm.scene); try { window.CompanhiaVRM.VRMUtils.deepDispose(this.avatar.vrm.scene); } catch (e) { /* já foi */ } }
@@ -397,12 +419,26 @@
       this.descanso = C.poseDescanso(1.2);
       this.ocupado = false;
       this.falhas = 0;
+      // cada entrada na sala é uma "vez": sair (ou entrar de novo) muda a vez, cancela o que estava a caminho e faz as
+      // respostas atrasadas da vez anterior serem ignoradas (antes, uma delas podia chegar depois e travar a sala)
+      this.vez = 0;
+      this.controle = null;
       this.relogio = new window.THREE.Clock();
       this.quadro = () => { if (!this.codigo) return; const dt = Math.min(0.3, this.relogio.getDelta()); for (const r of this.remotos.values()) { try { r.atualizar(dt); } catch (e) { console.error(e); } } this.pedidoQuadro = requestAnimationFrame(this.quadro); };
     }
     get dentro() { return !!(this.codigo && this.eu); }
     get pessoas() { return this.remotos.size + (this.dentro ? 1 : 0); }
     link() { return this.codigo ? location.origin + location.pathname + "#sala=" + this.codigo : ""; }
+    /** O sinal da vez atual na sala (cancela quando a pessoa sai). */
+    sinal() { return this.controle ? this.controle.signal : null; }
+    /** Começa (ou encerra, com entrou = false) uma vez na sala: o que estava a caminho é cancelado. */
+    novaVez(entrou) {
+      this.vez++;
+      if (this.controle) this.controle.abort();
+      this.controle = entrou ? new AbortController() : null;
+      this.ocupado = false;
+      this.enviando = false;
+    }
 
     /** As salas públicas deste servidor e se dá para criar: {salas: [...], criar, visitantes_criam, dono, abertas, maximo}. */
     static lista() { return pedir("GET", "", { base: "/api/salas" }); }
@@ -474,13 +510,14 @@
         pedir("POST", `${codigo}/sair`, { json: { id: eu.id, segredo: eu.segredo } }).catch(() => {});
         throw e;
       }
+      this.novaVez(true);
       this.codigo = codigo;
       this.info = info;
       this.eu = { ...eu, nome };
       this.visto = eu.mensagens || 0;
       this.mapaVersao = info.mapa ? info.mapa.versao : 0;
       this.mapaArquivo = info.mapa ? info.mapa.arquivo || info.mapa.versao : 0;
-      if (avatar) pedir("PUT", `${codigo}/avatar?id=${eu.id}&segredo=${eu.segredo}`, { corpo: avatar }).catch((e) => console.warn("sala: o avatar não subiu", e));
+      if (avatar) pedir("PUT", `${codigo}/avatar?id=${eu.id}&segredo=${eu.segredo}`, { corpo: avatar, sinal: this.sinal() }).catch((e) => { if (!e.saiu) console.warn("sala: o avatar não subiu", e); });
       this.avatarEnviado = avatar || null;
       this.aparenciaEnviada = "";
       this.texturasEnviadas = new Map(); // Blob → n
@@ -518,10 +555,10 @@
       const a = this.obterAparencia();
       if (!a) return;
       this.enviando = true;
-      const { codigo, eu } = this, q = `id=${eu.id}&segredo=${eu.segredo}`;
+      const { codigo, eu, vez } = this, q = `id=${eu.id}&segredo=${eu.segredo}`, sinal = this.sinal();
       try {
         if (a.avatar && a.avatar !== this.avatarEnviado) {
-          await pedir("PUT", `${codigo}/avatar?${q}`, { corpo: a.avatar });
+          await pedir("PUT", `${codigo}/avatar?${q}`, { corpo: a.avatar, sinal });
           this.avatarEnviado = a.avatar;
         }
         const texturas = {};
@@ -529,26 +566,28 @@
           if (!(blob instanceof Blob)) continue;
           if (!this.texturasEnviadas.has(blob)) {
             const n = this.texturasEnviadas.size % 256;
-            await pedir("PUT", `${codigo}/textura?${q}&n=${n}`, { corpo: blob });
+            await pedir("PUT", `${codigo}/textura?${q}&n=${n}`, { corpo: blob, sinal });
             this.texturasEnviadas.set(blob, n);
           }
           texturas[peca] = this.texturasEnviadas.get(blob);
         }
         const json = JSON.stringify({ ajuste: a.ajuste || null, ocultas: a.ocultas || [], texturas });
         if (json !== this.aparenciaEnviada && this.codigo === codigo) {
-          await pedir("PUT", `${codigo}/aparencia?${q}`, { corpo: json });
+          await pedir("PUT", `${codigo}/aparencia?${q}`, { corpo: json, tempo: ESPERA.pequeno, sinal });
           this.aparenciaEnviada = json;
         }
-      } catch (e) { console.warn("sala: a aparência não subiu", e); }
-      finally { this.enviando = false; }
+      } catch (e) { if (!e.saiu) console.warn("sala: a aparência não subiu", e); }
+      finally { if (vez === this.vez) this.enviando = false; } // de uma vez anterior: a nova já começou sem ela
     }
     async trocar() {
       if (!this.dentro || this.ocupado) return;
       if (performance.now() - this.ultimaAparencia > 1000) { this.ultimaAparencia = performance.now(); this.enviarAparencia(); }
+      const { vez, eu, codigo } = this;
       this.ocupado = true;
       try {
         const enviado = Date.now() / 1000;
-        const r = await pedir("POST", `${this.codigo}/estado`, { json: { id: this.eu.id, segredo: this.eu.segredo, desde: this.visto, estado: this.meuEstado() } });
+        const r = await pedir("POST", `${codigo}/estado`, { json: { id: eu.id, segredo: eu.segredo, desde: this.visto, estado: this.meuEstado() }, tempo: ESPERA.estado, sinal: this.sinal() });
+        if (vez !== this.vez) return; // saiu (ou entrou de novo) enquanto esperava: a resposta é da vez anterior
         this.falhas = 0;
         if (typeof r.agora === "number") { // o relógio do servidor menos o meu (metade da ida e volta descontada), suavizado
           const d = r.agora - (enviado + Date.now() / 1000) / 2;
@@ -557,7 +596,7 @@
         }
         const vivos = new Set();
         for (const j of r.pessoas) {
-          if (j.id === this.eu.id) { this.meuVideo = j.video || 0; continue; }
+          if (j.id === eu.id) { this.meuVideo = j.video || 0; continue; }
           vivos.add(j.id);
           let rem = this.remotos.get(j.id);
           if (!rem) { rem = new Remoto(this, j.id, j.nome); this.remotos.set(j.id, rem); this.aoMensagem({ sistema: true, texto: C.t("{nome} entrou.", { nome: j.nome }) }); this.aoMudar(); }
@@ -566,19 +605,20 @@
         for (const [id, rem] of this.remotos) if (!vivos.has(id)) { this.aoMensagem({ sistema: true, texto: C.t("{nome} saiu.", { nome: rem.nome }) }); rem.descartar(); this.remotos.delete(id); this.aoMudar(); }
         for (const m of r.mensagens || []) {
           this.visto = Math.max(this.visto, m.n);
-          const meu = m.de === this.eu.id, rem = this.remotos.get(m.de);
+          const meu = m.de === eu.id, rem = this.remotos.get(m.de);
           if (rem && !(C.batePapo && C.batePapo.ler().baloes === false)) rem.falar(m.texto); // Opções › Bate-papo: os balões
           this.aoMensagem({ de: m.de, nome: m.nome, texto: m.texto, meu, titulo: m.titulo || null });
         }
-        if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => console.warn(e)); }
+        if (r.mapa !== this.mapaVersao) { this.mapaVersao = r.mapa; this.trocarMapa().catch((e) => { if (!e.saiu) console.warn(e); }); }
         // quem criou mudou o nome ou o bate-papo: todos veem
         if (this.info && ((r.nome && r.nome !== this.info.nome) || (r.bate_papo !== undefined && r.bate_papo !== this.info.bate_papo) || (r.videos && r.videos !== this.info.videos))) {
           this.info = { ...this.info, nome: r.nome || this.info.nome, bate_papo: r.bate_papo, videos: r.videos || this.info.videos };
           this.aoMudar();
         }
       } catch (e) {
+        if (vez !== this.vez) return; // da vez anterior (ou cancelado porque saiu)
         if (e.status === 404 || e.status === 403 || ++this.falhas > 40) { const motivo = e.status === 404 ? "A sala foi fechada." : e.status === 403 ? "Você foi tirado da sala (ficou tempo demais sem resposta)." : "A ligação com a sala caiu."; await this.sair(true); this.aoMensagem({ sistema: true, texto: motivo }); LNUX.aviso(motivo, "alerta", 8000); }
-      } finally { this.ocupado = false; }
+      } finally { if (vez === this.vez) this.ocupado = false; }
     }
     /** Quem criou a sala trocou o cenário (todos passam para o novo) ou só o ajuste dele (tamanho, giro, posição, começo). */
     async trocarMapa() {
@@ -601,7 +641,8 @@
         this.aoMudar();
         return;
       }
-      const glb = await pedir("GET", `${this.codigo}/mapa?v=${arquivo}`, { como: "blob" });
+      const glb = await pedir("GET", `${this.codigo}/mapa?v=${arquivo}`, { como: "blob", sinal: this.sinal() });
+      if (!this.dentro) return;
       await mundo.abrirMapa(new Map([["sala.glb", glb]]), { nome: info.mapa.nome, principal: "sala.glb", ajuste: { ...(info.mapa.ajuste || {}) } });
       this.mapaArquivo = arquivo;
       this.aoMensagem({ sistema: true, texto: C.t("O cenário da sala agora é \"{nome}\".", { nome: info.mapa.nome }) });
@@ -628,6 +669,7 @@
       clearInterval(this.pulso);
       cancelAnimationFrame(this.pedidoQuadro);
       const codigo = this.codigo, eu = this.eu;
+      this.novaVez(false); // o que estava a caminho (a troca de estado, a aparência, os avatares dos outros) é cancelado
       this.codigo = null;
       this.eu = null;
       this.ajusteEnviado = undefined;

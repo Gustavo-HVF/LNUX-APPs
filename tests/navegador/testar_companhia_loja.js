@@ -5,8 +5,9 @@
 // "visita" só pelo endereço (sem a chave), como quem recebeu o link. Cobre: a loja vazia; publicar pela tela (a
 // personagem, com a prévia 3D e a miniatura tirada dela); a grade como uma loja (abas, busca, miniaturas, que o dono
 // gera para o que veio sem); a prévia 3D da personagem, do mundo e da animação antes de usar; usar cada um (a
-// personagem escolhida para a sala, o mundo em Cenário, a animação em Pacotes de movimento); a visita publicando
-// um arquivo dela e apagando só o que é dela; o dono fechando a loja para publicações. Depois sobe um servidor com
+// personagem escolhida para a sala, o mundo em Cenário, a animação em Pacotes de movimento); a visita sem conta não
+// publica (＋ Publicar pede para entrar na conta); com conta (o código chega num SMTP de mentira), publica um arquivo
+// dela e apaga só o que é dela; o dono fechando a loja para publicações. Depois sobe um servidor com
 // --so-app companhia e confere, como quem chega pelo túnel: a página inicial leva à Companhia, os outros apps não
 // abrem, sem o botão dos Apps Web, e a ponte não abre nem com a chave.
 const { chromium } = require("playwright");
@@ -17,6 +18,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 const { bonecoVRM0, mapaDeTeste, bvhDeTeste } = require("./companhia_arquivos.js");
+const { smtpFalso, configurarEmail, criarConta, apagarConta } = require("./companhia_email.js");
 
 const PASTA = process.env.LNUX_TESTE_SAIDA || __dirname;
 const TOKEN = process.env.LNUX_TESTE_TOKEN || fs.readFileSync(path.join(PASTA, "token.txt"), "utf8").trim();
@@ -55,6 +57,7 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     return n;
   });
   const dono = await pessoa("dono"), visita = await pessoa("visita");
+  const smtp = await smtpFalso();
   let servidor = null;
   try {
     // ── o dono: uma personagem dele e a loja vazia ──
@@ -68,7 +71,9 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await dono.pagina.click('.lnux-menu button:has(.rotulo:text-is("Loja: personagens, mapas e animações..."))');
     await dono.pagina.waitForSelector(".loja .loja-vazio:not([hidden])");
     ok(await dono.ev(() => /Ainda não há .+ na loja/.test(document.querySelector(".loja-vazio").textContent) && !document.querySelector(".loja-dono").hidden &&
-      document.querySelector(".loja-dono input").checked), "a loja abre pelo menu Personagem; vazia, e o dono vê onde fica a pasta e se os visitantes publicam");
+      document.querySelector(".loja-dono input").checked && /quem tem conta/.test(document.querySelector(".loja-dono").textContent)),
+      "a loja abre pelo menu Personagem; vazia, e o dono vê onde fica a pasta e se quem tem conta publica");
+    await configurarEmail(dono, smtp.porta); // para a visita criar a conta dela (o código chega no SMTP de mentira)
 
     // ── publicar pela tela: a prévia e a miniatura ──
     await dono.pagina.click(".loja #loja-publicar");
@@ -143,23 +148,33 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     await visita.pagina.waitForFunction(async () => (await C.movimentos.lista()).some((m) => m.nome === "levantar" && m.pacote === "Loja"), null, { timeout: 30000 });
     ok(true, "\"Usar esta animação\" põe a animação nos pacotes de movimento");
 
-    // ── a visita publica uma animação dela (um arquivo do aparelho) e só ela (ou o dono) apaga ──
+    // ── sem conta, a visita não publica: ＋ Publicar pede para entrar na conta ──
     const bvh = path.join(PASTA, "aceno-da-visita.bvh");
     fs.writeFileSync(bvh, bvhDeTeste());
     await visita.ev(() => { window.Companhia.abrirLoja(); });
     await visita.pagina.waitForSelector(".loja:not(.salas) .cartao-loja");
+    await visita.pagina.click(".loja:not(.salas) #loja-publicar");
+    await visita.pagina.waitForSelector(".lnux-dialogo .janela-conta", { timeout: 10000 });
+    const semConta = await visita.ev(async () => ({ publicar: !!document.querySelector(".loja-publicar"), aviso: [...document.querySelectorAll(".lnux-aviso, .lnux-avisos *")].some((a) => /Só quem tem conta publica/.test(a.textContent)),
+      servidor: (await fetch("/api/loja/animacao?arquivo=x.bvh", { method: "PUT", body: "HIERARCHY" }).then((r) => r.status)) }));
+    ok(!semConta.publicar && semConta.aviso && semConta.servidor === 401, "sem conta, ＋ Publicar avisa que só quem tem conta publica e abre o \"Entrar na conta\" (o servidor também recusa: 401)");
+    await visita.pagina.keyboard.press("Escape");
+    await visita.pagina.waitForFunction(() => !document.querySelector(".lnux-dialogo .janela-conta"));
+    // ── com conta, a visita publica uma animação dela (um arquivo do aparelho) e só ela (ou o dono) apaga ──
+    await criarConta(smtp, visita, "Visita da loja", "visita.loja@exemplo.com");
+    await visita.pagina.waitForFunction(async () => (await C.loja.lista()).pode_publicar);
     await visita.pagina.click(".loja:not(.salas) #loja-publicar");
     await visita.pagina.click('.loja-tipos button[data-tipo="animacao"]');
     await visita.pagina.waitForFunction(() => [...document.querySelector(".loja-publicar select").options].some((o) => o.value === "@arquivo"));
     const [escolha] = await Promise.all([visita.pagina.waitForEvent("filechooser"), visita.pagina.selectOption(".loja-publicar select", "@arquivo")]);
     await escolha.setFiles(bvh);
     await visita.pagina.waitForSelector(".vitrine-publicar[data-pronta]", { timeout: 60000 });
-    await visita.pagina.fill('.loja-publicar input[aria-label="Seu nome"]', "Visita");
+    ok(!(await visita.ev(() => !!document.querySelector('.loja-publicar input[aria-label="Seu nome"]'))), "com conta, publicar não pede o nome (o autor é a conta)");
     await visita.pagina.click('.lnux-dialogo footer button:text-is("Publicar")');
     await visita.pagina.waitForSelector(".loja-detalhe:not([hidden]) .loja-acoes .perigo", { timeout: 60000 });
     lista = (await visita.ev(() => C.loja.lista())).itens;
     const daVisita = lista.find((i) => i.nome === "aceno-da-visita");
-    ok(daVisita && daVisita.autor === "Visita" && daVisita.miniatura > 0, "a visita publica uma animação dela (com a miniatura), e pode apagar o que publicou");
+    ok(daVisita && daVisita.autor === "Visita da loja" && daVisita.conta && daVisita.miniatura > 0, "com conta, a visita publica uma animação dela (com a miniatura, e a conta como autora), e pode apagar o que publicou");
     await visita.pagina.click(".loja-acoes .perigo");
     await visita.pagina.click('.lnux-dialogo footer button:text-is("Apagar")');
     await visita.pagina.waitForFunction(async () => !(await C.loja.lista()).itens.some((i) => i.nome === "aceno-da-visita"), null, { timeout: 20000 });
@@ -216,6 +231,8 @@ const portaLivre = () => new Promise((ok) => { const s = net.createServer(); s.l
     try { await visita.pagina.screenshot({ path: path.join(PASTA, "companhia-loja-erro.png") }); } catch (e2) { /* sem tela */ }
   } finally {
     if (servidor) servidor.kill();
+    await apagarConta(visita); // o nome volta a ficar livre para os outros testes
+    smtp.srv.close();
     await navegador.close();
   }
   console.log(`\nCompanhia (loja): ${passos} ok, ${erros.length} com problema.`);
