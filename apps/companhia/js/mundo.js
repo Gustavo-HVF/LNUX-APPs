@@ -10,6 +10,11 @@
  *   - Ponto de partida: o guardado ou, sem ele, o chão do meio do mapa; num mapa fechado, o de dentro (não o telhado).
  *   - Colisão: a personagem é uma cápsula que desliza no chão, nas paredes e nas rampas do cenário. As malhas do
  *     mapa são juntadas numa árvore (three-mesh-bvh, MIT), então mapas grandes não pesam a cada quadro.
+ *   - Câmeras (F troca): terceira pessoa (atrás, com a altura e o lado ajustáveis), no ombro (Q troca o lado) e primeira
+ *     pessoa (nos olhos: a cabeça some e, olhando para baixo, aparece o corpo; a cabeça acompanha o olhar para cima e para
+ *     baixo, e a câmera segue a cabeça nos movimentos grandes, como um mortal ou uma dança).
+ *   - Boneco de pano (R, ou ao despencar de muito alto): a personagem cai mole (js/ragdoll.js); R ou andar levanta.
+ *   - As pessoas da sala são sólidas: ninguém atravessa ninguém (outros() diz onde elas estão).
  *   - O andar/correr/pular tem um movimento próprio (calculado aqui); um movimento de um pacote pode ficar no
  *     lugar de cada um (Movimento › Pacotes de movimento › "Usar ao andar").
  *
@@ -135,7 +140,8 @@
       this.querPular = false;
       this.voando = false;      // voar: sem gravidade, atravessando as paredes (na sala, só quem criou)
       this.podeVoar = () => true; // quem usa o mundo decide (a tela troca quando entra numa sala)
-      this.cfg = { velocidade: 1, sensibilidade: 1, inverterY: false }; // Opções › Controle
+      // Opções › Controle e Câmera. camera: terceira | ombro | primeira; camLado/camAltura: o deslocamento da terceira pessoa
+      this.cfg = { velocidade: 1, sensibilidade: 1, inverterY: false, camera: "terceira", camLado: 0, camAltura: 0, ombroLado: 1, ombroAfastar: 0.5, ombroDistancia: 1.8, fovPrimeira: 75, ragdollQueda: true };
       try { Object.assign(this.cfg, JSON.parse(LNUX.preferencia.ler("companhia.mundo", "{}"))); } catch (e) { /* padrão */ }
       if (+this.cfg.distancia > 0) this.cam.dist = Math.min(8, Math.max(1.2, +this.cfg.distancia)); // Opções › Câmera
       this.estado = "parado";   // parado | andando | correndo | pulando
@@ -169,9 +175,32 @@
       this.sombra.renderOrder = 1;
       palco.cena.add(this.chao, this.sombra);
       this.luzes = C.LuzesDoMapa ? new C.LuzesDoMapa(this) : null; // as luzes do mapa e a luz calculada por raios (js/luzes.js)
+      this.ragdoll = C.Ragdoll ? new C.Ragdoll(palco, this) : null; // o boneco de pano (js/ragdoll.js)
+      this.outros = null;       // () → [{p: Vector3 (os pés), raio, altura}]: as pessoas da sala, que não dá para atravessar
+      this.olharCabeca = 0;     // em primeira pessoa: quanto a cabeça abaixa (+) ou levanta (−), em radianos (os outros veem)
       this.ligarEntradas();
     }
     salvarCfg() { LNUX.preferencia.gravar("companhia.mundo", JSON.stringify(this.cfg)); }
+    get primeira() { return this.andando && this.cfg.camera === "primeira"; }
+    get caido() { return !!(this.ragdoll && this.ragdoll.ativo); }
+    /** Troca a câmera: terceira → ombro → primeira (ou a pedida). Devolve o modo. */
+    trocarCamera(modo) {
+      const ordem = ["terceira", "ombro", "primeira"];
+      this.cfg.camera = ordem.includes(modo) ? modo : ordem[(ordem.indexOf(this.cfg.camera) + 1) % ordem.length];
+      if (this.cfg.camera === "primeira") this.cam.altura = limitar(this.cam.altura, -1.2, 1.3);
+      else this.cam.altura = limitar(this.cam.altura, -0.35, 1.3);
+      this.salvarCfg();
+      this.palco.emit("camera", this.cfg.camera);
+      return this.cfg.camera;
+    }
+    /** No ombro: troca o lado (direito ↔ esquerdo). */
+    trocarOmbro() { this.cfg.ombroLado = this.cfg.ombroLado < 0 ? 1 : -1; this.salvarCfg(); this.palco.emit("camera", this.cfg.camera); return this.cfg.ombroLado; }
+    /** Cai como boneco de pano (ou levanta, se já caiu). */
+    alternarRagdoll() {
+      if (!this.ragdoll || !this.andando || this.voando) return false;
+      if (this.ragdoll.ativo) { this.ragdoll.levantar(); return false; }
+      return this.ragdoll.cair(this.vel.clone());
+    }
     get altura() { return this.palco.altura || 1.5; }
     get raio() { return Math.max(0.12, this.altura * 0.16); }
 
@@ -194,6 +223,10 @@
     sair() {
       if (!this.andando) return;
       this.andando = false;
+      if (this.ragdoll && this.ragdoll.ativo) this.ragdoll.levantar();
+      this.esconderCabeca(false);
+      const cam = this.palco.camera;
+      if (cam.near !== 0.05) { cam.near = 0.05; cam.updateProjectionMatrix(); }
       this.alternarVoo(false);
       this.teclas.clear();
       this.direcional.x = this.direcional.y = 0;
@@ -316,6 +349,9 @@
       window.addEventListener("keydown", (e) => {
         if (!this.andando || alvoEditavel(e) || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".lnux-fundo-modal")) return;
         if (e.code === "KeyV") { e.preventDefault(); if (!e.repeat && !this.alternarVoo() && !this.podeVoar()) this.palco.emit("voo-negado"); return; }
+        if (e.code === "KeyF") { e.preventDefault(); if (!e.repeat) this.trocarCamera(); return; }
+        if (e.code === "KeyQ") { e.preventDefault(); if (!e.repeat) { if (this.cfg.camera !== "ombro") this.trocarCamera("ombro"); else this.trocarOmbro(); } return; }
+        if (e.code === "KeyR") { e.preventDefault(); if (!e.repeat) this.alternarRagdoll(); return; }
         const acao = TECLAS[e.code];
         if (!acao) return;
         e.preventDefault();
@@ -337,7 +373,7 @@
         if (!arrasto || arrasto.id !== e.pointerId || !this.andando) return;
         const k = this.cfg.sensibilidade || 1, y = this.cfg.inverterY ? -1 : 1;
         this.cam.giro -= (e.clientX - arrasto.x) * 0.006 * k;
-        this.cam.altura = limitar(this.cam.altura + (e.clientY - arrasto.y) * 0.005 * k * y, -0.35, 1.3);
+        this.cam.altura = limitar(this.cam.altura + (e.clientY - arrasto.y) * 0.005 * k * y, this.cfg.camera === "primeira" ? -1.2 : -0.35, 1.3);
         arrasto.x = e.clientX;
         arrasto.y = e.clientY;
       });
@@ -346,7 +382,7 @@
       c.addEventListener("pointercancel", soltar);
     }
     /** A rodinha (ou o gesto de pinça) aproxima e afasta a câmera. */
-    zoom(fator) { this.cam.dist = limitar(this.cam.dist * fator, 0.7 * (this.altura / 1.5), 14 * (this.altura / 1.5)); }
+    zoom(fator) { if (this.cfg.camera === "primeira") return; this.cam.dist = limitar(this.cam.dist * fator, 0.7 * (this.altura / 1.5), 14 * (this.altura / 1.5)); }
     /** Direcional e botão de pulo na tela (para o celular; no computador ficam discretos). */
     mostrarControles(sim) {
       if (!sim) { if (this.controles) { this.controles.remove(); this.controles = null; } return; }
@@ -390,6 +426,19 @@
       this.atualizarAnimacoes(); // as animações do mapa tocam andando ou não
       if (!this.andando || !this.palco.vrm) return;
       const raiz = this.palco.raiz, t = this.teclas, esc = this.altura / 1.5;
+      if (this.ragdoll) this.ragdoll.passo(dt);
+      if (this.caido) {
+        // caído: andar (depois de um instante) levanta
+        const quer = ["frente", "tras", "esquerda", "direita", "pular"].some((x) => t.has(x)) || Math.hypot(this.direcional.x, this.direcional.y) > 0.3;
+        if (quer && performance.now() - this.ragdoll.desde > 1200) this.ragdoll.levantar();
+        else {
+          this.pesoAndar = this.pesoCorrer = this.pesoPulo = 0;
+          if (this.estado !== "caido") { this.estado = "caido"; this.palco.emit("mundo-estado", "caido"); }
+          const c = this.ragdoll.centro(this._v);
+          this.sombra.position.set(c.x, this.alturaDoChao(c) + 0.012, c.z);
+          return;
+        }
+      }
       let lado = (t.has("direita") ? 1 : 0) - (t.has("esquerda") ? 1 : 0) + this.direcional.x;
       let frente = (t.has("frente") ? 1 : 0) - (t.has("tras") ? 1 : 0) + this.direcional.y;
       const forca = Math.hypot(lado, frente);
@@ -404,7 +453,15 @@
         this.vel.x += (mx * rapidez - this.vel.x) * acel;
         this.vel.z += (mz * rapidez - this.vel.z) * acel;
       }
-      if (forca > 0.1) {
+      this.olharCabeca = this.primeira ? limitar(this.cam.altura, -0.9, 1.1) : 0;
+      if (this.primeira) {
+        // em primeira pessoa, o corpo olha para onde a câmera olha (e anda de lado e de costas)
+        let d = this.cam.giro + Math.PI - this.rumo;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        this.rumo += d * (1 - Math.exp(-dt * 20));
+        const info = this.palco.anim.info;
+        if (forca > 0.1 && info && info.tipo === "movimento" && this.palco.anim.tocando) this.palco.pararMovimento(0.25);
+      } else if (forca > 0.1) {
         // vira para onde anda
         const alvo = Math.atan2(mx, mz);
         let d = alvo - this.rumo;
@@ -418,12 +475,19 @@
       if (this.querPular && (this.noChao || (this.tempoNoAr || 0) < 0.14)) { this.vel.y = Math.sqrt(2 * 22 * esc * 0.95 * esc); this.noChao = false; this.tempoNoAr = 0.2; }
       this.querPular = false;
       // gravidade e colisão, em passos pequenos (para não atravessar paredes finas)
-      const passos = 5, h = dt / passos;
+      const passos = 5, h = dt / passos, estavaNoAr = !this.noChao;
+      let maisRapido = 0;
       for (let i = 0; i < passos; i++) {
+        maisRapido = Math.min(maisRapido, this.vel.y);
         // no chão, um empurrãozinho para baixo mantém a cápsula encostada (e descendo rampas sem quicar)
         this.vel.y = this.noChao && this.vel.y <= 0 ? -22 * esc * h : this.vel.y - 22 * esc * h;
         raiz.position.addScaledVector(this.vel, h);
         this.colidir(h);
+      }
+      // despencou de muito alto (uns 6 m): cai como boneco de pano
+      if (estavaNoAr && this.noChao && this.cfg.ragdollQueda !== false && maisRapido < -Math.sqrt(2 * 22 * esc * 6 * esc) && this.ragdoll) {
+        raiz.rotation.y = this.rumo;
+        this.ragdoll.cair(new window.THREE.Vector3(this.vel.x, maisRapido * 0.25, this.vel.z));
       }
       this.tempoNoAr = this.noChao ? 0 : (this.tempoNoAr || 0) + dt;
       raiz.rotation.y = this.rumo;
@@ -479,6 +543,7 @@
       if (!this.colisor) {
         // chão simples
         if (raiz.position.y <= 0 && this.vel.y <= 0) { raiz.position.y = 0; this.vel.y = 0; this.noChao = true; } else this.noChao = false;
+        this.colidirPessoas();
         return;
       }
       const seg = this._seg, caixa = this._caixa;
@@ -512,7 +577,24 @@
       raiz.position.add(desl);
       if (!this.noChao) { desl.normalize(); this.vel.addScaledVector(desl, -desl.dot(this.vel)); }
       else this.vel.y = 0;
+      this.colidirPessoas();
       void T;
+    }
+    /** As pessoas da sala são cilindros em pé: quem encosta é empurrado para fora (ninguém atravessa ninguém). */
+    colidirPessoas() {
+      if (!this.outros || this.voando) return;
+      const raiz = this.palco.raiz, p = raiz.position;
+      for (const o of this.outros()) {
+        if (Math.abs(p.y - o.p.y) > Math.max(this.altura, o.altura) * 0.9) continue; // um em cima do outro (num andar de cima)
+        const dx = p.x - o.p.x, dz = p.z - o.p.z, dist = Math.hypot(dx, dz), raio = this.raio + o.raio;
+        if (dist >= raio) continue;
+        // bem no mesmo lugar (entrou junto): sai para trás de onde olha
+        const nx = dist > 1e-4 ? dx / dist : -Math.sin(this.rumo), nz = dist > 1e-4 ? dz / dist : -Math.cos(this.rumo);
+        p.x += nx * (raio - dist);
+        p.z += nz * (raio - dist);
+        const contra = this.vel.x * nx + this.vel.z * nz;
+        if (contra < 0) { this.vel.x -= contra * nx; this.vel.z -= contra * nz; }
+      }
     }
 
     // ── o movimento do andar ────────────────────────────────────────
@@ -535,29 +617,92 @@
         1 - Math.min(1, pesoMov)); // um movimento do pacote tocando manda
     }
 
-    // ── câmera em terceira pessoa ───────────────────────────────────
+    // ── câmeras: terceira pessoa, no ombro e primeira pessoa ────────
     camera(dt) {
-      const T = window.THREE, cam = this.palco.camera, raiz = this.palco.raiz, k = this.cam;
-      if (cam.fov !== 50) { cam.fov = 50; cam.updateProjectionMatrix(); }
-      const alvo = this._v.copy(raiz.position);
-      alvo.y += this.altura * 0.82;
+      const T = window.THREE, cam = this.palco.camera, raiz = this.palco.raiz, k = this.cam, esc = this.altura / 1.5;
+      const primeira = this.cfg.camera === "primeira";
+      this.esconderCabeca(primeira);
+      if (primeira) { this.cameraPrimeira(dt); return; }
+      const ombro = this.cfg.camera === "ombro";
+      if (cam.fov !== 50 || cam.near !== 0.05) { cam.fov = 50; cam.near = 0.05; cam.updateProjectionMatrix(); }
+      const alvo = this.caido ? this.ragdoll.centro(this._v) : this._v.copy(raiz.position).setY(raiz.position.y + this.altura * 0.82);
+      alvo.y += (ombro ? 0.08 : +this.cfg.camAltura || 0) * esc;
       k.alvo.lerp(alvo, 1 - Math.exp(-dt * 14));
       const ca = Math.cos(k.altura);
       const dir = this._v2.set(Math.sin(k.giro) * ca, Math.sin(k.altura), Math.cos(k.giro) * ca);
-      let dist = k.dist;
+      // para o lado (no ombro, ou o ajuste da terceira pessoa): a direita de quem olha
+      const lado = (ombro ? (this.cfg.ombroLado < 0 ? -1 : 1) * (+this.cfg.ombroAfastar || 0.5) : +this.cfg.camLado || 0) * esc;
+      const centro = (this._centro = this._centro || new T.Vector3()).copy(k.alvo);
+      if (Math.abs(lado) > 1e-3) {
+        const direita = (this._dir = this._dir || new T.Vector3()).set(Math.cos(k.giro), 0, -Math.sin(k.giro));
+        let afastar = lado;
+        if (this.colisor) { // o ponto ao lado não entra numa parede
+          const toque = this.colisor.geometry.boundsTree.raycastFirst(new T.Ray(k.alvo.clone(), direita.clone().multiplyScalar(Math.sign(lado))), T.DoubleSide);
+          if (toque && toque.distance < Math.abs(lado) + 0.15) afastar = Math.sign(lado) * Math.max(0, toque.distance - 0.15);
+        }
+        centro.addScaledVector(direita, afastar);
+      }
+      let dist = ombro ? Math.max(0.8, (+this.cfg.ombroDistancia || 1.8)) * esc : k.dist;
       if (this.colisor) {
         // a câmera não atravessa as paredes: chega mais perto
-        const toque = this.colisor.geometry.boundsTree.raycastFirst(new T.Ray(k.alvo, dir), T.DoubleSide);
+        const toque = this.colisor.geometry.boundsTree.raycastFirst(new T.Ray(centro, dir), T.DoubleSide);
         if (toque && toque.distance < dist + 0.2) dist = Math.max(0.25, toque.distance - 0.2);
       }
-      cam.position.copy(k.alvo).addScaledVector(dir, dist);
-      cam.lookAt(k.alvo);
+      cam.position.copy(centro).addScaledVector(dir, dist);
+      cam.lookAt(centro);
       // a luz acompanha a câmera, de cima (com a luz realista, quem manda é o sol: palco.atualizarLuz)
       const luz = this.palco.luz;
       if (!this.palco.luzSol) {
         luz.position.copy(k.alvo).addScaledVector(dir, 2).add(this._v.set(0.6, 2.2, 0));
         luz.target.position.copy(k.alvo);
         luz.target.updateMatrixWorld();
+      }
+    }
+    /**
+     * Primeira pessoa: a câmera nos olhos. Olhando para baixo aparece o corpo (a cabeça some só para quem joga). Andando,
+     * ela olha para onde a pessoa arrasta; quando a cabeça gira bem mais que isso (um mortal, uma dança, o boneco de
+     * pano), a câmera segue a cabeça.
+     */
+    cameraPrimeira(dt) {
+      const T = window.THREE, p = this.palco, cam = p.camera, k = this.cam, esc = this.altura / 1.5;
+      const fov = limitar(+this.cfg.fovPrimeira || 75, 50, 110);
+      if (cam.fov !== fov || cam.near !== 0.02) { cam.fov = fov; cam.near = 0.02; cam.updateProjectionMatrix(); }
+      const cabeca = p.nos && p.nos.head;
+      if (!cabeca) return;
+      cabeca.updateWorldMatrix(true, false);
+      // a rotação da cabeça no espaço canônico (no VRM 0.x, o modelo está virado: desfaz)
+      const qc = (this._qc = this._qc || new T.Quaternion()), vira = (this._vira = this._vira || new T.Quaternion().setFromAxisAngle(new T.Vector3(0, 1, 0), Math.PI));
+      cabeca.getWorldQuaternion(qc);
+      if (p.v0) qc.multiply(vira);
+      // os olhos: um pouco acima e à frente do osso da cabeça
+      const olhos = (this._olhos = this._olhos || new T.Vector3());
+      cabeca.getWorldPosition(olhos).add(this._v.set(0, 0.075 * esc, 0.1 * esc).applyQuaternion(qc));
+      // para onde olhar: o giro e a altura do arrasto; e para onde a cabeça aponta de verdade
+      const firme = (this._firme = this._firme || new T.Quaternion()).setFromEuler(this._e.set(-k.altura, k.giro, 0, "YXZ"));
+      const daCabeca = (this._daCabeca = this._daCabeca || new T.Quaternion()).copy(qc).multiply(vira);
+      const longe = 2 * Math.acos(Math.min(1, Math.abs(firme.dot(daCabeca)))); // o quanto a cabeça saiu do olhar (radianos)
+      const seguir = this.caido ? 1 : limitar((longe - 0.35) / 0.55, 0, 1);
+      this.seguirCabeca = (this.seguirCabeca || 0) + (seguir - (this.seguirCabeca || 0)) * (1 - Math.exp(-dt * 10));
+      cam.quaternion.copy(firme).slerp(daCabeca, this.seguirCabeca);
+      cam.position.copy(olhos);
+      k.alvo.copy(olhos);
+      const luz = p.luz;
+      if (!p.luzSol) {
+        luz.position.copy(olhos).add(this._v.set(0.6, 2.2, 0.6));
+        luz.target.position.copy(olhos);
+        luz.target.updateMatrixWorld();
+      }
+    }
+    /** Em primeira pessoa, a cabeça (e o cabelo preso nela) some só para quem joga: senão a câmera fica dentro dela. */
+    esconderCabeca(sim) {
+      const osso = this.palco.ossoBruto && this.palco.ossoBruto("head");
+      if (!osso) return;
+      if (sim) {
+        if (osso.scale.x > 1e-3) this._escalaCabeca = osso.scale.clone();
+        osso.scale.setScalar(1e-4);
+      } else if (this._escalaCabeca) {
+        osso.scale.copy(this._escalaCabeca);
+        this._escalaCabeca = null;
       }
     }
 

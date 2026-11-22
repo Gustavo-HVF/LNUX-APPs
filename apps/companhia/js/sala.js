@@ -270,6 +270,8 @@
         for (const [n, q] of Object.entries(e.pose)) { if (!this.pose[n] || !Array.isArray(q)) continue; (this.poseRecebida[n] = this.poseRecebida[n] || new T.Quaternion()).set(q[0], q[1], q[2], q[3]).normalize(); }
       } else this.poseRecebida = null;
       this.rostoRecebido = e.rosto || null;
+      this.olharCabeca = typeof e.o === "number" ? e.o : 0;
+      this.quadrilRecebido = Array.isArray(e.qd) ? e.qd : null; // boneco de pano
       if (j.avatar !== this.avatarVersao) { this.avatarVersao = j.avatar; this.buscarAvatar(); }
       if ((j.aparencia || 0) !== this.aparenciaVersao) { this.aparenciaVersao = j.aparencia || 0; this.buscarAparencia(); }
       if ((j.video || 0) !== this.videoVersao) { this.videoVersao = j.video || 0; this.buscarVideo(); }
@@ -360,7 +362,14 @@
       const descanso = av.descanso || this.sala.descanso;
       for (const n of C.OSSOS_VRM) { if (descanso[n]) pose[n].copy(descanso[n]); else pose[n].identity(); }
       this.quadril.set(0, 0, 0);
-      C.poseDeAndar(pose, this.quadril, a, 1);
+      if (this.quadrilRecebido) this.quadril.set(this.quadrilRecebido[0], this.quadrilRecebido[1], this.quadrilRecebido[2]).multiplyScalar(av.hips.y || 1); // caída (boneco de pano)
+      else C.poseDeAndar(pose, this.quadril, a, 1);
+      if (this.olharCabeca && !(this.poseRecebida && this.poseRecebida.head)) { // em primeira pessoa: a cabeça dela segue o olhar
+        const q = (this._qo = this._qo || new T.Quaternion()), e = (this._eo = this._eo || new T.Euler()), o = this.olharCabeca;
+        pose.chest.multiply(q.setFromEuler(e.set(o * 0.15, 0, 0)));
+        pose.neck.multiply(q.setFromEuler(e.set(o * 0.35, 0, 0)));
+        pose.head.multiply(q.setFromEuler(e.set(o * 0.5, 0, 0)));
+      }
       if (this.poseRecebida) for (const [n, q] of Object.entries(this.poseRecebida)) { const s = (this.poseSuave[n] = this.poseSuave[n] || q.clone()); s.slerp(q, 1 - Math.exp(-dt * 14)); pose[n].copy(s); }
       if (env > 0 && !(this.poseRecebida && this.poseRecebida.rightUpperArm)) {
         const q = (this._q = this._q || new T.Quaternion()), q2 = (this._q2 = this._q2 || new T.Quaternion()), e = (this._e = this._e || new T.Euler());
@@ -545,6 +554,16 @@
     meuEstado() {
       const p = this.palco, m = p.mundo, r = p.raiz.position;
       const e = { p: [arred(r.x), arred(r.y), arred(r.z)], r: arred(m.rumo), e: m.estado, emo: p.emocao, g: this.gesto, c: arred(m.cam.giro) }; // c: para onde a câmera olha (a tela de vídeo que segue fica na frente dela)
+      if (m.olharCabeca) e.o = arred(m.olharCabeca); // em primeira pessoa: a cabeça abaixa e levanta com o olhar
+      const rd = m.ragdoll;
+      if (rd && (rd.ativo || rd.saida > 0)) {
+        // boneco de pano: a pose inteira do corpo e onde o quadril está (em relação à altura do quadril, para servir em qualquer avatar)
+        e.pose = {};
+        for (const n of C.OSSOS_RAGDOLL) { const q = p.pose[n]; if (q && p.nos[n]) e.pose[n] = [arred(q.x), arred(q.y), arred(q.z), arred(q.w)]; }
+        const qd = p.quadrilDesl, a = p.alturaQuadril || 1;
+        e.qd = [arred(qd.x / a), arred(qd.y / a), arred(qd.z / a)];
+        return e;
+      }
       const cap = this.captura;
       if (cap && cap.ativa && cap.atual.size) {
         e.pose = {};

@@ -971,3 +971,25 @@
     "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).": ["The new store and room layout: tall cards with the name at the bottom and the bubbles at the top (search, filter and more).", "ストアとルームの新しいレイアウト: 名前が下にある縦長のカードと、上のバブル（検索、フィルターなど）。"],
   });
 })();
+
+// Câmeras (terceira pessoa, ombro, primeira pessoa), boneco de pano e colisão entre as pessoas
+(function () {
+  "use strict";
+  const C = window.C;
+  const novos = {
+    "Tipo de câmera": ["Camera type", "カメラの種類"], "Câmera": ["Camera", "カメラ"], "Terceira pessoa": ["Third person", "三人称"], "No ombro": ["Over the shoulder", "肩越し"],
+    "Primeira pessoa": ["First person", "一人称"], "F troca a câmera; Q põe a câmera no ombro e troca o lado.": ["F switches the camera; Q puts it over the shoulder and switches sides.", "F でカメラを切り替え、Q で肩越しにして左右を入れ替えます。"],
+    "Câmera para o lado": ["Camera to the side", "カメラを横に"], "no meio": ["centered", "中央"], "direita": ["right", "右"], "esquerda": ["left", "左"],
+    "Altura da câmera": ["Camera height", "カメラの高さ"], "Lado": ["Side", "側"], "Ombro esquerdo": ["Left shoulder", "左肩"], "Ombro direito": ["Right shoulder", "右肩"],
+    "Afastar para o lado": ["Move to the side", "横にずらす"], "Campo de visão": ["Field of view", "視野角"],
+    "Olhe para baixo para ver o corpo. A cabeça acompanha o olhar, e a câmera segue a cabeça nos movimentos grandes (um mortal, uma dança).": ["Look down to see your body. The head follows your gaze, and the camera follows the head during big moves (a flip, a dance).", "下を見ると体が見えます。頭は視線に合わせて動き、大きな動き（宙返りやダンス）ではカメラが頭についていきます。"],
+    "Boneco de pano": ["Ragdoll", "ラグドール"], "Levantar (R)": ["Get up (R)", "起き上がる（R）"], "Cair agora (R)": ["Fall now (R)", "今すぐ倒れる（R）"],
+    "Cair como boneco de pano ao despencar de muito alto": ["Fall like a ragdoll when dropping from very high", "とても高い所から落ちたらラグドールで倒れる"],
+    "Caído, aperte R de novo ou ande para levantar.": ["When down, press R again or walk to get up.", "倒れたら、もう一度 R を押すか歩くと起き上がります。"],
+    "Cair como boneco de pano (e levantar)": ["Fall like a ragdoll (and get up)", "ラグドールで倒れる（起き上がる）"],
+    "Trocar a câmera (terceira pessoa, ombro, primeira pessoa)": ["Switch the camera (third person, shoulder, first person)", "カメラを切り替え（三人称・肩越し・一人称）"],
+    "Câmera no ombro (de novo: troca o lado)": ["Over-the-shoulder camera (again: switch sides)", "肩越しカメラ（もう一度で左右を入れ替え）"],
+    "Câmeras em primeira e terceira pessoa (e no ombro), boneco de pano (R) e ninguém atravessa ninguém na sala.": ["First- and third-person cameras (and over the shoulder), ragdoll (R) and nobody walks through anybody in the room.", "一人称・三人称（肩越しも）のカメラ、ラグドール（R）、ルームで人をすり抜けないように。"],
+  };
+  for (const [k, v] of Object.entries(novos)) if (!C.TEXTOS[k]) C.TEXTOS[k] = v;
+})();

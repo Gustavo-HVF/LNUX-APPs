@@ -958,7 +958,8 @@
       if (emo.postura === "subir" && !andando) pulo += 0.02 * k * Math.max(0, 1 - fase * 1.5);
       // olhar: ponteiro (se mexeu há pouco) ou passeia
       const ol = this.olhar;
-      if (agora - ol.ultimo > 5000 || andando) { ol.alvoX = Math.sin(t * 0.21) * 0.3; ol.alvoY = Math.sin(t * 0.17) * 0.15; }
+      if (andando && mundo.primeira) { ol.alvoX = 0; ol.alvoY = 0; } // em primeira pessoa, a cabeça não passeia (a câmera está nela)
+      else if (agora - ol.ultimo > 5000 || andando) { ol.alvoX = Math.sin(t * 0.21) * 0.3; ol.alvoY = Math.sin(t * 0.17) * 0.15; }
       ol.x = misturar(ol.x, ol.alvoX, Math.min(1, dt * 5));
       ol.y = misturar(ol.y, ol.alvoY, Math.min(1, dt * 5));
       let olharX = ol.x - (post.desviar || 0);
@@ -994,6 +995,9 @@
       if (!(ras && ras.cabeca)) {
         somar("neck", cabX * 0.4 * leve, cabY * 0.4 * leve, cabZ * 0.4 * leve);
         somar("head", cabX * 0.6 * leve, cabY * 0.6 * leve, cabZ * 0.6 * leve);
+        // em primeira pessoa, a cabeça abaixa e levanta junto com o olhar (o peito ajuda um pouco)
+        const olhar = andando ? mundo.olharCabeca || 0 : 0;
+        if (olhar) { somar("chest", olhar * 0.15, 0, 0); somar("neck", olhar * 0.35, 0, 0); somar("head", olhar * 0.5, 0, 0); }
       }
       if (!(ras && ras.bracos)) {
         somar("leftShoulder", 0, 0, ombros);
@@ -1009,11 +1013,13 @@
       this.quadrilDesl.y += pulo * this.altura;
       // 5. ajuste do esqueleto (correção por osso, nos eixos do corpo)
       for (const [n, q] of this.ajusteQ) if (pose[n]) pose[n].premultiply(q);
+      // boneco de pano: a pose sai dos pontos da física (e, ao levantar, volta aos poucos)
+      if (mundo && mundo.ragdoll) mundo.ragdoll.aplicar(pose, this.quadrilDesl);
       // 6. ossos do modelo
       this.gravarPose();
       // 7. os pés no chão do cenário (IK das pernas): degraus, rampas e chão torto
       if (mundo && C.ikDosPes) {
-        const ligada = mundo.cfg.ik !== false && andando && mundo.noChao && !mundo.voando && !(ras && ras.pernas);
+        const ligada = mundo.cfg.ik !== false && andando && mundo.noChao && !mundo.voando && !mundo.caido && !(ras && ras.pernas);
         this.raiz.updateWorldMatrix(true, false);
         this._frente = (this._frente || new window.THREE.Vector3()).set(0, 0, 1).applyQuaternion(this.raiz.quaternion);
         this.ik = C.ikDosPes(vrm, { colisor: mundo.colisor, base: this.raiz.position, frente: this._frente, ativo: ligada, dt, estado: (this.estadoIk = this.estadoIk || {}) });
