@@ -217,7 +217,7 @@ function png(w, h, [r, g, b]) {
     const codigoSala = await ana.ev(() => window.Companhia.sala.codigo);
     await dono.ev(() => { window.Companhia.janelaSala(); }); // (sem esperar a lista fechar)
     await dono.pagina.waitForSelector(`.salas .cartao-sala[data-codigo="${codigoSala}"]`, { timeout: 30000 });
-    ok(await dono.ev((c) => /por Ana Clara/.test(document.querySelector(`.cartao-sala[data-codigo="${c}"]`).textContent), codigoSala), "na lista, a sala aparece como criada pela conta (\"por Ana Clara\")");
+    ok(await dono.ev((c) => /por Ana Clara/.test((document.querySelector(`.cartao-sala[data-codigo="${c}"]`).textContent + " " + document.querySelector(`.cartao-sala[data-codigo="${c}"]`).title)), codigoSala), "na lista, a sala aparece como criada pela conta (\"por Ana Clara\")");
     await dono.pagina.click(`.cartao-sala[data-codigo="${codigoSala}"] .entrar`);
     await dono.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     await dono.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].conta, null, { timeout: 20000 });

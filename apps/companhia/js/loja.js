@@ -742,7 +742,6 @@
       aberto = null;
       detalhe.hidden = true;
       grade.hidden = false;
-      abas.hidden = false;
       vazio.hidden = !!filtrados().length;
     }
     let numeros = null;
@@ -764,7 +763,8 @@
       aberto = item;
       const tp = TIPOS[item.tipo];
       grade.hidden = true;
-      abas.hidden = true;
+      botaoCategoria.fecharPainel(); // as categorias (e o filtro) fecham com o item aberto
+      botaoFiltro.fecharPainel();
       vazio.hidden = true;
       detalhe.hidden = false;
       const palco = el("div", { class: "vitrine" }, el("div", { class: "vitrine-aviso" }, "Carregando a prévia..."));
