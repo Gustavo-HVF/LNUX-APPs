@@ -145,7 +145,7 @@
       lista.replaceChildren(...r.pessoas.map((p) => el("div", { class: "busca-pessoas-pessoa", role: "listitem", "data-id": p.id },
         el("button", { type: "button", class: "busca-pessoas-abrir", onclick: () => { caixa.fechar(); ir("perfil", { id: p.id }); } },
           C.fotoDaConta(p, 56), el("span", { class: "busca-pessoas-nome", translate: "no" }, p.nome), C.selosDeTitulos ? C.selosDeTitulos(p.titulos, true) : null),
-        amizade(p))), r.mais ? el("p", { class: "busca-pessoas-dica" }, t("Tem mais gente: digite mais letras do nome.")) : null);
+        amizade(p))), ...LNUX.filhos(r.mais ? el("p", { class: "busca-pessoas-dica" }, t("Tem mais gente: digite mais letras do nome.")) : null));
     }
     campo.addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(procurar, 250); });
     campo.addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(espera); procurar(); } });
@@ -319,7 +319,7 @@
     const pedidos = el("div", { class: "perfil-pedidos" });
     // no meu perfil, trocar o banner e a foto direto (escolher, arrumar com zoom e posição, mandar)
     const trocarImagem = async (tipo) => { if (await C.trocarImagemDoPerfil(tipo)) ir("perfil", { semTransicao: true }); };
-    caixa.replaceChildren(
+    caixa.replaceChildren(...LNUX.filhos(
       bannerDoPerfil(p, meu ? el("div", { class: "perfil-banner-acoes" },
         el("button", { type: "button", class: "lnux-botao perfil-banner-trocar", id: "perfil-trocar-banner", onclick: () => trocarImagem("capa") }, C.iconeWebc("foto"), t(capa ? "Trocar o banner" : "Pôr um banner"))) : null),
       el("div", { class: "perfil-foto-grande" }, C.fotoDaConta(p, 150),
@@ -334,7 +334,7 @@
           p.links && p.links.length ? el("div", { class: "perfil-links" }, p.links.map((l) => el("a", { href: l, target: "_blank", rel: "noopener noreferrer nofollow", translate: "no" }, l.replace(/^https?:\/\//, "")))) : null),
         secao(t("Salvos"), salvos),
         secao(t("Amigos"), amigos),
-        meu ? secao(t("Pedidos de amizade"), pedidos) : null));
+        meu ? secao(t("Pedidos de amizade"), pedidos) : null)));
     // os salvos: os itens da loja (personagens, mapas e animações)
     try {
       const itens = (await C.loja.lista()).itens, porId = new Map(itens.map((i) => [i.id, i]));
