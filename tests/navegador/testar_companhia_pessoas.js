@@ -176,6 +176,26 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.waitForFunction(() => /fechou o chat privado/.test(document.querySelector(".privado-janela").textContent), null, { timeout: 10000 });
     ok(await ana.ev(() => document.querySelector(".privado-campo").disabled), "a Bia fecha o chat privado: a Ana é avisada e não escreve mais");
 
+    // ── o boneco de pano chega para a outra pessoa; e uma não atravessa a outra ──
+    await ana.pagina.mouse.click(250, 650);
+    await ana.pagina.keyboard.press("KeyR");
+    await bia.pagina.waitForFunction(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return r && r.estado === "caido" && r.quadrilRecebido; }, null, { timeout: 15000 });
+    await bia.pagina.waitForTimeout(1500);
+    const visto = await bia.ev(() => { const r = [...window.Companhia.sala.remotos.values()][0], q = new THREE.Vector3(); r.avatar.nos.hips.getWorldPosition(q); return { quadril: q.y - r.grupo.position.y, altura: r.altura }; });
+    ok(visto.quadril < visto.altura * 0.3, `a Ana cai como boneco de pano (R) e a Bia vê o corpo dela no chão (quadril a ${visto.quadril.toFixed(2)} m)`);
+    await ana.pagina.keyboard.press("KeyR");
+    await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].estado !== "caido", null, { timeout: 15000 });
+    // a Bia anda até a Ana (vira para ela e segue em frente) e para encostada, sem atravessar
+    const contra = await bia.ev(() => new Promise((ok) => {
+      const p = window.Companhia.palco, m = p.mundo, eu = p.raiz.position, r = [...window.Companhia.sala.remotos.values()][0], ela = r.grupo.position;
+      const ir = new THREE.Vector3(ela.x - eu.x, 0, ela.z - eu.z).normalize();
+      // a câmera atrás da Bia, sempre olhando para a Ana (ela continua indo de frente contra a Ana)
+      const mirar = setInterval(() => { const v = new THREE.Vector3(ela.x - eu.x, 0, ela.z - eu.z); if (v.lengthSq() > 1e-6) m.cam.giro = Math.atan2(-v.x, -v.z); }, 50);
+      m.cam.giro = Math.atan2(-ir.x, -ir.z);
+      m.teclas.add("frente");
+      setTimeout(() => { m.teclas.delete("frente"); clearInterval(mirar); const depois = new THREE.Vector3(eu.x - ela.x, 0, eu.z - ela.z); ok({ passou: depois.dot(ir) > 0, d: depois.length(), minimo: m.raio + Math.max(0.12, r.altura * 0.16) }); }, 3500);
+    }));
+    ok(!contra.passou && contra.d >= contra.minimo - 0.05, `a Bia anda contra a Ana e para encostada, sem atravessar (${contra.d.toFixed(2)} m entre as duas)`);
     await bia.ev(() => window.Companhia.sala.sair());
     await ana.ev(() => window.Companhia.sala.fechar());
     ok(await ana.ev(() => !document.querySelector(".privado-janela") && !document.querySelector(".pessoa-bolhas")), "ao sair da sala, as janelinhas e as bolinhas somem");

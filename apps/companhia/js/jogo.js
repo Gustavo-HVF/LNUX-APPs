@@ -283,13 +283,28 @@
       if (secao === "camera") {
         const m = p && p.mundo;
         if (!m) return [grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar.")))];
-        return [
+        // trocar o tipo de câmera redesenha a seção (cada tipo tem os seus ajustes)
+        const redesenhar = () => abrirOpcoes("camera");
+        const c = m.cfg, modo = c.camera || "terceira";
+        return LNUX.filhos(
+          grupo(t("Tipo de câmera"),
+            segmentos("Câmera", [["terceira", t("Terceira pessoa")], ["ombro", t("No ombro")], ["primeira", t("Primeira pessoa")]], modo, (v) => { m.trocarCamera(v); redesenhar(); }),
+            el("p", { class: "jogo-nota" }, t("F troca a câmera; Q põe a câmera no ombro e troca o lado."))),
+          modo === "terceira" ? grupo(t("Terceira pessoa"),
+            faixa("Distância da câmera", 1.2, 8, 0.1, +(c.distancia || m.cam.dist || 3.2).toFixed(1), (x) => { c.distancia = x; m.cam.dist = x; m.salvarCfg(); }, (x) => x.toFixed(1) + " m"),
+            faixa("Câmera para o lado", -1, 1, 0.05, +c.camLado || 0, (x) => { c.camLado = x; m.salvarCfg(); }, (x) => (Math.abs(x) < 0.01 ? t("no meio") : (x > 0 ? t("direita") : t("esquerda")) + " " + Math.abs(x).toFixed(2) + " m")),
+            faixa("Altura da câmera", -0.5, 0.6, 0.05, +c.camAltura || 0, (x) => { c.camAltura = x; m.salvarCfg(); }, (x) => (x >= 0 ? "+" : "") + x.toFixed(2) + " m")) : null,
+          modo === "ombro" ? grupo(t("No ombro"),
+            segmentos("Lado", [[-1, t("Ombro esquerdo")], [1, t("Ombro direito")]], c.ombroLado < 0 ? -1 : 1, (v) => { c.ombroLado = +v; m.salvarCfg(); }),
+            faixa("Afastar para o lado", 0.2, 1.2, 0.05, +c.ombroAfastar || 0.5, (x) => { c.ombroAfastar = x; m.salvarCfg(); }, (x) => x.toFixed(2) + " m"),
+            faixa("Distância da câmera", 0.8, 4, 0.1, +c.ombroDistancia || 1.8, (x) => { c.ombroDistancia = x; m.salvarCfg(); }, (x) => x.toFixed(1) + " m")) : null,
+          modo === "primeira" ? grupo(t("Primeira pessoa"),
+            faixa("Campo de visão", 50, 110, 1, +c.fovPrimeira || 75, (x) => { c.fovPrimeira = x; m.salvarCfg(); }, (x) => Math.round(x) + "°"),
+            el("p", { class: "jogo-nota" }, t("Olhe para baixo para ver o corpo. A cabeça acompanha o olhar, e a câmera segue a cabeça nos movimentos grandes (um mortal, uma dança)."))) : null,
           grupo(t("Câmera"),
-            faixa("Sensibilidade da câmera", 0.3, 2.5, 0.1, m.cfg.sensibilidade || 1, (x) => { m.cfg.sensibilidade = x; m.salvarCfg(); }, (x) => x.toFixed(1) + "×"),
-            chave("Inverter a câmera (para cima e para baixo)", m.cfg.inverterY, (x) => { m.cfg.inverterY = x; m.salvarCfg(); }),
-            faixa("Distância da câmera", 1.2, 8, 0.1, +(m.cfg.distancia || m.cam.dist || 3.2).toFixed(1), (x) => { m.cfg.distancia = x; m.cam.dist = x; m.salvarCfg(); }, (x) => x.toFixed(1) + " m")),
-          grupo("", el("p", { class: "jogo-nota" }, t("Arrastar gira a câmera; a rodinha do mouse (ou a pinça, no celular) aproxima e afasta. A câmera não atravessa as paredes."))),
-        ];
+            faixa("Sensibilidade da câmera", 0.3, 2.5, 0.1, c.sensibilidade || 1, (x) => { c.sensibilidade = x; m.salvarCfg(); }, (x) => x.toFixed(1) + "×"),
+            chave("Inverter a câmera (para cima e para baixo)", c.inverterY, (x) => { c.inverterY = x; m.salvarCfg(); })),
+          grupo("", el("p", { class: "jogo-nota" }, t("Arrastar gira a câmera; a rodinha do mouse (ou a pinça, no celular) aproxima e afasta. A câmera não atravessa as paredes."))));
       }
       if (secao === "ajuda") return [...linhas(s.ajuda, secao), el("hr"), grupo("", el("p", { class: "jogo-nota" }, t("As expressões: clique nelas embaixo da tela ou aperte de 1 a 9 no teclado. Os outros na sala veem.")))];
       if (secao === "acessibilidade") {
@@ -322,14 +337,19 @@
           m ? grupo(t("Andar"),
             faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade || 1, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => v.toFixed(1) + "×"),
             chave("Pés no chão (IK): as pernas se ajustam a degraus e rampas", m.cfg.ik !== false, (v) => { m.cfg.ik = v; m.salvarCfg(); })) : grupo("", el("p", { class: "jogo-nota" }, t("Abra uma personagem VRoid (.vrm) para mudar a câmera e o andar."))),
+          m ? grupo(t("Boneco de pano"),
+            el("button", { type: "button", class: "lnux-botao", id: "jogo-ragdoll", onclick: () => { fecharOpcoes(); m.alternarRagdoll(); } }, t(m.caido ? "Levantar (R)" : "Cair agora (R)")),
+            chave("Cair como boneco de pano ao despencar de muito alto", m.cfg.ragdollQueda !== false, (v) => { m.cfg.ragdollQueda = v; m.salvarCfg(); }),
+            el("p", { class: "jogo-nota" }, t("Caído, aperte R de novo ou ande para levantar."))) : null,
           grupo(t("No celular"), el("p", { class: "jogo-nota" }, t("No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima."))),
-        ];
+        ].filter(Boolean);
       }
       if (secao === "teclado") {
         const tecla = (k, o) => el("div", { class: "jogo-tecla" }, el("span", { class: "jogo-teclas" }, ...k.split(" ").map((x) => el("kbd", {}, x))), el("span", {}, t(o)));
         return [
           grupo(t("Andar"), tecla("W A S D", "Andar (ou as setas)"), tecla("Shift", "Correr"), tecla("Espaço", "Pular"),
-            tecla("V", "Voar (quem criou a sala)"), tecla("Espaço C", "Subir e descer, voando")),
+            tecla("V", "Voar (quem criou a sala)"), tecla("Espaço C", "Subir e descer, voando"), tecla("R", "Cair como boneco de pano (e levantar)")),
+          grupo(t("Câmera"), tecla("F", "Trocar a câmera (terceira pessoa, ombro, primeira pessoa)"), tecla("Q", "Câmera no ombro (de novo: troca o lado)")),
           grupo(t("Personagem"), tecla("1 … 9", "Expressões")),
           grupo(t("Janelas"), tecla("Enter", "Abrir o bate-papo"), tecla("Esc", "Abrir e fechar as Opções")),
         ];

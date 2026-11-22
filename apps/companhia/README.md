@@ -85,6 +85,18 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
   de uns segundos ela volta ao normal sozinha), e os outros na sala veem. Os desenhos são próprios (SVG, sem emoji).
 - **No canto**, o **bate-papo** (abre e fecha a conversa da sala por cima do jogo; um número mostra as mensagens novas;
   Enter abre, Esc fecha) e o **vídeo numa tela**.
+- **Câmeras** (a tecla **F** troca, ou *Opções › Câmera*):
+  - **Terceira pessoa**: atrás da personagem, com a distância, a altura e o lado da câmera ajustáveis.
+  - **No ombro**: a câmera ao lado do ombro (a tecla **Q** liga e troca o lado), com quanto afastar e a distância.
+  - **Primeira pessoa**: a câmera nos olhos. A cabeça some só para quem joga, então, olhando para baixo, aparecem as
+    pernas e os pés. Olhando para cima e para baixo, a cabeça da personagem acompanha (e os outros na sala veem). Nos
+    movimentos grandes (um mortal, uma dança, o boneco de pano), a câmera segue o giro da cabeça. O campo de visão é
+    ajustável.
+- **Boneco de pano** (*ragdoll*): a tecla **R** (ou *Opções › Controle*) faz a personagem cair mole, com o corpo solto,
+  batendo no cenário; **R** de novo, ou andar, levanta. Despencar de muito alto (uns 6 m) também derruba (dá para
+  desligar). Os outros na sala veem o corpo caído.
+- **Ninguém atravessa ninguém**: as personagens da sala são sólidas. Quem anda contra outra pessoa para encostado (ou
+  desliza em volta dela).
 - **Clicar na personagem de alguém** abre **três bolinhas** em cima dela (do alto para o lado): **Adicionar amigo**,
   **Ver perfil** e **Chat privado**. São brancas com a borda preta e mostram um desenho; passando o mouse (ou com o
   foco do teclado), a bolinha se estica e diz o nome da opção (no celular, os nomes já aparecem). Quem joga sem conta

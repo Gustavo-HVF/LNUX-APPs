@@ -51,6 +51,8 @@
         palco3d.captura = captura;
         // voar (atravessar as paredes): sozinho, sempre; numa sala, só quem criou
         palco3d.mundo.podeVoar = () => !(sala && sala.dentro) || !!sala.chave;
+        // as pessoas da sala são sólidas: ninguém atravessa ninguém
+        palco3d.mundo.outros = () => (sala && sala.dentro ? [...sala.remotos.values()].map((r) => ({ p: r.grupo.position, raio: Math.max(0.12, (r.altura || 1.65) * 0.16), altura: r.altura || 1.65 })) : []);
         videos.ligar(palco3d); // as telas de vídeo no cenário (js/video.js)
       }
       captura.palco = palco3d;
