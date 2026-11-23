@@ -71,8 +71,8 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.waitForSelector('.webc-cartao[data-ir="sala"]', { timeout: 30000 });
     const site = await ana.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.dataset.ir).join(), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.dataset.ir).join(),
       paleta: !!document.querySelector("#webc-tema svg"), idioma: !!document.querySelector("#webc-idioma"), eu: !!document.querySelector("#webc-eu") }));
-    ok(site.cartoes === "loja,sala,perfil" && site.nav === "loja,sala,perfil" && site.paleta && site.idioma && site.eu, "jogar sem conta abre o início: os cartões Loja, Sala e Perfil, e no alto a paleta de temas, o idioma e a conta");
-    ok(await ana.ev(() => [...document.querySelectorAll(".webc-quadrado")].map((q) => q.dataset.quadrado).join() === "chatbot,novidades,widgets" && /Ana/.test(document.querySelector("#webc-eu").textContent)),
+    ok(site.cartoes === "loja,sala,perfil" && site.nav === "loja,sala,criar,perfil" && site.paleta && site.idioma && site.eu, "jogar sem conta abre o início: os cartões Loja, Sala e Perfil, e no alto a paleta de temas, o idioma e a conta");
+    ok(await ana.ev(() => [...document.querySelectorAll(".webc-quadrado")].map((q) => q.dataset.quadrado).join() === "chatbot,criar,novidades,widgets" && /Ana/.test(document.querySelector("#webc-eu").textContent)),
       "embaixo dos cartões, os quadrados menores: Chat bot, Novidades e Widgets; no alto, o nome dito na tela de entrar");
 
     // ── conversar com a personagem: pelo menu da conta ──
@@ -104,7 +104,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
       const some = (s) => { const e = document.querySelector(s); return !e || getComputedStyle(e).display === "none"; };
       return { modo: window.Companhia.modo, selo: some("#selo-ia"), gasto: some("#gasto"), mic: some("#botao-mic"), rodape: some(".conversa-rodape"), afeto: some("#chip-afeto"), nucleo: some("#nucleo-aviso"), chip: !document.querySelector("#chip-sala").hidden };
     });
-    ok(m.join() === "personagem,sala,batepapo,conta,aparencia,acessibilidade,grafico,som,camera,controle,teclado,ajuda" && (await ana.ev(() => getComputedStyle(document.querySelector(".lnux-menubar")).display === "none")),
+    ok(m.join() === "personagem,itens,sala,batepapo,conta,aparencia,acessibilidade,grafico,som,camera,controle,teclado,ajuda" && (await ana.ev(() => getComputedStyle(document.querySelector(".lnux-menubar")).display === "none")),
       `jogar: no lugar dos menus, o ☰ abre a janela Opções (${m.join(", ")}); sem IA, Conversa nem Voz`);
     ok(semIA.modo === "jogar" && semIA.selo && semIA.gasto && semIA.mic && semIA.rodape && semIA.afeto && semIA.nucleo && semIA.chip, "jogar: somem o selo da IA, os tokens, o microfone, \"Falar\", o afeto e o aviso do Live2D; aparece o botão da sala");
     await ana.pagina.waitForSelector(".salas .loja-vazio:not([hidden])");

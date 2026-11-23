@@ -20,6 +20,7 @@
     personagem: { nome: "Personagens", um: "Personagem", icone: "🧍", desenho: "b-personagem", usar: "Usar esta personagem" },
     mundo: { nome: "Mapas", um: "Mapa", icone: "🗺️", desenho: "b-mundo", usar: "Usar este mapa" },
     animacao: { nome: "Animações", um: "Animação", icone: "💃", desenho: "b-animacao", usar: "Usar esta animação" },
+    item: { nome: "Itens", um: "Item", icone: "🔦", desenho: "b-item", usar: "Usar este item" },
   };
   const t = (s, v) => (C.t ? C.t(s, v) : s);
   const SEGREDOS = "companhia.loja.segredos";
@@ -243,7 +244,7 @@
       await C.prepararVRM();
       this.limpar();
       if (tipo === "personagem") return this.personagem(blob);
-      if (tipo === "mundo") return this.mundo(blob);
+      if (tipo === "mundo" || tipo === "item") return this.mundo(blob);
       return this.animacao(blob, arquivo);
     }
     async abrirVRM(blob) {
@@ -798,7 +799,8 @@
             item.descricao ? el("p", { class: "loja-descricao", translate: "no" }, item.descricao) : null,
             numeros,
             el("p", { class: "fraco pequeno", style: { margin: 0 } }, item.tipo === "personagem" ? "Arraste para girar; a rodinha aproxima. Usar guarda a personagem entre as suas." :
-              item.tipo === "mundo" ? "Arraste para girar; a rodinha aproxima. Usar guarda o mapa em Movimento › Cenário." : "A animação, num boneco. Usar guarda em Movimento › Pacotes de movimento."),
+              item.tipo === "mundo" ? "Arraste para girar; a rodinha aproxima. Usar guarda o mapa em Movimento › Cenário." :
+              item.tipo === "item" ? "Arraste para girar; a rodinha aproxima. Usar guarda o item em Opções › Itens e já põe na mão (dá para ajustar no seu corpo)." : "A animação, num boneco. Usar guarda em Movimento › Pacotes de movimento."),
             el("div", { class: "loja-acoes" }, usar, baixarArquivo, apagar))));
       desenharNumeros(item);
       let blob = null;

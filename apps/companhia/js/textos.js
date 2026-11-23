@@ -993,3 +993,71 @@
   };
   for (const [k, v] of Object.entries(novos)) if (!C.TEXTOS[k]) C.TEXTOS[k] = v;
 })();
+
+// Estúdio de itens, mochila e itens na sala
+(function () {
+  "use strict";
+  const C = window.C;
+  const novos = {
+    "Nome do item": ["Item name", "アイテム名"], "A cena do item: arraste para girar a câmera ou mover a parte escolhida": ["The item scene: drag to orbit the camera or move the selected part", "アイテムのシーン: ドラッグでカメラを回すか、選んだパーツを動かします"],
+    "As partes do item": ["The item's parts", "アイテムのパーツ"], "Ferramentas": ["Tools", "ツール"], "Meus itens": ["My items", "マイアイテム"], "Salvar o ajuste": ["Save the adjustment", "調整を保存"],
+    "Exportar .glb": ["Export .glb", ".glb を書き出す"], "Estúdio de itens": ["Item studio", "アイテムスタジオ"], "AJUSTAR": ["ADJUST", "調整"], "CRIAR": ["CREATE", "作成"], "Criar": ["Create", "作成"],
+    "Opções do estúdio": ["Studio options", "スタジオのオプション"],
+    "Ajuste onde o item fica no seu corpo: arraste o item na mão de boneco (ou use os números à direita). Fica guardado só para você, e os outros na sala veem o item no lugar que você deixou.": ["Adjust where the item sits on your body: drag it on the puppet hand (or use the numbers on the right). It's saved just for you, and others in the room see the item where you put it.", "アイテムを体のどこに付けるか調整します。人形の手の上でドラッグ（または右の数値）。あなた専用に保存され、ルームの人にもその位置で見えます。"],
+    "Partes": ["Parts", "パーツ"], "Encaixe: {lugar}": ["Attachment: {lugar}", "装着: {lugar}"], "Esconder": ["Hide", "隠す"], "Mostrar": ["Show", "表示"], "Subir": ["Move up", "上へ"], "Descer": ["Move down", "下へ"], "Corpo": ["Body", "体"],
+    "Nenhuma parte ainda: adicione uma forma, um modelo 3D, uma luz, partículas ou um lançador.": ["No parts yet: add a shape, a 3D model, a light, particles or a launcher.", "まだパーツがありません。形、3D モデル、ライト、パーティクル、ランチャーを追加してください。"],
+    "Adicionar": ["Add", "追加"], "Modelo 3D...": ["3D model...", "3D モデル..."], "＋ Luz": ["＋ Light", "＋ ライト"], "＋ Partículas": ["＋ Particles", "＋ パーティクル"], "＋ Lançador": ["＋ Launcher", "＋ ランチャー"],
+    "Modelo 3D para o item (.glb, .gltf, .fbx, .obj ou ZIP)": ["3D model for the item (.glb, .gltf, .fbx, .obj or ZIP)", "アイテムの 3D モデル（.glb、.gltf、.fbx、.obj、ZIP）"], "Não achei um modelo 3D nesses arquivos.": ["I couldn't find a 3D model in those files.", "それらのファイルに 3D モデルが見つかりません。"],
+    "Posição, giro e tamanho": ["Position, rotation and size", "位置・回転・サイズ"], "Posição (m)": ["Position (m)", "位置（m）"], "Giro (°)": ["Rotation (°)", "回転（°）"], "Tamanho": ["Size", "サイズ"],
+    "Duplicar": ["Duplicate", "複製"], "Espelhar X": ["Mirror X", "X 反転"], "Espelhar Y": ["Mirror Y", "Y 反転"], "Espelhar Z": ["Mirror Z", "Z 反転"], "Centralizar": ["Center", "中央へ"], "Pôr no chão": ["Put on the floor", "床に置く"], "Zerar": ["Reset", "リセット"],
+    "Nome da parte": ["Part name", "パーツ名"], "Forma e material": ["Shape and material", "形と素材"], "Forma": ["Shape", "形"], "Metal": ["Metal", "金属感"], "Rugosidade": ["Roughness", "粗さ"], "Brilho (luz própria)": ["Glow (own light)", "発光"],
+    "Cor do brilho": ["Glow color", "発光の色"], "Opacidade": ["Opacity", "不透明度"], "Aramado": ["Wireframe", "ワイヤーフレーム"], "Faces chapadas": ["Flat faces", "フラットシェーディング"], "Textura (imagem)...": ["Texture (image)...", "テクスチャ（画像）..."],
+    "Modelo": ["Model", "モデル"], "Tocar as animações do arquivo ao usar": ["Play the file's animations when used", "使用時にファイルのアニメーションを再生"], "{n} animação(ões) no arquivo.": ["{n} animation(s) in the file.", "ファイル内のアニメーション: {n}"], "O arquivo não tem animações.": ["The file has no animations.", "ファイルにアニメーションはありません。"],
+    "Luz": ["Light", "ライト"], "Tipo": ["Type", "種類"], "Força": ["Strength", "強さ"], "Alcance (m)": ["Range (m)", "範囲（m）"], "Abertura do cone (°)": ["Cone angle (°)", "円錐の角度（°）"], "Suavidade da borda": ["Edge softness", "縁のやわらかさ"],
+    "Piscar (como uma tocha)": ["Flicker (like a torch)", "ちらつき（たいまつ風）"], "Faz sombra": ["Casts shadows", "影を落とす"], "Cone visível no ar": ["Visible cone in the air", "空中に見える光の円錐"], "Liga e desliga ao usar (E)": ["Turns on and off when used (E)", "使用（E）でオン・オフ"], "Começa ligada": ["Starts on", "最初はオン"],
+    "Lanterna (um cone)": ["Flashlight (a cone)", "懐中電灯（円錐）"], "Lâmpada (para todos os lados)": ["Lamp (all directions)", "ランプ（全方向）"],
+    "Partículas": ["Particles", "パーティクル"], "Modelo pronto": ["Preset", "プリセット"], "Quando": ["When", "いつ"], "Sempre": ["Always", "常に"], "Enquanto usa (segurando E)": ["While using (holding E)", "使用中（E を押している間）"], "Uma rajada ao usar": ["A burst when used", "使用時に一斉に"],
+    "Por segundo": ["Per second", "毎秒"], "Rajada ao usar": ["Burst when used", "使用時の量"], "Vida (s)": ["Lifetime (s)", "寿命（秒）"], "Abertura (°)": ["Spread (°)", "広がり（°）"], "Gravidade": ["Gravity", "重力"], "Arrasto do ar": ["Air drag", "空気抵抗"],
+    "Tamanho no começo": ["Start size", "最初の大きさ"], "Tamanho no fim": ["End size", "最後の大きさ"], "Cor no começo": ["Start color", "最初の色"], "Cor no fim": ["End color", "最後の色"], "Desenho": ["Sprite", "形"], "De onde saem": ["Emit from", "出る場所"],
+    "Círculo": ["Circle", "円"], "Faísca": ["Spark", "火花"], "Fumaça": ["Smoke", "煙"], "Estrela": ["Star", "星"], "Quadrado": ["Square", "四角"], "Bolha": ["Bubble", "泡"], "Um ponto": ["A point", "点"], "Uma esfera": ["A sphere", "球"], "Uma caixa": ["A box", "箱"],
+    "Brilho somado (luz)": ["Additive glow (light)", "加算発光"], "Ficam no mundo (não seguem o item)": ["Stay in the world (don't follow the item)", "ワールドに残る（アイテムに追従しない）"],
+    "Lançador de projéteis": ["Projectile launcher", "発射装置"], "Velocidade (m/s)": ["Speed (m/s)", "速度（m/s）"], "Alcance (s de voo)": ["Range (seconds of flight)", "射程（飛行秒数）"], "Intervalo entre tiros (ms)": ["Time between shots (ms)", "発射間隔（ms）"],
+    "Projéteis por tiro": ["Projectiles per shot", "1 回の弾数"], "Dispersão (°)": ["Spread (°)", "ばらつき（°）"], "Quiques": ["Bounces", "跳ね返り"], "Recuo": ["Recoil", "反動"], "Rastro": ["Trail", "軌跡"], "Brilhante": ["Glowing", "光る"],
+    "Faíscas no impacto": ["Sparks on impact", "着弾時の火花"], "Clarão no cano": ["Muzzle flash", "マズルフラッシュ"], "O tiro sai na direção da seta (+Z). No jogo, vai para onde a câmera aponta.": ["Shots go in the arrow's direction (+Z). In the game, they go where the camera points.", "矢印の方向（+Z）に発射します。ゲームではカメラの向きに飛びます。"],
+    "O item": ["The item", "アイテム"], "Encaixe no corpo": ["Attachment on the body", "体への装着"], "Onde fica": ["Where it goes", "付ける場所"], "Ver na mão de boneco": ["See on the puppet hand", "人形の手で見る"], "Ver no boneco inteiro": ["See on the whole puppet", "人形全体で見る"],
+    "Encaixe padrão": ["Default attachment", "標準の装着"], "Voltar ao do criador": ["Back to the creator's", "作者の設定に戻す"],
+    "Escolha \"Encaixe\" na lista (ou clique aqui) e arraste o item na cena: ele se move em relação ao osso. A parte azul na mão de boneco é onde fica o cabo.": ["Choose \"Attachment\" in the list (or click here) and drag the item in the scene: it moves relative to the bone. The blue part on the puppet hand is where the handle goes.", "リストで「装着」を選び（またはここをクリック）、シーンでアイテムをドラッグすると骨に対して動きます。人形の手の青い部分が持ち手の位置です。"],
+    "Dica: monte o item com a frente para a seta verde (+Z). Lanternas e lançadores apontam para a frente.": ["Tip: build the item facing the green arrow (+Z). Flashlights and launchers point forward.", "ヒント: アイテムは緑の矢印（+Z）を前にして作りましょう。懐中電灯やランチャーは前を向きます。"],
+    "(cópia)": ["(copy)", "（コピー）"], "Imagem para a textura": ["Image for the texture", "テクスチャの画像"], "Arrastar": ["Drag", "ドラッグ"], "Mover": ["Move", "移動"], "Girar": ["Rotate", "回転"], "Eixo": ["Axis", "軸"], "Livre": ["Free", "自由"],
+    "Encaixar na grade (1 cm e 15°)": ["Snap to grid (1 cm and 15°)", "グリッドに吸着（1 cm・15°）"], "Grade": ["Grid", "グリッド"], "Desfazer (Ctrl+Z)": ["Undo (Ctrl+Z)", "元に戻す（Ctrl+Z）"], "Desfazer": ["Undo", "元に戻す"], "Refazer (Ctrl+Y)": ["Redo (Ctrl+Y)", "やり直す（Ctrl+Y）"], "Refazer": ["Redo", "やり直す"],
+    "Vista": ["View", "表示"], "Item": ["Item", "アイテム"], "Mão": ["Hand", "手"], "Focar (F)": ["Focus (F)", "フォーカス（F）"], "Focar": ["Focus", "フォーカス"], "Usar (E)": ["Use (E)", "使う（E）"], "Testar": ["Test", "テスト"], "Novo": ["New", "新規"], "Importar": ["Import", "読み込み"], "Salvar": ["Save", "保存"], "Publicar na loja": ["Publish to the store", "ストアに公開"],
+    "Segure para disparar sem parar. A parede fica na frente do item (+Z).": ["Hold to fire continuously. The wall is in front of the item (+Z).", "押し続けると連射します。壁はアイテムの前（+Z）にあります。"],
+    "Ajuste guardado: o item fica assim no seu corpo.": ["Adjustment saved: the item sits like this on your body.", "調整を保存しました。アイテムはこの位置に付きます。"], "Guardando o item": ["Saving the item", "アイテムを保存中"],
+    "\"{nome}\" foi guardado em Meus itens.": ["\"{nome}\" was saved in My items.", "「{nome}」をマイアイテムに保存しました。"], "Adicione pelo menos uma parte antes de publicar.": ["Add at least one part before publishing.", "公開する前にパーツを 1 つ以上追加してください。"],
+    "Publicar \"{nome}\" na loja": ["Publish \"{nome}\" to the store", "「{nome}」をストアに公開"],
+    "O item vai para a loja, em Itens: todos veem, baixam e usam. Quem baixar recebe o item já no lugar que você deixou (e pode ajustar no próprio corpo).": ["The item goes to the store, under Items: everyone can see, download and use it. Whoever downloads it gets it already where you placed it (and can adjust it on their own body).", "アイテムはストアの「アイテム」に入り、誰でも見て・ダウンロードして・使えます。ダウンロードした人にはあなたが決めた位置で付き、自分の体に合わせて調整もできます。"],
+    "# para achar (separados por espaço)": ["# to find it (separated by spaces)", "検索用の #（スペース区切り）"], "\"{nome}\" está na loja, em Itens.": ["\"{nome}\" is in the store, under Items.", "「{nome}」はストアの「アイテム」にあります。"], "Item para abrir (.glb)": ["Item to open (.glb)", "開くアイテム（.glb）"],
+    "O item voltou ao encaixe de quem criou.": ["The item is back to the creator's attachment.", "アイテムを作者の装着位置に戻しました。"], "Começar um item novo? O que não foi guardado se perde.": ["Start a new item? Anything not saved will be lost.", "新しいアイテムを始めますか？保存していない内容は失われます。"],
+    "Item novo": ["New item", "新しいアイテム"], "da loja": ["from the store", "ストアから"], "meu": ["mine", "自作"], "Abrir": ["Open", "開く"], "Abrir outro item? O que não foi guardado se perde.": ["Open another item? Anything not saved will be lost.", "別のアイテムを開きますか？保存していない内容は失われます。"],
+    "Editar uma cópia": ["Edit a copy", "コピーを編集"], "Apagar \"{nome}\" deste aparelho?": ["Delete \"{nome}\" from this device?", "「{nome}」をこの端末から削除しますか？"], "Nenhum item guardado ainda. Monte um e aperte Salvar.": ["No saved items yet. Build one and press Save.", "保存したアイテムはまだありません。作って「保存」を押してください。"],
+    "{p} partículas · {q} projéteis · {n} tiros": ["{p} particles · {q} projectiles · {n} shots", "パーティクル {p}・弾 {q}・発射 {n}"], "Abra uma personagem VRoid (.vrm) para segurar itens.": ["Open a VRoid character (.vrm) to hold items.", "アイテムを持つには VRoid キャラクター（.vrm）を開いてください。"],
+    "Esse item não está mais guardado.": ["That item is no longer saved.", "そのアイテムはもう保存されていません。"], "Esse item é grande demais (o limite é 25 MB).": ["That item is too big (the limit is 25 MB).", "そのアイテムは大きすぎます（上限は 25 MB）。"],
+    "Itens": ["Items", "アイテム"], "usar": ["use", "使う"], "esconder": ["hide", "隠す"], "mostrar": ["show", "表示"], "criado por você": ["made by you", "あなたが作成"], "Guardar": ["Put away", "しまう"], "Segurar": ["Hold", "持つ"], "Usar": ["Use", "使う"],
+    "Ajustar no meu corpo": ["Adjust on my body", "自分の体に合わせる"], "Nenhum item ainda. Crie um no Estúdio de itens ou baixe da loja.": ["No items yet. Create one in the Item studio or download one from the store.", "まだアイテムがありません。アイテムスタジオで作るか、ストアからダウンロードしてください。"],
+    "Criar um item...": ["Create an item...", "アイテムを作る..."], "Itens da loja...": ["Store items...", "ストアのアイテム..."],
+    "Com o item na mão: E usa (segurando, o lançador dispara sem parar), G esconde e mostra. Os outros na sala veem o item e o que ele faz.": ["With the item in hand: E uses it (holding it, a launcher fires continuously), G hides and shows it. Others in the room see the item and what it does.", "アイテムを持っているとき: E で使用（押し続けるとランチャーは連射）、G で隠す・表示。ルームの人にもアイテムと効果が見えます。"],
+    "\"{nome}\" foi para Opções › Itens{mao}.": ["\"{nome}\" went to Options › Items{mao}.", "「{nome}」をオプション › アイテムに入れました{mao}。"], " e está na sua mão": [" and it's in your hand", "（手に持っています）"],
+    "Usar o item (segurando: sem parar)": ["Use the item (holding: continuously)", "アイテムを使う（押し続けると連続）"], "Esconder e mostrar o item": ["Hide and show the item", "アイテムを隠す・表示"],
+    "Usar este item": ["Use this item", "このアイテムを使う"],
+    "Arraste para girar; a rodinha aproxima. Usar guarda o item em Opções › Itens e já põe na mão (dá para ajustar no seu corpo).": ["Drag to rotate; the wheel zooms. Use saves the item in Options › Items and puts it in your hand (you can adjust it on your body).", "ドラッグで回転、ホイールで拡大。「使う」でオプション › アイテムに保存し、手に持ちます（体に合わせて調整できます）。"],
+    "Estúdio de itens: lanternas, armas de bolha, varinhas...": ["Item studio: flashlights, bubble guns, wands...", "アイテムスタジオ: 懐中電灯、シャボン銃、魔法の杖..."],
+    "Estúdio de itens (Criar): lanternas que iluminam o mapa, partículas, lançadores de projéteis, modelos 3D e o encaixe na mão.": ["Item studio (Create): flashlights that light up the map, particles, projectile launchers, 3D models and the hand attachment.", "アイテムスタジオ（作成）: マップを照らす懐中電灯、パーティクル、発射装置、3D モデル、手への装着。"],
+    // os nomes das formas, dos modelos prontos e dos lugares do corpo
+    "Cubo": ["Cube", "立方体"], "Esfera": ["Sphere", "球"], "Cilindro": ["Cylinder", "円柱"], "Cone": ["Cone", "円錐"], "Cápsula": ["Capsule", "カプセル"], "Toro": ["Torus", "トーラス"], "Plano": ["Plane", "平面"], "Anel": ["Ring", "リング"],
+    "Faíscas": ["Sparks", "火花"], "Fogo": ["Fire", "炎"], "Neve": ["Snow", "雪"], "Bolhas": ["Bubbles", "泡"], "Confete": ["Confetti", "紙吹雪"], "Estrelas": ["Stars", "星"], "Magia": ["Magic", "魔法"],
+    "Pistola": ["Pistol", "ピストル"], "Laser": ["Laser", "レーザー"], "Fogos": ["Fireworks", "花火"], "Bola de neve": ["Snowball", "雪玉"], "Lanterna": ["Flashlight", "懐中電灯"], "Lâmpada": ["Lamp", "ランプ"], "Tocha": ["Torch", "たいまつ"],
+    "Mão direita": ["Right hand", "右手"], "Mão esquerda": ["Left hand", "左手"], "Cabeça": ["Head", "頭"], "Peito": ["Chest", "胸"], "Costas": ["Back", "背中"], "Quadril": ["Hips", "腰"], "Pé direito": ["Right foot", "右足"], "Pé esquerdo": ["Left foot", "左足"],
+    "Modelo 3D": ["3D model", "3D モデル"], "Lançador": ["Launcher", "ランチャー"],
+  };
+  for (const [k, v] of Object.entries(novos)) if (!C.TEXTOS[k]) C.TEXTOS[k] = v;
+})();

@@ -198,7 +198,9 @@ LOJA_TIPOS = {  # tipo → (subpasta, extensões aceitas)
     "personagem": ("personagens", (".vrm",)),
     "mundo": ("mundos", (".glb",)),
     "animacao": ("animacoes", (".vrma", ".bvh", ".fbx", ".glb")),
+    "item": ("itens", (".glb",)),  # do Estúdio de itens (o .glb leva a ficha do item em extras)
 }
+ITEM_MAXIMO = 25 * 1024 * 1024  # o item que cada pessoa leva na mão, numa sala
 LOJA_MINIATURA = 3 * 1024 * 1024
 LOJA_TRAVA = threading.Lock()
 LOJA_TAGS = 12          # quantos # cada item pode ter
@@ -596,6 +598,7 @@ class Sala:
             self.privados.pop(k, None)
         if self.pessoas.pop(pid, None) is not None:
             (self.pasta / f"avatar-{pid}.vrm").unlink(missing_ok=True)
+            (self.pasta / f"item-{pid}.glb").unlink(missing_ok=True)
             (self.pasta / f"aparencia-{pid}.json").unlink(missing_ok=True)
             for f in self.pasta.glob(f"textura-{pid}-*"):
                 f.unlink(missing_ok=True)
@@ -2199,6 +2202,25 @@ class Manipulador(BaseHTTPRequestHandler):
                                      "conta": conta["id"] if conta else None, "dono": de_quem_criou, "video": None,
                                      "titulos": list(conta.get("titulos", [])) if conta else []}
             return self.responder_json({"id": pid, "segredo": sala.pessoas[pid]["segredo"], "mensagens": sala.n, **sala.resumo()}, 201)
+        # o item que a pessoa leva (do Estúdio de itens): os outros o baixam uma vez, como o avatar
+        if acao == "item" and m == "PUT":
+            j = pessoa(p)
+            tamanho = int(self.headers.get("Content-Length") or 0)
+            if tamanho > ITEM_MAXIMO:
+                raise ErroPonte(413, "Esse item é grande demais (o limite é 25 MB).")
+            cabe_no_disco(sala.pasta, tamanho)
+            self.receber_para(sala.pasta / f"item-{p['id']}.glb")
+            with open(sala.pasta / f"item-{p['id']}.glb", "rb") as f:
+                if f.read(4) != b"glTF":
+                    (sala.pasta / f"item-{p['id']}.glb").unlink(missing_ok=True)
+                    raise ErroPonte(400, "O item precisa ser um .glb.")
+            j["item"] = j.get("item", 0) + 1
+            return self.responder_json({"item": j["item"]}, 201)
+        if acao == "item" and m in ("GET", "HEAD") and len(partes) == 3:
+            arquivo = sala.pasta / f"item-{partes[2]}.glb"
+            if partes[2] not in sala.pessoas or not arquivo.is_file():
+                raise ErroPonte(404, "Essa pessoa não mandou um item.")
+            return self.enviar_arquivo(arquivo, "model/gltf-binary")
         if acao == "avatar" and m == "PUT":
             j = pessoa(p)
             cabe_no_disco(sala.pasta, int(self.headers.get("Content-Length") or 0))
@@ -2361,7 +2383,7 @@ class Manipulador(BaseHTTPRequestHandler):
             except (TypeError, ValueError):
                 desde = 0
             return self.responder_json({
-                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"],
+                "pessoas": [{"id": i, "nome": x["nome"], "avatar": x["avatar"], "aparencia": x.get("aparencia", 0), "conta": x.get("conta"), "estado": x["estado"], "item": x.get("item", 0),
                              "video": (x.get("video") or {}).get("n", 0), "titulos": x.get("titulos", [])}
                             for i, x in sala.pessoas.items()],
                 "mensagens": [msg for msg in sala.mensagens if msg["n"] > desde and (not msg.get("para") or eu_id in (msg["de"], msg["para"]))][-50:],

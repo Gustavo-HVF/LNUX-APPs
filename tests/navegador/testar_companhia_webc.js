@@ -129,7 +129,7 @@ function lerEmail(bruto) {
     await visita.pagina.click("#inicio-jogar");
     await visita.pagina.waitForSelector('.webc-cartao[data-ir="loja"]', { timeout: 30000 });
     const inicioEn = await visita.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.textContent).join(" | "), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.textContent).join() }));
-    ok(/store/i.test(inicioEn.cartoes) && /rooms/i.test(inicioEn.cartoes) && /profile/i.test(inicioEn.cartoes) && /^store,rooms,profile$/i.test(inicioEn.nav), `o início em inglês: ${inicioEn.nav}`);
+    ok(/store/i.test(inicioEn.cartoes) && /rooms/i.test(inicioEn.cartoes) && /profile/i.test(inicioEn.cartoes) && /^store,rooms,create,profile$/i.test(inicioEn.nav), `o início em inglês: ${inicioEn.nav}`);
     ok(await semLnux(visita), "nada no site fala do LNUX, da Companhia nem do aparelho de quem tem o servidor");
 
     // ── a paleta de temas (os do VLC-Web) ──
