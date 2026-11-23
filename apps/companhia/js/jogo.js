@@ -51,6 +51,7 @@
     controle: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M14.5 12h19c5.8 0 9.6 4.6 10.3 12.5l.9 9.2c.4 4-3.8 6.4-6.8 3.8L33 33H15l-4.9 4.5c-3 2.6-7.2.2-6.8-3.8l.9-9.2C4.9 16.6 8.7 12 14.5 12Zm-1 6.5v3.5H10v3h3.5v3.5h3V25H20v-3h-3.5v-3.5Zm19.5.2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm4.5 4.5a2 2 0 1 0 0 4 2 2 0 0 0 0-4Z"/></svg>',
   };
   Object.assign(ICONES, {
+    itens: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M17 15h14l3-8H14Z"/><rect x="16" y="17" width="16" height="26" rx="3" fill="currentColor"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M22 23h4v9h-4Z"/></svg>',
     batepapo: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M8 8h26a5 5 0 0 1 5 5v13a5 5 0 0 1-5 5H19l-8 6v-6H8a5 5 0 0 1-5-5V13a5 5 0 0 1 5-5Z"/><path fill="currentColor" opacity=".55" d="M42 17a4 4 0 0 1 3 4v12a4 4 0 0 1-4 4h-2v5l-7-5H22a4 4 0 0 1-3.5-2H35a7 7 0 0 0 7-7Z"/></svg>',
     conta: '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="9" width="40" height="30" rx="5" fill="currentColor"/><circle cx="17" cy="21" r="5" fill="var(--jogo-cartao-fundo, #fff)"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M8.5 33c.8-4.6 4.1-7 8.5-7s7.7 2.4 8.5 7Z"/><path fill="var(--jogo-cartao-fundo, #fff)" d="M29 18h10v3H29Zm0 7h10v3H29Z"/></svg>',
     aparencia: '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="currentColor" d="M24 4C12.4 4 4 12.4 4 23.4 4 34.2 12.6 44 23.3 44c2.6 0 4-1.6 4-3.6 0-1-.4-1.8-1-2.6-.6-.8-1-1.6-1-2.6 0-2 1.6-3.2 3.6-3.2H33c6.1 0 11-4.5 11-10.6C44 11.4 35 4 24 4Z"/><circle cx="14.5" cy="22" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="19.5" cy="13.5" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="29" cy="13.5" r="3" fill="var(--jogo-cartao-fundo, #fff)"/><circle cx="34.5" cy="21" r="3" fill="var(--jogo-cartao-fundo, #fff)"/></svg>',
@@ -60,7 +61,7 @@
   });
   // as categorias da janela Opções, em grupos (no computador, à esquerda; no celular, os quadrados)
   const GRUPOS = [
-    ["Jogo", [["personagem", "Personagem"], ["sala", "Sala"], ["batepapo", "Bate-papo"]]],
+    ["Jogo", [["personagem", "Personagem"], ["itens", "Itens"], ["sala", "Sala"], ["batepapo", "Bate-papo"]]],
     ["Você", [["conta", "Conta"], ["aparencia", "Aparência"], ["acessibilidade", "Acessibilidade"]]],
     ["Ajustes", [["grafico", "Gráfico"], ["som", "Som"], ["camera", "Câmera"], ["controle", "Controle"], ["teclado", "Teclado"]]],
     ["Ajuda", [["ajuda", "Ajuda"]]],
@@ -135,6 +136,17 @@
     const botaoVideo = el("button", { type: "button", class: "jogo-canto-botao", id: "botao-video", title: "Vídeo na tela (YouTube, Vimeo, Twitch)", "aria-label": "Vídeo na tela", onclick: () => ctx.video() }, icone("video"));
     const canto = el("div", { class: "jogo-canto", role: "toolbar", "aria-label": "Bate-papo e vídeo" }, botaoChat, botaoVideo);
     document.getElementById("palco-area").append(canto);
+    // o item na mão (js/mochila.js): o nome e as teclas, em cima do canto
+    const chipItem = el("button", { type: "button", class: "jogo-item-chip", id: "jogo-item", hidden: true, title: t("Itens"), onclick: () => abrirOpcoes("itens") });
+    document.getElementById("palco-area").append(chipItem);
+    function atualizarItem() {
+      const it = ctx.itens && ctx.itens.naMao();
+      chipItem.hidden = !it;
+      if (!it) return;
+      chipItem.replaceChildren(el("span", { class: "jogo-item-icone", html: ICONES.itens }), el("b", { translate: "no" }, it.reg.nome),
+        el("span", { class: "jogo-item-teclas" }, el("kbd", {}, "E"), " ", t("usar"), " · ", el("kbd", {}, "G"), " ", ctx.itens.visivel() ? t("esconder") : t("mostrar")));
+      if (opcoes && opcoes.querySelector('[data-lista="itens"]')) abrirOpcoes("itens");
+    }
     // o bate-papo (a conversa da sala) flutua por cima do jogo; um ✕ no alto dele
     const cabeca = document.querySelector("#conversa .lnux-painel-cabeca");
     if (cabeca && !cabeca.querySelector("#jogo-fechar-chat")) cabeca.append(el("button", { type: "button", class: "lnux-botao icone plano jogo-so", id: "jogo-fechar-chat", title: "Fechar", "aria-label": "Fechar o bate-papo", onclick: () => alternarChat(false) }, icone("fechar")));
@@ -344,11 +356,38 @@
           grupo(t("No celular"), el("p", { class: "jogo-nota" }, t("No celular: o direcional na tela anda; arrastar gira a câmera; a pinça aproxima."))),
         ].filter(Boolean);
       }
+      if (secao === "itens") {
+        const it = ctx.itens;
+        if (!it) return [];
+        const lista = el("div", { class: "jogo-itens" }, el("p", { class: "jogo-nota" }, t("Carregando...")));
+        it.lista().then((l) => {
+          const mao = it.naMao();
+          lista.replaceChildren(...(l.length ? l.map((x) => {
+            const naMao = !!(mao && mao.reg.id === x.id);
+            const mini = x.miniatura instanceof Blob ? el("img", { src: URL.createObjectURL(x.miniatura), alt: "" }) : el("span", { class: "jogo-item-icone", html: ICONES.itens });
+            return el("div", { class: "jogo-item" + (naMao ? " na-mao" : ""), "data-item": x.id }, mini,
+              el("span", { class: "jogo-item-nome" }, el("b", { translate: "no" }, x.nome), el("span", { class: "fraco pequeno" }, x.origem === "loja" ? t("da loja") : t("criado por você"))),
+              el("div", { class: "jogo-item-botoes" },
+                naMao ? el("button", { type: "button", class: "lnux-botao pequeno", "data-acao": "guardar", onclick: () => { it.guardar(); abrirOpcoes("itens"); } }, t("Guardar"))
+                  : el("button", { type: "button", class: "lnux-botao primario pequeno", "data-acao": "segurar", onclick: () => it.segurar(x.id).then(() => abrirOpcoes("itens")).catch(LNUX.erro) }, t("Segurar")),
+                naMao ? el("button", { type: "button", class: "lnux-botao pequeno", "data-acao": "usar", onclick: () => it.usar() }, t("Usar")) : null,
+                el("button", { type: "button", class: "lnux-botao pequeno", "data-acao": "ajustar", onclick: () => { fecharOpcoes(); it.ajustar(x.id); } }, t("Ajustar no meu corpo"))));
+          }) : [el("p", { class: "jogo-nota" }, t("Nenhum item ainda. Crie um no Estúdio de itens ou baixe da loja."))]));
+        }).catch(LNUX.erro);
+        return [
+          grupo(t("Meus itens"), lista),
+          grupo("", el("div", { class: "estudio-botoes" },
+            el("button", { type: "button", class: "lnux-botao", onclick: () => { fecharOpcoes(); it.criar(); } }, t("Criar um item...")),
+            el("button", { type: "button", class: "lnux-botao", onclick: () => { fecharOpcoes(); it.loja(); } }, t("Itens da loja...")))),
+          grupo("", el("p", { class: "jogo-nota" }, t("Com o item na mão: E usa (segurando, o lançador dispara sem parar), G esconde e mostra. Os outros na sala veem o item e o que ele faz."))),
+        ];
+      }
       if (secao === "teclado") {
         const tecla = (k, o) => el("div", { class: "jogo-tecla" }, el("span", { class: "jogo-teclas" }, ...k.split(" ").map((x) => el("kbd", {}, x))), el("span", {}, t(o)));
         return [
           grupo(t("Andar"), tecla("W A S D", "Andar (ou as setas)"), tecla("Shift", "Correr"), tecla("Espaço", "Pular"),
             tecla("V", "Voar (quem criou a sala)"), tecla("Espaço C", "Subir e descer, voando"), tecla("R", "Cair como boneco de pano (e levantar)")),
+          grupo(t("Itens"), tecla("E", "Usar o item (segurando: sem parar)"), tecla("G", "Esconder e mostrar o item")),
           grupo(t("Câmera"), tecla("F", "Trocar a câmera (terceira pessoa, ombro, primeira pessoa)"), tecla("Q", "Câmera no ombro (de novo: troca o lado)")),
           grupo(t("Personagem"), tecla("1 … 9", "Expressões")),
           grupo(t("Janelas"), tecla("Enter", "Abrir o bate-papo"), tecla("Esc", "Abrir e fechar as Opções")),
@@ -376,7 +415,7 @@
     desenharExpressoes();
     C.aoMudarIdioma(() => { desenharExpressoes(); if (opcoes) abrirOpcoes(opcoes.dataset.secao || ""); });
     return {
-      EXPRESSOES, expressar, abrirOpcoes, fecharOpcoes, alternarChat, novaMensagem,
+      EXPRESSOES, expressar, abrirOpcoes, fecharOpcoes, alternarChat, novaMensagem, atualizarItem,
       /** A emoção mudou por outro caminho (ex.: a captura pela câmera): a barra acompanha. */
       emocaoMudou(nome) { emocaoAtual = nome; marcar(); },
       get opcoesAbertas() { return !!opcoes; },

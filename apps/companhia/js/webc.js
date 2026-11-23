@@ -33,6 +33,7 @@
     baixar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>',
     salvar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>',
     voltar: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+    criar: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M38 10l16 16-26 26H12V36Z"/><path d="M32 16l16 16"/><path d="M14 50l8-8"/></svg>',
     chatbot: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M14 16h36a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H30l-10 8v-8h-6a6 6 0 0 1-6-6V22a6 6 0 0 1 6-6Z"/><circle cx="24" cy="31" r="2.2" fill="currentColor"/><circle cx="32" cy="31" r="2.2" fill="currentColor"/><circle cx="40" cy="31" r="2.2" fill="currentColor"/><path d="M32 16V9m-3 0h6"/></svg>',
     novidades: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"><path d="M32 8l6 14 15 1-11.5 10 3.5 15L32 40l-13 8 3.5-15L11 23l15-1Z"/></svg>',
     widgets: '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"><rect x="10" y="10" width="19" height="19" rx="5"/><rect x="35" y="10" width="19" height="19" rx="5"/><rect x="10" y="35" width="19" height="19" rx="5"/><path stroke-linecap="round" d="M44.5 37v15M37 44.5h15"/></svg>',
@@ -54,6 +55,14 @@
     "b-link": b24('<path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2"/>'),
     "b-pessoas": b24('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 20c.5-4 3-6.3 6.5-6.3s6 2.3 6.5 6.3"/><path d="M16 4.8a3.4 3.4 0 0 1 0 6.4M18.5 14.2c1.8.9 2.8 2.9 3 5.8"/>'),
     "b-cadeado": b24('<rect x="5" y="10.5" width="14" height="10" rx="2" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/>'),
+    "b-item": b24('<rect x="8.5" y="9" width="7" height="12.5" rx="1.6"/><path d="M8 9h8l1.5-5.5h-11Z" fill="currentColor"/><path d="M12 13v4"/>'),
+    "b-criar-item": b24('<path d="M14.5 4.5 19.5 9.5 9 20H4v-5Z"/><path d="m12.5 6.5 5 5"/>'),
+    "b-novo": b24('<path d="M6 3h8l4 4v14H6Z"/><path d="M14 3v4h4M12 11v6M9 14h6"/>'),
+    "b-salvar": b24('<path d="M5 4h11l3 3v13H5Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>'),
+    "b-testar": b24('<path d="M8 5v14l11-7Z" fill="currentColor"/>'),
+    "b-meus": b24('<path d="M4 7h16v13H4Z"/><path d="M8 7V4h8v3M4 12h16"/>'),
+    "b-exportar": b24('<path d="M12 4v11m-4-4 4 4 4-4"/><path d="M4 17v3h16v-3"/>'),
+    "b-importar": b24('<path d="M12 15V4m-4 4 4-4 4 4"/><path d="M4 17v3h16v-3"/>'),
     "b-sala": b24('<path d="M4 21V5.5L13 3v18"/><path d="M13 5h4.5a1.5 1.5 0 0 1 1.5 1.5V21M2.5 21h19"/><circle cx="10" cy="12.5" r=".9" fill="currentColor"/>'),
   });
   C.iconeWebc = (nome) => svg(ICONES[nome] || "");
@@ -108,7 +117,7 @@
       onclick: (e) => buscaDePessoas(e.currentTarget) }, C.iconeWebc("busca"));
     return el("header", { class: "webc-topo" },
       el("button", { type: "button", class: "webc-logo", "aria-label": "WEBC — início", title: "Início", onclick: () => ir("inicio") }, C.logoWebc(46)),
-      el("nav", { class: "webc-nav", "aria-label": "Páginas" }, ["loja", "sala", "perfil"].map((p) => el("button", { type: "button", "data-ir": p, onclick: () => ir(p) }, { loja: "Loja", sala: "Sala", perfil: "Perfil" }[p]))),
+      el("nav", { class: "webc-nav", "aria-label": "Páginas" }, ["loja", "sala", "criar", "perfil"].map((p) => el("button", { type: "button", "data-ir": p, onclick: () => ir(p) }, { loja: "Loja", sala: "Sala", criar: "Criar", perfil: "Perfil" }[p]))),
       el("div", { class: "webc-acoes" }, buscar, tema, el("span", { class: "webc-separador", "aria-hidden": "true" }), idioma, eu));
   }
   function desenharEu() {
@@ -224,6 +233,8 @@
     loja: (pag, op) => paginaDeOverlay(pag, () => C.abrirLoja(estado.ctx.loja, { dentro: pag, pagina: true, tipo: op.tipo || "personagem", item: op.item, busca: op.busca })),
     sala: (pag, op) => paginaDeOverlay(pag, () => C.abrirSalas(estado.ctx.salas, { dentro: pag, pagina: true, codigo: op.codigo || "" })),
     perfil: paginaPerfil,
+    // o Estúdio de itens (js/estudio-itens.js): opcoes {id (abrir um item guardado), ajustar (só o encaixe, para esta pessoa)}
+    criar: async (pag, op) => { await C.prepararVRM(); return C.abrirEstudioItens(pag, { id: op.id || "", ajustar: !!op.ajustar, mochila: estado.ctx && estado.ctx.mochila ? estado.ctx.mochila() : null }); },
   };
   /** A loja e as salas: os mesmos de antes, agora dentro da página (sem o botão de fechar). */
   function paginaDeOverlay(pag, abrir) {
@@ -274,6 +285,7 @@
         cartao("perfil", "PERFIL", "Sua foto, bio, salvos e amigos")),
       el("div", { class: "webc-quadrados" },
         ctx && ctx.conversar ? quadrado("chatbot", "Chat bot", "Converse com a personagem", () => ctx.conversar()) : null,
+        quadrado("criar", "Criar", "Estúdio de itens: lanternas, armas de bolha, varinhas...", () => ir("criar")),
         quadrado("novidades", "Novidades", "O que há de novo", () => ir("novidades")),
         quadrado("widgets", "Widgets", "Adicione ao seu início", () => C.widgets.escolher().then(() => widgets.desenhar()))),
       area));
@@ -286,6 +298,7 @@
   const MUDANCAS = [
     "Câmeras em primeira e terceira pessoa (e no ombro), boneco de pano (R) e ninguém atravessa ninguém na sala.",
     "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).",
+    "Estúdio de itens (Criar): lanternas que iluminam o mapa, partículas, lançadores de projéteis, modelos 3D e o encaixe na mão.",
     "Pesquisar por alguém e as bolinhas em cima das personagens: adicionar amigo, ver perfil e chat privado.",
     "Foto e banner do perfil do seu jeito (arrastar, ampliar e reduzir; o banner em 750 × 325), e o perfil de cada um no tema que a pessoa usa.",
     "Mapas com o material antigo do Sketchfab (specular/glossiness) abrem com as texturas.",
@@ -399,7 +412,7 @@
         return el("div", { class: "perfil-grupo" }, el("h3", {}, titulo, el("span", { class: "conta" }, String(l.length))),
           l.length ? el("div", { class: "webc-grade pequena" }, l.map((i) => C.cartaoDaLoja(i, { aoAbrir: () => ir("loja", { tipo: i.tipo, item: i.id }) }))) : el("p", { class: "fraco pequeno" }, t("Nada salvo ainda.")));
       };
-      salvos.replaceChildren(grupo("personagem", t("Personagens")), grupo("mundo", t("Mapas")), grupo("animacao", t("Animações")));
+      salvos.replaceChildren(grupo("personagem", t("Personagens")), grupo("mundo", t("Mapas")), grupo("animacao", t("Animações")), grupo("item", t("Itens")));
     } catch (e) { salvos.replaceChildren(el("p", { class: "fraco" }, t("A loja não respondeu."))); }
     // os amigos (e, no meu, os pedidos)
     const pessoa = (a, extra) => el("div", { class: "perfil-amigo" },

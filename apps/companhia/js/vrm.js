@@ -1011,6 +1011,8 @@
         }
       }
       this.quadrilDesl.y += pulo * this.altura;
+      // segurando um item (js/mochila.js): a mão fecha no cabo e, depois de atirar, o braço aponta para a frente
+      if (this.segurando && C.poseDeSegurar && !(ras && ras.maos)) C.poseDeSegurar(pose, this.segurando, this.mirarItem || 0);
       // 5. ajuste do esqueleto (correção por osso, nos eixos do corpo)
       for (const [n, q] of this.ajusteQ) if (pose[n]) pose[n].premultiply(q);
       // boneco de pano: a pose sai dos pontos da física (e, ao levantar, volta aos poucos)

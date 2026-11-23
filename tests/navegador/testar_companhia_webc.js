@@ -129,7 +129,7 @@ function lerEmail(bruto) {
     await visita.pagina.click("#inicio-jogar");
     await visita.pagina.waitForSelector('.webc-cartao[data-ir="loja"]', { timeout: 30000 });
     const inicioEn = await visita.ev(() => ({ cartoes: [...document.querySelectorAll(".webc-cartao")].map((c) => c.textContent).join(" | "), nav: [...document.querySelectorAll(".webc-nav [data-ir]")].map((b) => b.textContent).join() }));
-    ok(/store/i.test(inicioEn.cartoes) && /rooms/i.test(inicioEn.cartoes) && /profile/i.test(inicioEn.cartoes) && /^store,rooms,profile$/i.test(inicioEn.nav), `o início em inglês: ${inicioEn.nav}`);
+    ok(/store/i.test(inicioEn.cartoes) && /rooms/i.test(inicioEn.cartoes) && /profile/i.test(inicioEn.cartoes) && /^store,rooms,create,profile$/i.test(inicioEn.nav), `o início em inglês: ${inicioEn.nav}`);
     ok(await semLnux(visita), "nada no site fala do LNUX, da Companhia nem do aparelho de quem tem o servidor");
 
     // ── a paleta de temas (os do VLC-Web) ──
@@ -153,7 +153,7 @@ function lerEmail(bruto) {
 
     // ── a loja: as três categorias, a pesquisa pelo # e curtir só com conta ──
     const loja = await visita.ev(() => ({ titulo: document.querySelector(".webc-loja .webc-painel-titulo").textContent, abas: [...document.querySelectorAll(".webc-loja .loja-aba")].map((a) => a.dataset.tipo).join() }));
-    ok(loja.titulo === "STORE" && loja.abas.split(",").sort().join() === "animacao,mundo,personagem", `a loja tem as três categorias: mapas, personagens e animações (título "${loja.titulo}")`);
+    ok(loja.titulo === "STORE" && loja.abas.split(",").sort().join() === "animacao,item,mundo,personagem", `a loja tem as quatro categorias: mapas, personagens, animações e itens (título "${loja.titulo}")`);
     await visita.pagina.click(".webc-loja .webc-bolha-busca"); // a lupa (a bolinha) abre a caixa de texto
     await visita.pagina.fill(".webc-loja .loja-busca", "fnaf");
     const fnaf = await visita.ev(() => [...document.querySelectorAll(".webc-loja .cartao-loja .nome")].map((n) => n.textContent));
@@ -210,7 +210,7 @@ function lerEmail(bruto) {
     await ana.pagina.waitForSelector(".perfil-pagina .perfil-salvos .cartao-loja", { timeout: 20000 });
     const perfil = await ana.ev(() => { const p = document.querySelector(".perfil-pagina"); return { banner: !!p.querySelector(".perfil-banner"), foto: !!p.querySelector(".perfil-foto-grande"), bio: p.querySelector(".perfil-bio").textContent,
       salvos: [...p.querySelectorAll(".perfil-salvos .cartao-loja .nome")].map((n) => n.textContent), grupos: [...p.querySelectorAll(".perfil-grupo h3")].map((h) => h.firstChild.textContent).join(), secoes: [...p.querySelectorAll(".perfil-secao h2")].map((h) => h.textContent).join() }; });
-    ok(perfil.banner && perfil.foto && perfil.bio === "Gosto de terror e de pizza." && perfil.salvos.join() === "Urso animatrônico" && perfil.grupos === "Personagens,Mapas,Animações" && /Bio,Salvos,Amigos/.test(perfil.secoes),
+    ok(perfil.banner && perfil.foto && perfil.bio === "Gosto de terror e de pizza." && perfil.salvos.join() === "Urso animatrônico" && perfil.grupos === "Personagens,Mapas,Animações,Itens" && /Bio,Salvos,Amigos/.test(perfil.secoes),
       "a página Perfil: a capa (banner), a foto, e descendo a bio, os salvos (personagens, mapas e animações) e os amigos");
     await ana.pagina.screenshot({ path: path.join(PASTA, "companhia-webc-perfil.png") });
 

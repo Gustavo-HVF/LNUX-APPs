@@ -275,6 +275,8 @@
       if (j.avatar !== this.avatarVersao) { this.avatarVersao = j.avatar; this.buscarAvatar(); }
       if ((j.aparencia || 0) !== this.aparenciaVersao) { this.aparenciaVersao = j.aparencia || 0; this.buscarAparencia(); }
       if ((j.video || 0) !== this.videoVersao) { this.videoVersao = j.video || 0; this.buscarVideo(); }
+      if ((j.item || 0) !== this.itemVersao) { this.itemVersao = j.item || 0; this.buscarItem(); }
+      this.itemEstado = e.it && typeof e.it === "object" ? e.it : null;
       this.conta = j.conta || null;
     }
     /** O vídeo dela mudou (abriu, pausou, pulou, mudou a tela de lugar, fechou). desvio: o relógio do servidor menos o meu. */
@@ -285,6 +287,47 @@
         const v = await pedir("GET", `${this.sala.codigo}/video/${this.id}?v=${versao}`, { tempo: ESPERA.pequeno, sinal: this.sala.sinal() });
         if (versao === this.videoVersao) this.video = { ...v, desvio: v.agora - Date.now() / 1000 };
       } catch (e) { if (versao === this.videoVersao) this.video = null; }
+    }
+    /** O item dela (do Estúdio de itens): baixa o .glb uma vez por versão e monta (a ficha é conferida em C.abrirItem). */
+    async buscarItem() {
+      const versao = this.itemVersao;
+      if (!versao || !C.abrirItem) return;
+      try {
+        const blob = await pedir("GET", `${this.sala.codigo}/item/${this.id}?v=${versao}`, { como: "blob", sinal: this.sala.sinal() });
+        const { def, malhas, animacoes } = await C.abrirItem(blob);
+        if (versao !== this.itemVersao) return;
+        if (this.item) this.item.descartar();
+        this.itemNos = null;
+        const palco = this.sala.palco;
+        this.item = new C.ItemVivo(def, malhas, animacoes, { cena: palco.cena, colisor: () => palco.mundo && palco.mundo.colisor, outros: () => [], reduzir: "reduzir" in document.documentElement.dataset });
+        this.itemEncaixe = null;
+        this.itemUsos = null;
+      } catch (e) { if (!e.saiu) console.warn("sala: o item de " + this.nome + " não chegou", e); }
+    }
+    /** Põe o item dela no corpo dela e repete o que ela faz com ele (as luzes, os usos e a mira). */
+    atualizarItem(dt) {
+      const it = this.item, e = this.itemEstado, av = this.avatar;
+      if (!it) return;
+      const mostrar = !!(e && e.on && av);
+      it.raiz.visible = mostrar;
+      if (!e || !av) { it.atualizar(dt); return; }
+      if (e.aj) { const k = JSON.stringify(e.aj); if (k !== this.itemEncaixe) { this.itemEncaixe = k; it.aplicarEncaixe(C.limparItem({ encaixe: e.aj }).encaixe); this.itemNos = null; } }
+      if (this.itemNos !== av.nos) { C.encaixarItem(it, av.nos, !!av.v0); this.itemNos = av.nos; } // o osso pode ter mudado (outro encaixe, outro avatar)
+      if (Array.isArray(e.lz)) it.definirLuzes(e.lz);
+      const u = Array.isArray(e.u) ? e.u : [0];
+      if (this.itemUsos === null) this.itemUsos = u[0]; // o que ela usou antes de eu chegar não repete
+      else if (u[0] > this.itemUsos) {
+        this.itemUsos = u[0];
+        const T = window.THREE, mira = u.length >= 4 ? new T.Vector3(u[1], u[2], u[3]) : null;
+        // as luzes que alternam já vêm em "lz": aqui só as rajadas, as animações e os disparos
+        const luzes = it.luzesLigadas;
+        it.usar(mira);
+        it.definirLuzes(luzes);
+        if (it.temLancador) this.mirarAte = performance.now() + 900;
+      }
+      if (!e.s) it.soltarUso();
+      else if (u.length >= 4) it.mira = new window.THREE.Vector3(u[1], u[2], u[3]);
+      it.atualizar(dt);
     }
     async buscarAparencia() {
       const versao = this.aparenciaVersao;
@@ -318,6 +361,7 @@
       } catch (e) { if (!e.saiu) console.warn("sala: o avatar de " + this.nome + " não abriu", e); }
     }
     trocarAvatar(av) {
+      if (this.item) { C.desencaixarItem(this.item); this.itemNos = null; } // o item não vai embora junto com o avatar velho
       if (this.avatar) { this.grupo.remove(this.avatar.vrm.scene); try { window.CompanhiaVRM.VRMUtils.deepDispose(this.avatar.vrm.scene); } catch (e) { /* já foi */ } }
       this.avatar = av;
       this.boneco.visible = !av;
@@ -377,6 +421,9 @@
         q.setFromEuler(e.set(0, 0, -1.07 + Math.sin(aceno * Math.PI * 6) * 0.35)).multiply(q2.setFromEuler(e.set(-0.8, 0, 0)));
         pose.rightLowerArm.slerp(q, env);
       }
+      const eIt = this.itemEstado;
+      if (this.item && eIt && eIt.on && eIt.aj && !(this.poseRecebida && this.poseRecebida[eIt.aj.osso === "leftHand" ? "leftIndexProximal" : "rightIndexProximal"]))
+        C.poseDeSegurar(pose, eIt.aj.osso, Math.max(0, Math.min(1, ((this.mirarAte || 0) - agora) / 300)));
       for (const [n, q] of av.ajusteQ) if (pose[n]) pose[n].premultiply(q); // as correções dos ossos que ela fez
       gravarPose(av, pose, this.quadril);
       // os pés dela no chão do nosso cenário (IK das pernas), como os nossos
@@ -395,8 +442,10 @@
         for (const n of PRESETS_ROSTO) if (av.expressoes.has(n)) em.setValue(n, alvo[n] || 0);
       }
       av.vrm.update(dt);
+      this.atualizarItem(dt);
     }
     descartar() {
+      if (this.item) { this.item.descartar(); this.item = null; }
       this.trocarAvatar(null);
       soltarPlaca(this.rotulo);
       soltarPlaca(this.balao);
@@ -452,6 +501,8 @@
       this.controle = entrou ? new AbortController() : null;
       this.ocupado = false;
       this.enviando = false;
+      this.enviandoItem = false;
+      this.itemEnviado = null;
     }
 
     /** As salas públicas deste servidor e se dá para criar: {salas: [...], criar, visitantes_criam, dono, abertas, maximo}. */
@@ -554,6 +605,8 @@
     meuEstado() {
       const p = this.palco, m = p.mundo, r = p.raiz.position;
       const e = { p: [arred(r.x), arred(r.y), arred(r.z)], r: arred(m.rumo), e: m.estado, emo: p.emocao, g: this.gesto, c: arred(m.cam.giro) }; // c: para onde a câmera olha (a tela de vídeo que segue fica na frente dela)
+      const it = this.mochila && this.mochila.paraSala();
+      if (it) e.it = it; // o item na mão (js/mochila.js)
       if (m.olharCabeca) e.o = arred(m.olharCabeca); // em primeira pessoa: a cabeça abaixa e levanta com o olhar
       const rd = m.ragdoll;
       if (rd && (rd.ativo || rd.saida > 0)) {
@@ -603,9 +656,19 @@
       } catch (e) { if (!e.saiu) console.warn("sala: a aparência não subiu", e); }
       finally { if (vez === this.vez) this.enviando = false; } // de uma vez anterior: a nova já começou sem ela
     }
+    /** O item que levo na mão vai para a sala uma vez (os outros baixam quando a versão muda). */
+    async enviarItem() {
+      const blob = this.mochila && this.mochila.blob;
+      if (!this.dentro || !blob || blob === this.itemEnviado || this.enviandoItem) return;
+      const { codigo, eu, vez } = this;
+      this.enviandoItem = true;
+      try { await pedir("PUT", `${codigo}/item?id=${eu.id}&segredo=${eu.segredo}`, { corpo: blob, sinal: this.sinal() }); if (vez === this.vez) this.itemEnviado = blob; }
+      catch (e) { if (!e.saiu) console.warn("sala: o item não subiu", e); }
+      finally { if (vez === this.vez) this.enviandoItem = false; }
+    }
     async trocar() {
       if (!this.dentro || this.ocupado) return;
-      if (performance.now() - this.ultimaAparencia > 1000) { this.ultimaAparencia = performance.now(); this.enviarAparencia(); }
+      if (performance.now() - this.ultimaAparencia > 1000) { this.ultimaAparencia = performance.now(); this.enviarAparencia(); this.enviarItem(); }
       const { vez, eu, codigo } = this;
       this.ocupado = true;
       try {

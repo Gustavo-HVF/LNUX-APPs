@@ -768,6 +768,14 @@
       else { await C.mapas.guardar(item.nome, new Map([[item.arquivo, blob]]), item.arquivo); LNUX.aviso(C.t("\"{nome}\" foi para Movimento › Cenário: abra uma personagem VRoid para andar nele.", { nome: item.nome }), "ok"); }
       return;
     }
+    if (item.tipo === "item") {
+      // vai para Opções › Itens (como "da loja") e já fica na mão, se der
+      const ja = (await C.itens.lista()).find((x) => x.loja === item.id);
+      const reg = await C.itens.guardar({ ...(ja ? { id: ja.id } : {}), nome: item.nome, origem: "loja", loja: item.id }, blob);
+      if (jogando() && palco3d && palco3d.vrm) { try { await montarMochila().segurar(reg.id); } catch (e) { console.warn(e); } }
+      LNUX.aviso(C.t("\"{nome}\" foi para Opções › Itens{mao}.", { nome: item.nome, mao: mochila && mochila.naMao ? C.t(" e está na sua mão") : "" }), "ok");
+      return;
+    }
     const r = await C.movimentos.importar(new Map([[item.arquivo, blob]]), "Loja");
     if (!r.novos.length) throw new Error(r.erros.join(" ") || "Essa animação não abriu.");
     if (atual && atual.tipo === "vrm") await estudio.tocar(r.novos[0].id);
@@ -780,6 +788,7 @@
     async fontes(tipo) {
       if (tipo === "personagem") return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", "")).map((p) => ({ id: p.id, nome: p.nome }));
       if (tipo === "mundo") return (await C.mapas.lista()).map((m) => ({ id: m.id, nome: m.nome }));
+      if (tipo === "item") return (await C.itens.lista()).filter((x) => x.origem === "meu").map((x) => ({ id: x.id, nome: x.nome }));
       return (await C.movimentos.lista()).map((m) => ({ id: m.id, nome: m.nome }));
     },
     async arquivoDaFonte(tipo, id) {
@@ -792,6 +801,11 @@
         if (!reg || !arqs) throw new Error("Esse cenário não está mais guardado.");
         const glb = arqs.size === 1 && /\.glb$/i.test([...arqs.keys()][0]) ? [...arqs.values()][0] : (await C.conversor.paraGLB(arqs, reg.principal || C.conversor.modelos(arqs)[0])).glb;
         return { blob: glb, arquivo: nomeArq(reg.nome) + ".glb", nome: reg.nome };
+      }
+      if (tipo === "item") {
+        const reg = (await C.itens.lista()).find((x) => x.id === id), blob = reg && (await C.itens.ler(id));
+        if (!blob) throw new Error("Esse item não está mais guardado.");
+        return { blob, arquivo: nomeArq(reg.nome) + ".glb", nome: reg.nome };
       }
       const reg = (await C.movimentos.lista()).find((m) => m.id === id), a = await C.movimentos.arquivo(id);
       if (!reg || !a) throw new Error("Esse movimento não está mais guardado.");
@@ -819,6 +833,10 @@
         try { r = await C.conversor.paraGLB(pronto, principal, { aoProgresso: (f, t) => prog.definir(f, t) }); } finally { prog.fechar(); }
         const nome = LNUX.nomeSemExtensao(arqs[0].nome);
         return { blob: r.glb, arquivo: nomeArq(nome) + ".glb", nome };
+      }
+      if (tipo === "item") {
+        const [b] = await LNUX.arquivos.abrir({ titulo: "Item para publicar (.glb do Estúdio de itens)", aceitar: ".glb" });
+        return b ? { blob: await b.blob(), arquivo: nomeArq(b.nome), nome: LNUX.nomeSemExtensao(b.nome) } : null;
       }
       const [a] = await LNUX.arquivos.abrir({ titulo: "Animação para publicar (.vrma, .bvh, .fbx ou .glb)", aceitar: ".vrma,.bvh,.fbx,.glb" });
       return a ? { blob: await a.blob(), arquivo: nomeArq(a.nome), nome: LNUX.nomeSemExtensao(a.nome) } : null;
@@ -1486,9 +1504,11 @@
     LNUX.aviso("Link copiado.", "ok");
   };
   function garantirSala() {
+    if (sala && mochila) sala.mochila = mochila;
     if (!sala) sala = new C.Sala({ palco: palco3d, captura, aoMudar: atualizarSala, aoMensagem: mensagemDaSala, aparencia: minhaAparencia,
       aoPrivado: (p, antes) => { if (privados) privados.aoMudar(p, antes); }, aoMensagemPrivada: (m) => { if (privados) privados.mensagem(m); } });
     if (menuDePessoa) menuDePessoa.ligar(); // clicar na personagem de alguém: as bolinhas (amigo, perfil, chat privado)
+    if (mochila) sala.mochila = mochila; // o item na mão vai para os outros
     return sala;
   }
   function mensagemDaSala(m) {
@@ -1701,8 +1721,40 @@
   }
   /** Gestos e expressões que os outros veem. */
   /** A tela de quem joga (js/jogo.js): as expressões de 1 a 9, o bate-papo e o vídeo no canto, e a janela Opções (o ☰). */
-  let jogo = null, privados = null, menuDePessoa = null;
+  let jogo = null, privados = null, menuDePessoa = null, mochila = null;
+  /** A mochila (js/mochila.js): o item na mão, E usa, G esconde e mostra. */
+  function montarMochila() {
+    if (mochila) return mochila;
+    mochila = C.Mochila({ palco: () => palco3d, jogando: () => jogando() && !(C.webc && C.webc.visivel), aoMudar: () => { if (jogo && jogo.atualizarItem) jogo.atualizarItem(); } });
+    if (sala) sala.mochila = mochila;
+    const quadroMochila = (dt) => mochila.quadro(dt);
+    if (palco3d) palco3d.on("quadro", quadroMochila); else ouvintesPalco.push(["quadro", quadroMochila]);
+    const editavel = (e) => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable;
+    const podeUsar = (e) => jogando() && !(C.webc && C.webc.visivel) && !editavel(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector(".lnux-fundo-modal, .jogo-opcoes-fundo") && palco3d && palco3d.mundo && palco3d.mundo.andando;
+    window.addEventListener("keydown", (e) => {
+      if (!podeUsar(e)) return;
+      if (e.code === "KeyE" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.usar(); }
+      if (e.code === "KeyG" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.alternarVisivel(); }
+    });
+    window.addEventListener("keyup", (e) => { if (e.code === "KeyE") mochila.soltar(); });
+    window.addEventListener("blur", () => mochila.soltar());
+    return mochila;
+  }
+  /** Opções › Itens: os meus e os baixados; segurar, ajustar no meu corpo, guardar. */
+  const ctxItens = {
+    lista: () => C.itens.lista(),
+    naMao: () => mochila && mochila.naMao,
+    visivel: () => !!(mochila && mochila.visivel),
+    async segurar(id) { montarMochila(); await mochila.segurar(id); },
+    guardar: () => mochila && mochila.guardar(),
+    alternarVisivel: () => mochila && mochila.alternarVisivel(),
+    usar: () => { if (mochila) { mochila.usar(); setTimeout(() => mochila.soltar(), 150); } },
+    ajustar: (id) => C.webc.ir("criar", { id, ajustar: true }),
+    criar: () => C.webc.ir("criar"),
+    loja: () => C.webc.ir("loja", { tipo: "item" }),
+  };
   function montarTelaDoJogo() {
+    montarMochila();
     privados = C.Privados({ sala: () => sala });
     menuDePessoa = C.MenuDePessoa({ sala: () => sala, palco: () => palco3d, privados: () => privados });
     jogo = C.Jogo({
@@ -1713,6 +1765,7 @@
       videos: () => videos,
       cenario: () => estudio.painelCenario(),
       secoes: secoesDoJogo,
+      itens: ctxItens,
     });
   }
   /** As seções da janela Opções, com os itens dos menus de sempre (sem a loja: ela fica no site). */
@@ -1732,12 +1785,12 @@
     live2d = null;
     montarTelaDoJogo();
     await mostrarVazio();
-    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false),
+    C.webc.montar({ salas: ctxSalas, loja: ctxLoja, sala: () => sala, sairDaSala: () => sairDaSala(false), mochila: () => montarMochila(),
       conversar: () => { if (sala && sala.dentro) sala.sair(); history.replaceState(null, "", location.pathname + location.search + "#modo=conversa"); location.reload(); } });
     ligarCabecalhoDoJogo();
     atualizarSala();
     const codigo = fragmento.get("sala") || "", pagina = fragmento.get("pagina"); // #pagina=loja|sala|perfil|novidades: abre direto nela
-    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil", "novidades"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
+    await C.webc.ir(codigo ? "sala" : ["loja", "sala", "perfil", "novidades", "criar"].includes(pagina) ? pagina : "inicio", { codigo, semTransicao: true });
   }
   /** No jogo (dentro de uma sala), o alto: o logo do WEBC leva ao site; o ☰ (a janela Opções) no lugar dos botões do LNUX. */
   function ligarCabecalhoDoJogo() {

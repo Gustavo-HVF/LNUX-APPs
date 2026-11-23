@@ -65,6 +65,30 @@ pisca na tela).
 - **Perfil**: a **capa** (o banner) e a **foto** redonda em cima; descendo, a **bio**, os **salvos** (os mapas,
   personagens e animações que a pessoa salvou na loja) e os **amigos**. No seu perfil, *Editar perfil* e os pedidos
   de amizade; no dos outros, *Adicionar amigo* (pedido → aceitar → amigos; dá para desfazer).
+- **Criar** (o Estúdio de itens, `js/estudio-itens.js`; ver [`docs/estudio-de-itens.md`](../../docs/estudio-de-itens.md)):
+  monte objetos que a personagem carrega e usa — lanternas, armas de bolha, varinhas, tochas, chapéus, mochilas.
+  - **Partes**: 8 formas prontas (cubo, esfera, cilindro, cone, cápsula, toro, plano, anel), **modelo 3D** (`.glb`,
+    `.gltf`, `.fbx`, `.obj`, ZIP; as animações do arquivo tocam ao usar), **luz** (lanterna com cone, lâmpada, tocha que
+    pisca: luz de verdade, que ilumina o mapa e faz sombra), **partículas** (fumaça, faíscas, fogo, neve, bolhas,
+    confete, estrelas, magia) e **lançador de projéteis** (pistola, laser, bolhas, fogos, bola de neve: velocidade,
+    gravidade, cadência, dispersão, quiques, rastro, faíscas no impacto, clarão no cano).
+  - **Edição**: arrastar para mover, girar ou mudar o tamanho (livre ou num eixo, com grade de 1 cm e 15°), valores
+    exatos, duplicar, apagar, espelhar, centralizar, pôr no chão, renomear, esconder, mudar a ordem, cor, metal,
+    rugosidade, brilho, opacidade, aramado, faces chapadas, textura de uma imagem, desfazer e refazer, atalhos (W, E, R,
+    X/Y/Z, F, Del, Ctrl+D, Ctrl+Z, Ctrl+Y), **Testar** (usar o item contra uma parede), foto automática, exportar e
+    importar o `.glb`.
+  - **Encaixe no corpo**: mão direita ou esquerda, cabeça, peito, costas, quadril ou pés, com a **mão de boneco** (a
+    parte azul é onde fica o cabo) e o **boneco inteiro** para acertar. Quem baixa recebe o item no lugar que quem
+    criou deixou; em *Opções › Itens › Ajustar no meu corpo*, cada pessoa ajusta o dela (fica guardado no aparelho e
+    os outros na sala veem no lugar novo).
+  - **Guardar e publicar**: os itens ficam em *Meus itens* (no aparelho); *Publicar na loja* põe na categoria
+    **Itens**. Um item é um `.glb` com a ficha dentro; ao abrir, a ficha é conferida e limitada (2.000 partículas,
+    80 projéteis, 4 luzes, 64 partes, 25 MB), porque o item dos outros é dado, nunca código.
+- **No jogo, os itens**: *Opções › Itens* (Segurar, Guardar, Usar, Ajustar no meu corpo). Com o item na mão, a mão
+  fecha no cabo; **E** usa (segurando, o lançador dispara sem parar, e o braço aponta para a frente), **G** esconde e
+  mostra. Com um lançador aparece a mira no meio da tela, e o tiro vai para onde a câmera aponta; os projéteis batem
+  no cenário e nas pessoas (só o efeito). Na sala, o arquivo do item vai uma vez para os outros, e eles veem o item,
+  as luzes, os tiros e as partículas.
 - **Pesquisar por alguém**: a lupa no alto abre um cartão preto à direita, com "pesquisa por alguém" e uma linha
   embaixo. Digitando parte do nome (sem diferença de acentos e maiúsculas), aparecem as contas: a **foto redonda** e o
   **nome**. Um clique abre o perfil da pessoa; o botão redondo ao lado manda o pedido de amizade (ou aceita o dela).
