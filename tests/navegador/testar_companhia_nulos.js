@@ -120,7 +120,17 @@ function procurarNulos() {
     await pagina.click("#jogo-menu");
     await pagina.waitForSelector(".jogo-opcoes [data-secao]");
     const secoes = await p.ev(() => [...document.querySelectorAll(".jogo-opcoes [data-secao]")].map((b) => b.dataset.secao));
-    for (const s of secoes) { await pagina.click(`.jogo-opcoes [data-secao="${s}"]`); await conferir(`Opções › ${s}`); }
+    const apertadas = [];
+    for (const s of secoes) {
+      await pagina.click(`.jogo-opcoes [data-secao="${s}"]`);
+      await conferir(`Opções › ${s}`);
+      // as linhas dos menus não podem ficar espremidas (o texto quebrando palavra por palavra)
+      apertadas.push(...(await p.ev((sec) => [...document.querySelectorAll(".jogo-opcoes-lista .jogo-item")].filter((b) => {
+        const r = b.querySelector(".rotulo");
+        return r && b.offsetWidth > 200 && (r.offsetWidth < b.offsetWidth * 0.4 || b.offsetHeight > 90);
+      }).map((b) => `${sec}: "${b.textContent.trim().slice(0, 30)}"`), s)));
+    }
+    ok(!apertadas.length, "as linhas das Opções ocupam a largura (o texto não fica espremido numa coluna)" + (apertadas.length ? ": " + apertadas.slice(0, 4).join(" | ") : ""));
     await pagina.click(".jogo-opcoes-fechar");
     await ir("loja"); await conferir("a loja com a sala aberta por trás");
     await ir("sala"); await pagina.waitForSelector(".salas .cartao-sala", { timeout: 20000 }); await conferir("a página Sala com a minha sala na lista");
