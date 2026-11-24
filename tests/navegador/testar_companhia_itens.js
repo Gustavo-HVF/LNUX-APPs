@@ -146,9 +146,9 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await ana.pagina.click('.lnux-dialogo footer button:text-is("Fechar")');
     await ana.pagina.click("#jogo-menu");
     await ana.pagina.click('.jogo-opcoes [data-secao="itens"]');
-    await ana.pagina.waitForSelector('.jogo-itens [data-acao="segurar"]');
-    await ana.pagina.click('.jogo-itens [data-acao="segurar"]');
-    await ana.pagina.waitForSelector('.jogo-itens [data-acao="guardar"]', { timeout: 15000 });
+    await ana.pagina.waitForSelector('.jogo-inventario [data-acao="segurar"]');
+    await ana.pagina.click('.jogo-inventario [data-acao="segurar"]');
+    await ana.pagina.waitForSelector('.jogo-inventario [data-acao="guardar"]', { timeout: 15000 });
     await ana.pagina.click(".jogo-opcoes-fechar");
     const naMao = await ana.ev(() => { const p = window.Companhia.palco, it = document.querySelector("#jogo-item"); let osso = null; const base = (window.__vivo = null); void base;
       for (const [n, no] of Object.entries(p.nos)) if (no.children.some((c) => c.children.some((x) => /^item:/.test(x.name)))) osso = n;
@@ -179,7 +179,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     // ── ajustar no meu corpo ──
     await ana.pagina.click("#jogo-menu");
     await ana.pagina.click('.jogo-opcoes [data-secao="itens"]');
-    await ana.pagina.click('.jogo-itens [data-acao="ajustar"]');
+    await ana.pagina.click('.jogo-inventario [data-acao="ajustar"]');
     await ana.pagina.waitForSelector(".estudio-itens.ajustando .estudio-tela canvas", { timeout: 20000 });
     await ana.pagina.waitForTimeout(800);
     const campoY = ana.pagina.locator('.estudio-props .estudio-secao .estudio-tres').first().locator('input[aria-label="Y"]');

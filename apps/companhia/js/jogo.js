@@ -359,15 +359,15 @@
       if (secao === "itens") {
         const it = ctx.itens;
         if (!it) return [];
-        const lista = el("div", { class: "jogo-itens" }, el("p", { class: "jogo-nota" }, t("Carregando...")));
+        const lista = el("div", { class: "jogo-inventario" }, el("p", { class: "jogo-nota" }, t("Carregando...")));
         it.lista().then((l) => {
           const mao = it.naMao();
           lista.replaceChildren(...(l.length ? l.map((x) => {
             const naMao = !!(mao && mao.reg.id === x.id);
-            const mini = x.miniatura instanceof Blob ? el("img", { src: URL.createObjectURL(x.miniatura), alt: "" }) : el("span", { class: "jogo-item-icone", html: ICONES.itens });
-            return el("div", { class: "jogo-item" + (naMao ? " na-mao" : ""), "data-item": x.id }, mini,
-              el("span", { class: "jogo-item-nome" }, el("b", { translate: "no" }, x.nome), el("span", { class: "fraco pequeno" }, x.origem === "loja" ? t("da loja") : t("criado por você"))),
-              el("div", { class: "jogo-item-botoes" },
+            const mini = x.miniatura instanceof Blob ? el("img", { class: "jogo-inv-mini", src: URL.createObjectURL(x.miniatura), alt: "" }) : el("span", { class: "jogo-inv-mini", html: ICONES.itens });
+            return el("div", { class: "jogo-inv" + (naMao ? " na-mao" : ""), "data-item": x.id }, mini,
+              el("span", { class: "jogo-inv-nome" }, el("b", { translate: "no" }, x.nome), el("span", { class: "fraco pequeno" }, x.origem === "loja" ? t("da loja") : t("criado por você"))),
+              el("div", { class: "jogo-inv-botoes" },
                 naMao ? el("button", { type: "button", class: "lnux-botao pequeno", "data-acao": "guardar", onclick: () => { it.guardar(); abrirOpcoes("itens"); } }, t("Guardar"))
                   : el("button", { type: "button", class: "lnux-botao primario pequeno", "data-acao": "segurar", onclick: () => it.segurar(x.id).then(() => abrirOpcoes("itens")).catch(LNUX.erro) }, t("Segurar")),
                 naMao ? el("button", { type: "button", class: "lnux-botao pequeno", "data-acao": "usar", onclick: () => it.usar() }, t("Usar")) : null,

@@ -1240,9 +1240,11 @@ html[data-webc="site"] .mira-item { display: none; }
 .jogo-item-icone { display: inline-grid; width: 24px; height: 24px; }
 .jogo-item-icone svg { width: 100%; height: 100%; }
 .jogo-item-teclas { opacity: .85; }
-.jogo-itens { display: grid; gap: 8px; }
-.jogo-item { display: grid; grid-template-columns: 48px 1fr; gap: 6px 10px; align-items: center; padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
-.jogo-item.na-mao { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
-.jogo-item img, .jogo-item > .jogo-item-icone { width: 48px; height: 48px; border-radius: 10px; background: #1e2129; object-fit: contain; color: #fff; padding: 6px; }
-.jogo-item-nome { display: grid; }
-.jogo-item-botoes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+/* Opções › Itens (o inventário; "jogo-item" é a linha dos menus das Opções, não confundir) */
+.jogo-inventario { display: grid; gap: 8px; }
+.jogo-inv { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 6px 10px; align-items: center; padding: 8px; border-radius: 12px; border: 1px solid var(--border); }
+.jogo-inv.na-mao { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
+.jogo-inv-mini { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 10px; background: #1e2129; object-fit: contain; color: #fff; padding: 6px; }
+.jogo-inv-mini svg { width: 100%; height: 100%; }
+.jogo-inv-nome { display: grid; min-width: 0; }
+.jogo-inv-botoes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
