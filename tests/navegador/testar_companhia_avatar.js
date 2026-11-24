@@ -120,7 +120,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
       leitores.ex.achadas.blinkLeft === "eye_close_L" && JSON.stringify(leitores.ex.extras) === JSON.stringify(["照れ"]), `formas do rosto viram expressões do VRM: ${JSON.stringify(leitores.ex.achadas)}`);
 
     // ── o .unitypackage pelo menu ──
-    await menu("Personagem", "Importar avatar do Unity (.unitypackage, .fbx)...");
+    await menu("Personagem", "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...");
     await escolherArquivo(arqPacote);
     let texto = await resumo();
     ok(/23 ossos reconhecidos pela ficha do Unity \(\.meta\), com os olhos e sem os dedos/.test(texto) && /pose em T \(45°\)/.test(texto) && /1,7\d m de altura/.test(texto),
@@ -188,7 +188,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok((await ev(() => C.listarPersonagens())).length === antes && (await ev(() => window.Companhia.atual.nome)) === "avatar-do-unity", "Cancelar no resumo não importa nada");
 
     // ── .fbx com as texturas ao lado (ossos pelos nomes, TGA pedido pelo .fbx, PSD pelo nome do material) ──
-    await menu("Personagem", "Importar avatar do Unity (.unitypackage, .fbx)...");
+    await menu("Personagem", "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...");
     await escolherArquivo(arqFbx);
     texto = await resumo();
     ok(/23 ossos reconhecidos pelos nomes dos ossos/.test(texto) && /3 de 3 com textura/.test(texto) && !/pelos materiais do Unity/.test(texto),
@@ -225,7 +225,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(await ev(() => !document.querySelector("#avatar-convertido") && window.Companhia.palco.mundo.info.principal === "mundo.glb"), "um .unitypackage de mundo solto no palco continua virando cenário");
 
     // ── pacote sem esqueleto ──
-    await menu("Personagem", "Importar avatar do Unity (.unitypackage, .fbx)...");
+    await menu("Personagem", "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...");
     await escolherArquivo(arqSemEsqueleto);
     await pagina.waitForFunction(() => [...document.querySelectorAll(".lnux-aviso")].some((a) => /não tem esqueleto/.test(a.textContent)), null, { timeout: 30000 }).catch(() => {});
     ok(await ev(() => [...document.querySelectorAll(".lnux-aviso")].some((a) => /não tem esqueleto/.test(a.textContent) && /Cenário/.test(a.textContent))),

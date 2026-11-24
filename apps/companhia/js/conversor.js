@@ -62,8 +62,11 @@
     return tex;
   }
 
-  /** .blend → cena do three.js, pelo leitor próprio. */
-  async function cenaDoBlend(blob, arquivos, avisos) {
+  /**
+   * .blend → cena do three.js, pelo leitor próprio. personagem: as malhas presas num esqueleto (o da armadura ou o
+   * refeito pelos grupos de vértices, js/blend-personagem.js) viram malhas com pele, com as formas (shape keys).
+   */
+  async function cenaDoBlend(blob, arquivos, avisos, { personagem = false } = {}) {
     const T = window.THREE, V = window.CompanhiaVRM;
     let dados = new Uint8Array(await blob.arrayBuffer());
     const como = C.blend.compactacao(dados);
@@ -86,6 +89,7 @@
       const mat = new T.MeshStandardMaterial({ name: m.nome, roughness: Math.min(1, Math.max(0, m.rugosidade)), metalness: Math.min(1, Math.max(0, m.metalico)) });
       mat.color.setRGB(m.cor[0], m.cor[1], m.cor[2]);
       if (m.cor[3] < 0.999) { mat.transparent = true; mat.opacity = m.cor[3]; }
+      if (m.recorte) mat.alphaTest = 0.5; // um shader transparente misturado pelo alfa da imagem: recorta (cabelo, cílios, rendas)
       if (m.imagem !== null) { if (texturas[m.imagem]) mat.map = texturas[m.imagem]; else faltaram++; }
       return mat;
     });
@@ -101,6 +105,13 @@
     });
     const raiz = new T.Group();
     raiz.name = "Cena do Blender";
+    if (personagem) {
+      montarPersonagem(b, raiz, materiais, padrao, avisos);
+      raiz.rotation.x = -Math.PI / 2;
+      raiz.updateMatrixWorld(true);
+      raiz.traverse((o) => { if (o.isSkinnedMesh) o.bind(o.skeleton); }); // (sem a matriz: assim ele calcula as inversas dos ossos) // a pose de repouso, já de pé (Y para cima)
+      return raiz;
+    }
     for (const o of b.objetos) {
       const m = b.malhas[o.malha], g = geometrias[o.malha];
       const lista = [];
@@ -116,6 +127,88 @@
     raiz.updateMatrixWorld(true);
     avisos.push("Convertido pelo leitor próprio (sem o Blender): modificadores, curvas, textos e instâncias de coleção não entram. Com o Blender instalado no aparelho e a ponte ligada, a conversão é completa.");
     return raiz;
+  }
+
+  /**
+   * As malhas de uma personagem do .blend, com pele: as posições já no mundo (do Blender), os ossos (THREE.Bone) do
+   * esqueleto de cada objeto, os pesos (até 4 por vértice), as normais lisas (pela média nos vértices de origem, sem
+   * costura nas bordas da UV) e as formas (shape keys) como alvos de morph. Objetos sem esqueleto entram parados.
+   */
+  function montarPersonagem(b, raiz, materiais, padrao, avisos) {
+    const T = window.THREE;
+    const esqueletos = new Map(); // chave → {ossos: [Bone], dados}
+    let semEsqueleto = 0, comoFoi = "";
+    b.objetos.forEach((o, io) => {
+      const m = b.malhas[o.malha], esq = C.esqueletoDoBlend ? C.esqueletoDoBlend(b, o, m) : null;
+      const n = m.indices.length, M = o.matriz;
+      // posições no mundo (por canto) e a normal lisa de cada vértice de origem
+      const pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const x = m.posicoes[i * 3], y = m.posicoes[i * 3 + 1], z = m.posicoes[i * 3 + 2];
+        pos[i * 3] = M[0] * x + M[4] * y + M[8] * z + M[12]; pos[i * 3 + 1] = M[1] * x + M[5] * y + M[9] * z + M[13]; pos[i * 3 + 2] = M[2] * x + M[6] * y + M[10] * z + M[14];
+      }
+      const normalV = new Float32Array(m.nVertices * 3);
+      for (let t = 0; t < n; t += 3) {
+        const a = t * 3, bb = (t + 1) * 3, c = (t + 2) * 3;
+        const ux = pos[bb] - pos[a], uy = pos[bb + 1] - pos[a + 1], uz = pos[bb + 2] - pos[a + 2], vx = pos[c] - pos[a], vy = pos[c + 1] - pos[a + 1], vz = pos[c + 2] - pos[a + 2];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        for (let k = 0; k < 3; k++) { const v = m.indices[t + k]; normalV[v * 3] += nx; normalV[v * 3 + 1] += ny; normalV[v * 3 + 2] += nz; }
+      }
+      const normais = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const v = m.indices[i], x = normalV[v * 3], y = normalV[v * 3 + 1], z = normalV[v * 3 + 2], l = Math.hypot(x, y, z) || 1;
+        normais[i * 3] = x / l; normais[i * 3 + 1] = y / l; normais[i * 3 + 2] = z / l;
+      }
+      const g = new T.BufferGeometry();
+      g.setAttribute("position", new T.BufferAttribute(pos, 3));
+      g.setAttribute("normal", new T.BufferAttribute(normais, 3));
+      if (m.uvs) g.setAttribute("uv", new T.BufferAttribute(m.uvs, 2));
+      for (const gr of m.grupos) g.addGroup(gr.inicio, gr.quantidade, gr.material);
+      // as formas (shape keys): a diferença de cada vértice, no mundo
+      if (m.formas && m.formas.length) {
+        g.morphAttributes.position = m.formas.map((f) => {
+          const d = new Float32Array(n * 3);
+          for (let i = 0; i < n; i++) {
+            const v = m.indices[i], x = f.posicoes[v * 3], y = f.posicoes[v * 3 + 1], z = f.posicoes[v * 3 + 2];
+            d[i * 3] = M[0] * x + M[4] * y + M[8] * z + M[12] - pos[i * 3]; d[i * 3 + 1] = M[1] * x + M[5] * y + M[9] * z + M[13] - pos[i * 3 + 1]; d[i * 3 + 2] = M[2] * x + M[6] * y + M[10] * z + M[14] - pos[i * 3 + 2];
+          }
+          return new T.BufferAttribute(d, 3);
+        });
+        g.morphTargetsRelative = true;
+      }
+      const lista = [];
+      for (const gr of m.grupos) lista[gr.material] = materiais[m.materiais[gr.material]] || padrao;
+      for (let i = 0; i < lista.length; i++) if (!lista[i]) lista[i] = padrao;
+      const material = m.grupos.length === 1 ? lista[m.grupos[0].material] : lista;
+      if (m.grupos.length === 1) g.clearGroups();
+      let malha;
+      if (esq) {
+        const chave = o.armadura >= 0 ? "a" + o.armadura : "o" + io;
+        if (!esqueletos.has(chave)) {
+          const ossos = esq.ossos.map((x) => { const bone = new T.Bone(); bone.name = x.nome; return bone; });
+          esq.ossos.forEach((x, i) => {
+            const pai = x.pai >= 0 ? esq.ossos[x.pai] : null;
+            ossos[i].position.set(x.pos[0] - (pai ? pai.pos[0] : 0), x.pos[1] - (pai ? pai.pos[1] : 0), x.pos[2] - (pai ? pai.pos[2] : 0));
+            if (x.pai >= 0) ossos[x.pai].add(ossos[i]); else raiz.add(ossos[i]);
+          });
+          esqueletos.set(chave, { ossos, nomes: new Map(esq.ossos.map((x, i) => [x.nome, i])) });
+        }
+        const e = esqueletos.get(chave), mapa = esq.ossos.map((x) => e.nomes.get(x.nome) ?? 0);
+        const idx = new Uint16Array(n * 4), pesos = new Float32Array(n * 4);
+        for (let i = 0; i < n; i++) { const v = m.indices[i]; for (let k = 0; k < 4; k++) { idx[i * 4 + k] = mapa[esq.ossoDe[v * 4 + k]] || 0; pesos[i * 4 + k] = esq.pesoDe[v * 4 + k]; } }
+        g.setAttribute("skinIndex", new T.BufferAttribute(idx, 4));
+        g.setAttribute("skinWeight", new T.BufferAttribute(pesos, 4));
+        malha = new T.SkinnedMesh(g, material);
+        malha.skeleton = new T.Skeleton(e.ossos);
+        comoFoi = esq.como;
+        if (esq.semPeso) avisos.push(`${esq.semPeso} vértice(s) de "${o.nome}" sem peso foram presos no osso mais perto.`);
+      } else { malha = new T.Mesh(g, material); semEsqueleto++; }
+      if (g.morphAttributes.position) { malha.morphTargetDictionary = {}; m.formas.forEach((f, i) => { malha.morphTargetDictionary[f.nome] = i; }); malha.morphTargetInfluences = m.formas.map(() => 0); }
+      malha.name = o.nome;
+      raiz.add(malha);
+    });
+    if (comoFoi === "grupos") avisos.push("O .blend não tem a armadura: o esqueleto foi refeito pelos grupos de vértices (os pesos que ficaram na malha). Confira as juntas na personagem; se algo dobrar estranho, salve o .blend com a armadura.");
+    if (semEsqueleto) avisos.push(`${semEsqueleto} objeto(s) sem esqueleto nem grupos de vértices entraram parados.`);
   }
 
   /** .blend → .glb pelo Blender do aparelho (pela ponte). Devolve o Blob do .glb, ou null se não há Blender. */
@@ -137,10 +230,10 @@
   }
 
   /** Abre um modelo de qualquer formato aceito como cena do three.js (menos .blend pela ponte, que já sai em .glb). */
-  async function carregar(arquivos, principal, avisos) {
+  async function carregar(arquivos, principal, avisos, opcoes = {}) {
     const T = window.THREE, V = window.CompanhiaVRM;
     const tipo = ext(principal), blob = arquivos.get(principal);
-    if (tipo === "blend") return cenaDoBlend(blob, arquivos, avisos);
+    if (tipo === "blend") return cenaDoBlend(blob, arquivos, avisos, opcoes);
     const g = gerenteDoPacote(arquivos, principal);
     const malhaDe = (geo) => { if (!geo.attributes.normal) geo.computeVertexNormals(); return new T.Mesh(geo, new T.MeshStandardMaterial({ color: 0xb8bcc8, roughness: 0.85, vertexColors: !!geo.attributes.color })); };
     let objeto;
@@ -217,7 +310,7 @@
      * Converte um modelo para .glb. arquivos: Map caminho → Blob (o modelo e o que vier ao lado dele).
      * Devolve {glb: Blob, triangulos, avisos: [texto], como: texto}.
      */
-    async paraGLB(arquivos, principal, { aoProgresso = () => {} } = {}) {
+    async paraGLB(arquivos, principal, { aoProgresso = () => {}, personagem = false } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
       const tipo = ext(principal), blob = arquivos.get(principal);
@@ -229,14 +322,14 @@
         if (padrao) avisos.push("Os materiais specular/glossiness (exportações antigas do Sketchfab) ganharam a versão padrão: as texturas aparecem em qualquer programa.");
         return { glb: padrao ? new Blob([padrao], { type: "model/gltf-binary" }) : blob, triangulos: null, avisos, como: "já estava em .glb" };
       }
-      if (tipo === "blend") {
+      if (tipo === "blend" && !personagem) { // (uma personagem passa pelo leitor próprio: ele refaz o esqueleto e mantém os pesos)
         let pronto = null;
         try { pronto = await blendPelaPonte(principal, blob, arquivos, aoProgresso); }
         catch (e) { avisos.push("O Blender do aparelho não conseguiu (" + e.message + "); usei o leitor próprio."); }
         if (pronto) return { glb: pronto, triangulos: null, avisos, como: "pelo Blender do aparelho" };
       }
       aoProgresso(0.2, "Lendo o modelo...");
-      const objeto = await carregar(arquivos, principal, avisos);
+      const objeto = await carregar(arquivos, principal, avisos, { personagem });
       const triangulos = preparar(objeto);
       if (!triangulos) throw new Error("Esse arquivo não tem nenhuma malha (só câmeras, luzes ou pontos).");
       aoProgresso(0.7, "Gravando o .glb...");
@@ -244,6 +337,7 @@
       cena.add(objeto);
       cena.updateMatrixWorld(true);
       const saida = await new V.GLTFExporter().parseAsync(cena, { binary: true, onlyVisible: true, maxTextureSize: 4096, animations: objeto.animations || [] });
+      if (personagem) return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como: "pelo leitor próprio de .blend" };
       const nAnim = (objeto.animations || []).length;
       if (nAnim) avisos.push(nAnim === 1 ? C.t("Com 1 animação: ela toca no jogo.") : C.t("Com {n} animações: elas tocam no jogo.", { n: nAnim }));
       objeto.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });

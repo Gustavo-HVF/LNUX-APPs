@@ -486,7 +486,7 @@
   Object.assign(T, {
     // menus
     "Personagem": ["Character", "キャラクター"], "Conversa": ["Chat", "会話"], "IA": ["AI", "AI"], "Voz": ["Voice", "ボイス"], "Exibir": ["View", "表示"], "Ajuda": ["Help", "ヘルプ"],
-    "Importar ZIP ou .vrm...": ["Import ZIP or .vrm...", "ZIP か .vrm を読み込む..."], "Importar avatar do Unity (.unitypackage, .fbx)...": ["Import a Unity avatar (.unitypackage, .fbx)...", "Unity アバターを読み込む（.unitypackage、.fbx）..."],
+    "Importar ZIP ou .vrm...": ["Import ZIP or .vrm...", "ZIP か .vrm を読み込む..."], "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...": ["Import a Unity or Blender avatar (.unitypackage, .fbx, .blend)...", "Unity・Blender のアバターを読み込む（.unitypackage、.fbx、.blend）..."],
     "Importar pasta...": ["Import folder...", "フォルダを読み込む..."], "Loja: personagens, mapas e animações...": ["Store: characters, maps and animations...", "ストア: キャラクター、マップ、アニメーション..."],
     "Trocar de personagem...": ["Switch character...", "キャラクターを切り替える..."], "Trocar de personagem": ["Switch character", "キャラクターを切り替える"], "Perfil e personalidade...": ["Profile and personality...", "プロフィールと性格..."],
     "Emoções e expressões...": ["Emotions and expressions...", "感情と表情..."], "Emoções e expressões": ["Emotions and expressions", "感情と表情"], "Áreas de toque...": ["Touch areas...", "タッチエリア..."],
@@ -529,8 +529,8 @@
     "Tema": ["Theme", "テーマ"], "Idioma": ["Language", "言語"], "Conta": ["Account", "アカウント"], "Início": ["Home", "ホーム"], "Loja": ["Store", "ストア"],
     // personagens
     "Nenhuma personagem ainda.": ["No characters yet.", "キャラクターはまだいません。"], "Importe uma personagem para conversar.": ["Import a character to chat.", "会話するにはキャラクターを読み込んでください。"], "Sem personagem": ["No character", "キャラクターなし"],
-    "Importar personagem (ZIP, .vrm, .unitypackage ou .model3.json)": ["Import character (ZIP, .vrm, .unitypackage or .model3.json)", "キャラクターを読み込む（ZIP、.vrm、.unitypackage、.model3.json）"],
-    "Importar avatar do Unity (.unitypackage, .fbx, .glb ou um ZIP com eles)": ["Import a Unity avatar (.unitypackage, .fbx, .glb or a ZIP with them)", "Unity アバターを読み込む（.unitypackage、.fbx、.glb、またはそれらの ZIP）"],
+    "Importar personagem (ZIP, .vrm, .blend, .unitypackage ou .model3.json)": ["Import character (ZIP, .vrm, .blend, .unitypackage or .model3.json)", "キャラクターを読み込む（ZIP、.vrm、.blend、.unitypackage、.model3.json）"],
+    "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .glb, .blend ou um ZIP com eles)": ["Import a Unity or Blender avatar (.unitypackage, .fbx, .glb, .blend or a ZIP with them)", "Unity・Blender のアバターを読み込む（.unitypackage、.fbx、.glb、.blend、それらの ZIP）"],
     "Solte o ZIP do modelo, o arquivo .vrm ou o avatar (.unitypackage, .fbx) — ou use Personagem › Importar pasta.": ["Drop the model ZIP, the .vrm file or the avatar (.unitypackage, .fbx) — or use Character › Import folder.", "モデルの ZIP、.vrm ファイル、アバター（.unitypackage、.fbx）をドロップするか、「キャラクター › フォルダを読み込む」を使ってください。"],
     "Pelo navegador, escolha o ZIP ou use Importar pasta.": ["In the browser, choose the ZIP or use Import folder.", "ブラウザでは ZIP を選ぶか、「フォルダを読み込む」を使ってください。"], "Escolher o arquivo...": ["Choose the file...", "ファイルを選ぶ..."],
     "Não consegui abrir essa personagem.": ["Couldn't open this character.", "このキャラクターを開けませんでした。"], "Essa personagem não está mais guardada.": ["This character is no longer saved.", "このキャラクターはもう保存されていません。"],
@@ -1060,4 +1060,13 @@
     "Modelo 3D": ["3D model", "3D モデル"], "Lançador": ["Launcher", "ランチャー"],
   };
   for (const [k, v] of Object.entries(novos)) if (!C.TEXTOS[k]) C.TEXTOS[k] = v;
+})();
+
+// Personagens do Blender (.blend)
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Personagens do Blender (.blend) viram personagens VRM: com a armadura ou só com os grupos de vértices (o esqueleto é refeito).": ["Blender characters (.blend) become VRM characters: with the armature or with only the vertex groups (the skeleton is rebuilt).", "Blender のキャラクター（.blend）が VRM キャラクターに。アーマチュア付きでも、頂点グループだけでも（骨格を再構築）。"],
+  });
 })();

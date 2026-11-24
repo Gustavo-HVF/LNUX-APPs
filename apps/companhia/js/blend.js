@@ -12,7 +12,9 @@
  *
  * O que sai: os objetos de malha com a posição no mundo (inclusive filhos de outros objetos), os triângulos
  * (polígonos de mais de 3 lados são divididos), o primeiro mapa UV, os materiais (cor, rugosidade, metal e a
- * imagem ligada à cor do Principled BSDF) e as imagens embutidas no arquivo.
+ * imagem ligada à cor do Principled BSDF — ou do Diffuse, da Emissão, do Toon...) e as imagens embutidas no arquivo.
+ * Para as personagens: os esqueletos (armaduras: os ossos com a posição de repouso), os grupos de vértices com os
+ * pesos de cada vértice, a armadura que deforma cada malha e as formas (shape keys, as do rosto).
  *
  * O que NÃO sai (para isso, converta pelo próprio Blender; a ponte faz sozinha quando ele está instalado):
  * modificadores (espelho, matriz, subdivisão...), curvas, textos, metaballs, instâncias de coleção, partículas,
@@ -332,17 +334,78 @@
     }
     const total = [...porMaterial.values()].reduce((s, l) => s + l.length, 0);
     if (!total) return null;
-    const posicoes = new Float32Array(total * 3), uvs = uv ? new Float32Array(total * 2) : null, grupos = [];
+    const posicoes = new Float32Array(total * 3), uvs = uv ? new Float32Array(total * 2) : null, indices = new Int32Array(total), grupos = [];
     let i = 0;
     for (const [material, cantos] of [...porMaterial].sort((a, b) => a[0] - b[0])) {
       grupos.push({ material, inicio: i, quantidade: cantos.length });
       for (const c of cantos) {
         posicoes[i * 3] = pos[c.v * 3]; posicoes[i * 3 + 1] = pos[c.v * 3 + 1]; posicoes[i * 3 + 2] = pos[c.v * 3 + 2];
         if (uvs) { uvs[i * 2] = uv[c.c * 2]; uvs[i * 2 + 1] = uv[c.c * 2 + 1]; }
+        indices[i] = c.v; // o vértice de origem de cada canto (para os pesos e as formas)
         i++;
       }
     }
-    return { posicoes, uvs, grupos, triangulos: total / 3 };
+    return { posicoes, uvs, grupos, triangulos: total / 3, indices, nVertices: nv };
+  }
+
+  // ── personagens: pesos, formas e esqueletos ─────────────────────────
+  /** Os nomes dos grupos de vértices: no objeto (até o 2.93) ou na malha (do 3.0 em diante). */
+  function nomesDosGrupos(arq, objeto, malha) {
+    const nomes = [];
+    for (const g of listaLigada(arq, malha, "vertex_group_names", "bDeformGroup")) nomes.push(g.texto("name"));
+    if (!nomes.length && objeto) for (const g of listaLigada(arq, objeto, "defbase", "bDeformGroup")) nomes.push(g.texto("name"));
+    return nomes;
+  }
+  /** Os pesos de cada vértice: até 4 por vértice, os mais fortes ({ossos: Int16Array nv×4 (índice do grupo), pesos}). */
+  function lerPesos(arq, m, nv) {
+    const eDV = arq.porNome.get("MDeformVert"), eDW = arq.porNome.get("MDeformWeight");
+    if (!eDV || !eDW) return null;
+    const dv = m.bloco("dvert") || camada(arq, m, "vdata", [2]) || camada(arq, m, "vert_data", [2]);
+    if (!dv || dv.tam < nv * eDV.tam) return null;
+    const cDW = eDV.campos.get("dw"), cTot = eDV.campos.get("totweight"), cNr = eDW.campos.get("def_nr"), cPeso = eDW.campos.get("weight");
+    const grupos = new Int16Array(nv * 4).fill(-1), pesos = new Float32Array(nv * 4);
+    let algum = false;
+    for (let v = 0; v < nv; v++) {
+      const p = dv.inicio + v * eDV.tam, tot = arq.ler.i32(p + cTot.desl);
+      if (tot <= 0) continue;
+      const b = arq.resolver(dv.escopo, arq.ler.ptr(p + cDW.desl));
+      if (!b) continue;
+      const lista = [];
+      for (let k = 0; k < tot && (k + 1) * eDW.tam <= b.tam; k++) {
+        const q = b.inicio + k * eDW.tam, w = arq.ler.f32(q + cPeso.desl);
+        if (w > 0) lista.push([arq.ler.i32(q + cNr.desl), w]);
+      }
+      lista.sort((a, c) => c[1] - a[1]);
+      for (let k = 0; k < Math.min(4, lista.length); k++) { grupos[v * 4 + k] = lista[k][0]; pesos[v * 4 + k] = lista[k][1]; algum = true; }
+    }
+    return algum ? { grupos, pesos } : null;
+  }
+  /** As formas (shape keys): [{nome, posicoes (nv×3, as posições com a forma toda)}], sem a básica. */
+  function lerFormas(arq, m, nv) {
+    const chave = m.alvo("key");
+    if (!chave) return [];
+    const ref = chave.bloco("refkey"), formas = [];
+    for (const kb of listaLigada(arq, chave, "block", "KeyBlock")) {
+      if (ref && kb.inicio === ref.inicio) continue;
+      const tot = kb.num("totelem") || 0, d = kb.bloco("data");
+      if (tot !== nv || !d || d.tam < nv * 12) continue;
+      formas.push({ nome: kb.texto("name"), posicoes: flutuantes(arq, d, nv) });
+    }
+    return formas;
+  }
+  /** Um esqueleto (armadura): os ossos em repouso, no espaço da armadura (cabeça, cauda e a matriz de cada um). */
+  function lerArmadura(arq, ar) {
+    const ossos = [];
+    const visitar = (lista, pai) => {
+      for (const b of lista) {
+        if (ossos.length > 1000) return;
+        const i = ossos.length;
+        ossos.push({ nome: b.texto("name"), pai, cabeca: b.vetor("arm_head") || [0, 0, 0], cauda: b.vetor("arm_tail") || [0, 1, 0], matriz: b.vetor("arm_mat") });
+        visitar([...listaLigada(arq, b, "childbase", "Bone")], i);
+      }
+    };
+    visitar([...listaLigada(arq, ar, "bonebase", "Bone")], -1);
+    return ossos;
   }
 
   // ── materiais e imagens ─────────────────────────────────────────────
@@ -357,7 +420,31 @@
       porNo.set(no.inicio, no);
       if (no.texto("idname") === "ShaderNodeBsdfPrincipled" && !principal) principal = no;
     }
-    if (!principal) return r;
+    if (!principal) {
+      // sem o Principled: a cor (ou a imagem) de outro shader (Diffuse, Emissão, Toon, Glossy...) ou, sem nada ligado, a
+      // primeira imagem da árvore; com um shader transparente misturado, a imagem recorta pelo alfa
+      let corNo = null;
+      const ligacoes = [...listaLigada(arq, arvore, "links", "bNodeLink")];
+      for (const no of porNo.values()) {
+        if (!/^ShaderNode(Bsdf|Emission)/.test(no.texto("idname")) || /Transparent/.test(no.texto("idname"))) continue;
+        for (const s of listaLigada(arq, no, "inputs", "bNodeSocket")) {
+          if ((s.texto("identifier") || s.texto("name")) !== "Color") continue;
+          const v = s.alvo("default_value", "bNodeSocketValueRGBA");
+          if (v && !corNo) { const c = v.vetor("value"); if (Array.isArray(c)) r.cor = c; }
+          for (const lig of ligacoes) {
+            const para = lig.bloco("tosock"), de = lig.bloco("fromnode");
+            if (!para || !de || para.inicio !== s.inicio) continue;
+            const ni = porNo.get(de.inicio);
+            if (ni && ni.texto("idname") === "ShaderNodeTexImage") corNo = corNo || ni;
+          }
+        }
+      }
+      if (!corNo) for (const no of porNo.values()) if (no.texto("idname") === "ShaderNodeTexImage" && no.bloco("id")) { corNo = no; break; }
+      const img = corNo && corNo.bloco("id");
+      if (img && imagens.has(img.inicio)) { r.imagem = imagens.get(img.inicio); r.cor = [1, 1, 1, r.cor[3] ?? 1]; }
+      if ([...porNo.values()].some((no) => no.texto("idname") === "ShaderNodeBsdfTransparent") && r.imagem !== null) r.recorte = true;
+      return r;
+    }
     const entradas = new Map();
     for (const s of listaLigada(arq, principal, "inputs", "bNodeSocket")) entradas.set(s.texto("identifier") || s.texto("name"), s);
     const valor = (nome, estrutura, campo) => { const s = entradas.get(nome), v = s && s.alvo("default_value", estrutura); return v ? (campo === "value" && v.campo("value").quantos > 1 ? v.vetor("value") : v.num("value")) : undefined; };
@@ -422,7 +509,7 @@
     const materiais = new Map(), listaMateriais = [];
     for (const b of doCodigo("MA")) { const r = registroDo(arq, b); if (r) { materiais.set(b.inicio, listaMateriais.length); listaMateriais.push(lerMaterial(arq, r, imagens)); } }
     const malhas = new Map(), listaMalhas = [];
-    const objetos = [], porBloco = new Map();
+    const objetos = [], porBloco = new Map(), armaduras = [], armaduraDoObjeto = new Map();
     const blocosOB = doCodigo("OB");
     for (const b of blocosOB) porBloco.set(b.inicio, registroDo(arq, b));
     const mundo = new Map();
@@ -438,6 +525,26 @@
       mundo.set(b.inicio, m);
       return m;
     };
+    // os esqueletos (objetos do tipo 25, armadura)
+    for (const b of blocosOB) {
+      const o = porBloco.get(b.inicio);
+      if (!o || o.num("type") !== 25) continue;
+      const ar = o.alvo("data");
+      if (!ar) continue;
+      armaduraDoObjeto.set(b.inicio, armaduras.length);
+      armaduras.push({ nome: nomeDoId(o), matriz: matrizDoMundo(b), ossos: lerArmadura(arq, ar) });
+    }
+    /** A armadura que deforma o objeto: o modificador Armature ou o pai (com "parentesco de esqueleto"). */
+    const armaduraDe = (o) => {
+      for (const md of listaLigada(arq, o, "modifiers", "ModifierData")) {
+        if (md.num("type") !== 8) continue; // 8 = Armature
+        const e = arq.porNome.get("ArmatureModifierData"), amd = e ? new Registro(arq, e, md.inicio, md.escopo) : null; // o ModifierData é o começo dele
+        const alvo = amd && amd.bloco("object");
+        if (alvo && armaduraDoObjeto.has(alvo.inicio)) return armaduraDoObjeto.get(alvo.inicio);
+      }
+      const pai = o.bloco("parent");
+      return pai && armaduraDoObjeto.has(pai.inicio) ? armaduraDoObjeto.get(pai.inicio) : -1;
+    };
     for (const b of blocosOB) {
       const o = porBloco.get(b.inicio);
       if (!o || o.num("type") !== 1) continue; // 1 = malha
@@ -452,15 +559,21 @@
           const nMat = m.num("totcol") || 0, bm = m.bloco("mat");
           lida.materiais = [];
           for (let i = 0; i < nMat && bm; i++) { const alvo = arq.resolver(bm.escopo, arq.ler.ptr(bm.inicio + i * arq.ponteiro)); lida.materiais.push(alvo && materiais.has(alvo.inicio) ? materiais.get(alvo.inicio) : -1); }
+          lida.pesos = lerPesos(arq, m, lida.nVertices);
+          lida.formas = lerFormas(arq, m, lida.nVertices);
+          lida.registro = m;
           malhas.set(dadosDaMalha.inicio, listaMalhas.length);
           listaMalhas.push(lida);
         } else malhas.set(dadosDaMalha.inicio, -1);
       }
       const malha = malhas.get(dadosDaMalha.inicio);
       if (malha < 0) continue;
-      objetos.push({ nome: nomeDoId(o), matriz: matrizDoMundo(b), malha });
+      // os nomes dos grupos de vértices (para ligar os pesos aos ossos) e a armadura que deforma
+      const lida = listaMalhas[malha];
+      objetos.push({ nome: nomeDoId(o), matriz: matrizDoMundo(b), malha, grupos: lida.pesos ? nomesDosGrupos(arq, o, lida.registro) : [], armadura: armaduraDe(o) });
     }
-    return { versao: arq.versao, objetos, malhas: listaMalhas, materiais: listaMateriais, imagens: listaImagens };
+    for (const m of listaMalhas) delete m.registro;
+    return { versao: arq.versao, objetos, malhas: listaMalhas, materiais: listaMateriais, imagens: listaImagens, armaduras };
   }
 
   /** gzip (1f 8b), zstd (28 b5 2f fd) ou nada. */

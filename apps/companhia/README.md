@@ -15,7 +15,12 @@ Nas personagens VRoid há ainda o menu **Movimento**: **captura de movimento** p
 braços, mãos, dedos e pernas), **pacotes de movimento** (`.vrma`, `.fbx`, `.bvh`), **cenários** para andar
 (W A S D, Espaço pula), com **luz e sombras realistas** (dá para desligar; hora do dia, exposição e tom), as **luzes do mapa** acesas de verdade, a **luz calculada por raios** (ray tracing), um **conversor de mapas** para `.glb`
 (inclusive `.blend`, do Blender) e **ajuste do esqueleto**. Avatares do **Unity / VRChat** (`.unitypackage`,
-`.fbx`) são convertidos para `.vrm` ao importar.
+`.fbx`) são convertidos para `.vrm` ao importar. Personagens do **Blender** (`.blend`, sozinho ou num ZIP com as texturas) também viram `.vrm`, sem
+precisar do Blender instalado: com a armadura, os ossos vêm dela; sem a armadura (muitos modelos do Sketchfab vêm assim, só
+com os grupos de vértices), o esqueleto é refeito pelos grupos (cada junta onde o grupo do osso encontra o do pai, a
+hierarquia pelos nomes); os pesos, as formas do rosto (shape keys) e as texturas (do Principled, do Diffuse, da Emissão...)
+vêm junto, e a pose vira a pose em T. Use *Personagem › Importar avatar do Unity ou do Blender*. Um `.blend` sem armadura
+e sem grupos não tem como dobrar: no Blender, Ctrl+P › Com pesos automáticos.
 
 O servidor pode publicar **só o WEBC**, sem os outros apps e sem a ponte para quem vem de fora. Só HTML, CSS e
 JavaScript, como os outros apps do LNUX-APPs; o código continua na pasta `apps/companhia/` (o id do app é
