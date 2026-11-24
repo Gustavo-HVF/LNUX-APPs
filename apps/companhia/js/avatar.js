@@ -1,7 +1,8 @@
 /*
  * Companhia — avatares de outros formatos viram personagens VRM.
  *
- * O que entra: o avatar de um .unitypackage (como os do VRChat e os vendidos no BOOTH: um .fbx com o esqueleto, as
+ * O que entra: uma personagem do Blender (.blend, com a armadura ou só com os grupos de vértices: o esqueleto é refeito,
+ * js/blend-personagem.js), o avatar de um .unitypackage (como os do VRChat e os vendidos no BOOTH: um .fbx com o esqueleto, as
  * texturas e os materiais .mat do Unity), um .fbx solto (com as texturas ao lado, num ZIP) ou um .glb/.gltf com
  * esqueleto de pessoa. O que sai: um .vrm (VRM 1.0) montado no aparelho, que a Companhia guarda e abre como
  * qualquer personagem VRoid — com roupas, captura de movimento, pacotes de movimento, andar e salas.
@@ -33,7 +34,7 @@
   const semExt = (n) => base(n).replace(/\.[^.]+$/, "");
   /** Só letras e números (e kana/kanji), para comparar nomes escritos de jeitos diferentes. */
   const liso = (n) => semExt(n).toLowerCase().replace(/[^a-z0-9\u3040-\u30ff\u4e00-\u9fff]/g, "");
-  const MODELO = /\.(fbx|glb|gltf)$/i;
+  const MODELO = /\.(fbx|glb|gltf|blend)$/i;
   const IMAGEM = /\.(png|jpe?g|webp|bmp|gif|tga|psd)$/i;
   const OBRIGATORIOS = ["hips", "spine", "head", "leftUpperArm", "leftLowerArm", "leftHand", "rightUpperArm", "rightLowerArm", "rightHand",
     "leftUpperLeg", "leftLowerLeg", "leftFoot", "rightUpperLeg", "rightLowerLeg", "rightFoot"];
@@ -281,7 +282,7 @@
 
   C.avatar = {
     MODELO,
-    ACEITAR: ".unitypackage,.fbx,.glb",
+    ACEITAR: ".unitypackage,.fbx,.glb,.blend",
     lerMat, lerMetaDoModelo, lerTGA, lerPSD, acharExpressoes, ossoDoUnity,
 
     /** O pacote tem cara de avatar (e não de cenário)? Um .vrm dentro, ou um modelo que o Unity marcou como pessoa. */
@@ -303,6 +304,19 @@
     async paraVRM(arquivos, principal, { nome, aoProgresso = () => {} } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
+      if (ext(principal) === "blend") {
+        // .blend: vira .glb com a pele (o esqueleto do arquivo, ou refeito pelos grupos de vértices) e segue como um .glb
+        aoProgresso(0.03, "Lendo o .blend...");
+        const r = await C.conversor.paraGLB(arquivos, principal, { personagem: true });
+        avisos.push(...r.avisos.filter((a) => !/^Convertido pelo leitor próprio/.test(a)));
+        const glb = principal.replace(/\.blend$/i, ".glb");
+        const novos = new Map(arquivos);
+        novos.metas = arquivos.metas; novos.guids = arquivos.guids;
+        novos.set(glb, r.glb);
+        arquivos = novos;
+        principal = glb;
+        nome = nome || semExt(principal);
+      }
       const blob = arquivos.get(principal), tipo = ext(principal);
       if (!blob) throw new Error("Não achei o arquivo " + principal + ".");
       const metas = arquivos.metas || new Map(), guids = arquivos.guids || new Map();
@@ -359,7 +373,8 @@
         if (o.isCamera || o.isLight) return;
         if (o.isMesh && o.geometry && o.geometry.attributes.position) { malhas.push(o); if (o.isSkinnedMesh && o.skeleton && o.skeleton.bones.length) comPele.push(o); }
       });
-      if (!comPele.length) throw new Error(`"${base(principal)}" não tem esqueleto (nenhuma malha presa em ossos), então não dá para virar personagem. Se é um cenário, abra em Movimento › Cenário.`);
+      if (!comPele.length) throw new Error(`"${base(principal)}" não tem esqueleto (nenhuma malha presa em ossos), então não dá para virar personagem. Se é um cenário, abra em Movimento › Cenário. ` +
+        "Se é uma personagem do Blender sem rig: no Blender, selecione o corpo e depois a armadura, Ctrl+P › Com pesos automáticos (With Automatic Weights), e salve.");
       const ehOsso = new Set();
       for (const m of comPele) for (const b of m.skeleton.bones) ehOsso.add(b);
       objeto.traverse((o) => { if (o.isBone) ehOsso.add(o); });

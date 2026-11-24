@@ -296,6 +296,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Personagens do Blender (.blend) viram personagens VRM: com a armadura ou só com os grupos de vértices (o esqueleto é refeito).",
     "Câmeras em primeira e terceira pessoa (e no ombro), boneco de pano (R) e ninguém atravessa ninguém na sala.",
     "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).",
     "Estúdio de itens (Criar): lanternas que iluminam o mapa, partículas, lançadores de projéteis, modelos 3D e o encaixe na mão.",

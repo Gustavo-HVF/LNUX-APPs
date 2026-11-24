@@ -590,7 +590,7 @@
         arquivos = C.pacoteDaPasta(files);
       } else {
         const avatar = origem === "avatar";
-        const [a] = await LNUX.arquivos.abrir({ titulo: avatar ? "Importar avatar do Unity (.unitypackage, .fbx, .glb ou um ZIP com eles)" : "Importar personagem (ZIP, .vrm, .unitypackage ou .model3.json)",
+        const [a] = await LNUX.arquivos.abrir({ titulo: avatar ? "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .glb, .blend ou um ZIP com eles)" : "Importar personagem (ZIP, .vrm, .blend, .unitypackage ou .model3.json)",
           aceitar: avatar ? C.avatar.ACEITAR + ",.zip" : (LNUX.ponte.disponivel ? ".zip,.vrm,.json," : ".zip,.vrm,") + C.avatar.ACEITAR });
         if (!a) return;
         if (/\.json$/i.test(a.nome)) {
@@ -1825,7 +1825,7 @@
   const menus = [
     { rotulo: "Personagem", itens: [
       { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
-      { rotulo: "Importar avatar do Unity (.unitypackage, .fbx)...", acao: () => importar("avatar") },
+      { rotulo: "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...", acao: () => importar("avatar") },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
       { rotulo: "Loja: personagens, mapas e animações...", acao: () => (jogando() && C.webc ? C.webc.ir("loja") : abrirLoja()), ativo: () => lojaDisponivel },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },
