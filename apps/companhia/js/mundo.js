@@ -585,6 +585,7 @@
       if (!this.outros || this.voando) return;
       const raiz = this.palco.raiz, p = raiz.position;
       for (const o of this.outros()) {
+        if (o.caido) continue; // quem está caído (boneco de pano) não segura ninguém: dá para passar por cima e arrastar
         if (Math.abs(p.y - o.p.y) > Math.max(this.altura, o.altura) * 0.9) continue; // um em cima do outro (num andar de cima)
         const dx = p.x - o.p.x, dz = p.z - o.p.z, dist = Math.hypot(dx, dz), raio = this.raio + o.raio;
         if (dist >= raio) continue;

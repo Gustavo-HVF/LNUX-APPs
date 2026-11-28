@@ -379,7 +379,10 @@
       const agora = performance.now(), t = agora / 1000, g = this.grupo, a = this.andar;
       // chega suavemente aonde o servidor disse (longe demais: pula direto)
       const d = g.position.distanceTo(this.alvo);
+      const antes = (this._antes = this._antes || g.position.clone()).copy(g.position);
       if (d > 6) g.position.copy(this.alvo); else g.position.lerp(this.alvo, 1 - Math.exp(-dt * 10));
+      // a velocidade dela (para empurrar e arrastar um corpo caído, js/ragdoll.js)
+      if (dt > 0 && d <= 6) { const v = (this.velocidade = this.velocidade || new window.THREE.Vector3()); v.lerp(antes.sub(g.position).multiplyScalar(-1 / dt), 1 - Math.exp(-dt * 8)); }
       let dr = this.rumoAlvo - this.rumo;
       dr = Math.atan2(Math.sin(dr), Math.cos(dr));
       this.rumo += dr * (1 - Math.exp(-dt * 10));
