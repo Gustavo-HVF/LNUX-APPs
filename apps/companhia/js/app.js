@@ -638,19 +638,24 @@
       throw new Error("Esse pacote não tem um modelo de avatar (.fbx, .glb ou .vrm)" + (nomes.some((n) => /\.(unity|prefab|anim|controller|cs|shader)$/i.test(n)) ? ": ele traz só cenas, animações, shaders ou scripts do Unity." : ".") +
         (nomes.length ? ` Veio: ${nomes.slice(0, 6).map((n) => n.split("/").pop()).join(", ")}${nomes.length > 6 ? "..." : ""}.` : ""));
     }
-    let principal = candidatos[0];
-    if (candidatos.length > 1) {
-      const s = el("select", { class: "lnux-selecao", size: Math.min(8, candidatos.length), style: { width: "100%" } }, candidatos.map((c, i) => el("option", { value: c, selected: i === 0 }, `${c.split("/").pop()} (${LNUX.bytes(arquivos.get(c).size)})`)));
-      const r = await LNUX.dialogo({ titulo: "Qual é o avatar?", corpo: el("div", { class: "ajustes" }, el("p", { style: { margin: 0 } }, "O pacote tem mais de um modelo. O primeiro costuma ser o avatar; os outros podem ser acessórios ou animações."), s),
-        botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Converter", primario: true, valor: () => s.value }] });
-      if (!r) return null;
-      principal = r;
+    // um pacote com vários modelos (a personagem, as roupas, os itens, às vezes um cenário): cada um ganha um papel
+    let principal = candidatos[0], juntos = [], comoItem = [], comoCenario = [];
+    const cenas = C.unityCena ? C.unityCena.cenas(arquivos) : [];
+    if (candidatos.length > 1 || cenas.length) {
+      const papeis = await papeisDoPacote(arquivos, candidatos, cenas);
+      if (!papeis) return null;
+      ({ principal, juntos, comoItem, comoCenario } = papeis);
+    }
+    const extrasFeitos = await importarExtrasDoPacote(arquivos, comoItem, comoCenario);
+    if (!principal) {
+      if (extrasFeitos.length) LNUX.aviso(C.t("Do pacote: {lista}.", { lista: extrasFeitos.join(", ") }), "ok");
+      return null;
     }
     const prog = LNUX.progresso("Convertendo o avatar para VRM");
     let r;
     try {
       await LNUX.esperar(40); // a janela aparece antes do trabalho pesado
-      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, aoProgresso: (f, t) => prog.definir(f, t) });
+      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, juntos, aoProgresso: (f, t) => prog.definir(f, t) });
     } finally { prog.fechar(); }
     const x = r.resumo, item = (...t) => el("li", {}, ...t);
     const ok = await LNUX.dialogo({ titulo: `Avatar convertido: ${r.nome}`, largo: true,
@@ -659,6 +664,8 @@
           item(el("b", {}, "Esqueleto: "), `${x.ossos} ossos reconhecidos ${x.comoMapeou}, ${x.olhos ? "com" : "sem"} os olhos e ${x.dedos ? `com os dedos (${x.dedos} ossos)` : "sem os dedos"}; ${x.altura.toLocaleString("pt-BR")} m de altura` + (x.poseEmT ? `; braços e pernas postos na pose em T (${x.poseEmT}°)` : "") + "."),
           item(el("b", {}, "Rosto: "), x.expressoes.length ? `${x.expressoes.length} ${x.expressoes.length > 1 ? "expressões" : "expressão"} (${x.expressoes.join(", ")})${x.atalhos.length ? ` e ${x.atalhos.length} ${x.atalhos.length > 1 ? "atalhos" : "atalho"} (${x.atalhos.join(", ")})` : ""}, das ${x.formas} formas do modelo.` : x.formas ? `nenhuma das ${x.formas} formas do rosto tem um nome que eu conheça: ela não vai mexer a boca nem piscar.` : "o modelo não tem formas de rosto: ela não vai mexer a boca nem piscar."),
           item(el("b", {}, "Materiais: "), `${x.comTextura} de ${x.materiais} com textura${x.doUnity ? ` (${x.doUnity} pelos materiais do Unity)` : ""}, no estilo de desenho das personagens VRoid.`),
+          x.pecasJuntas ? item(el("b", {}, "Peças juntas: "), C.t("{n} modelo(s) do pacote vestidos na personagem (roupas e acessórios).", { n: x.pecasJuntas })) : null,
+          extrasFeitos.length ? item(el("b", {}, "Também do pacote: "), extrasFeitos.join(", ") + ".") : null,
           item(el("b", {}, "Balanço: "), x.balanco.length ? x.balanco.join(", ") + "." : "nenhum osso de cabelo, saia ou rabo reconhecido pelo nome."),
           item(el("b", {}, "Arquivo: "), `${LNUX.bytes(x.tamanho)}, ${x.triangulos.toLocaleString("pt-BR")} triângulos.`)),
         r.avisos.length ? el("div", { class: "fraco" }, r.avisos.map((a) => el("p", { style: { margin: "4px 0 0" } }, "⚠ " + a))) : null,
@@ -666,6 +673,82 @@
           "O pacote não diz a licença: avatares comprados quase nunca deixam redistribuir. A personagem fica só neste aparelho, marcada como \"não redistribuir\"; confira os termos de quem fez antes de mostrar para outras pessoas.")),
       botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Importar", primario: true, valor: true }] });
     return ok ? new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]) : null;
+  }
+  /**
+   * A janela "O que é cada modelo?": um papel para cada modelo do pacote (e cada cena do Unity). Devolve
+   * {principal, juntos, comoItem, comoCenario} (principal: null quando nenhum é a personagem) ou null se desistiu.
+   */
+  async function papeisDoPacote(arquivos, candidatos, cenas) {
+    const metas = arquivos.metas || new Map();
+    const pessoa = (n) => metas.has(n) && C.avatar.lerMetaDoModelo(metas.get(n)).pessoa;
+    const nomeDe = (n) => n.split("/").pop();
+    const palpite = (n, i) => {
+      const b = nomeDe(n);
+      if (/anim|motion|pose|collider|effect|particle|_lod\d/i.test(b)) return "nao";
+      if (i === 0) return "personagem";
+      if (/cloth|outfit|dress|skirt|shirt|jacket|coat|pants|shorts|shoe|boot|sock|glove|hat|cap|hood|hair|ribbon|bow|accessor|acc_|_acc|glass|earring|necklace|choker|tail|ear|wing|horn|armor|roupa|cabelo|sapato|chapeu|saia|vestido|衣|服|髪|靴|帽/i.test(b)) return "junto";
+      if (/world|stage|room|scene|map|terrain|level|house|building|cenario|mapa|sala/i.test(b)) return "cenario";
+      if (pessoa(n)) return "nao"; // outra versão da personagem
+      return "item";
+    };
+    const OPCOES = [["personagem", "Personagem"], ["junto", "Junto da personagem (roupa, acessório)"], ["item", "Item"], ["cenario", "Cenário"], ["nao", "Não importar"]];
+    const linhas = candidatos.map((n, i) => {
+      const s = el("select", { class: "lnux-selecao", "data-modelo": n }, OPCOES.map(([v, t]) => el("option", { value: v, selected: v === palpite(n, i) }, t)));
+      return { n, s, linha: el("label", { class: "papel-modelo", style: { display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "center" } },
+        el("span", {}, el("b", {}, nomeDe(n)), " ", el("span", { class: "fraco pequeno" }, `${LNUX.bytes(arquivos.get(n).size)}${pessoa(n) ? " · " + C.t("esqueleto de pessoa") : ""}`)), s) };
+    });
+    const linhasCena = cenas.map((n) => {
+      const s = el("select", { class: "lnux-selecao", "data-cena": n }, [["nao", "Não importar"], ["cenario", "Cenário"]].map(([v, t]) => el("option", { value: v }, t)));
+      return { n, s, linha: el("label", { style: { display: "grid", gridTemplateColumns: "1fr auto", gap: "8px", alignItems: "center" } }, el("span", {}, el("b", {}, nomeDe(n)), " ", el("span", { class: "fraco pequeno" }, C.t("cena do Unity"))), s) };
+    });
+    const erro = el("p", { class: "fraco", style: { margin: 0, color: "var(--perigo, #c33)" } });
+    const ler = () => {
+      const de = (v) => linhas.filter((x) => x.s.value === v).map((x) => x.n);
+      const ps = de("personagem");
+      const res = { principal: ps[0] || null, juntos: de("junto"), comoItem: de("item"), comoCenario: [...de("cenario"), ...linhasCena.filter((x) => x.s.value === "cenario").map((x) => x.n)] };
+      if (ps.length > 1) res.erro = "Só um modelo pode ser a personagem.";
+      else if (!res.principal && !res.comoItem.length && !res.comoCenario.length) res.erro = "Nada foi escolhido para importar.";
+      else if (!res.principal && res.juntos.length) res.erro = "As peças \"junto da personagem\" precisam de uma personagem.";
+      return res;
+    };
+    const r = await LNUX.dialogo({ titulo: "O que é cada modelo?", largo: true,
+      corpo: el("div", { class: "ajustes", id: "papeis-do-pacote" },
+        el("p", { style: { margin: 0 } }, "O pacote tem mais de um modelo. Diga o que cada um é: tudo entra de uma vez."),
+        el("div", { style: { display: "grid", gap: "6px", maxHeight: "50vh", overflow: "auto" } }, ...linhas.map((x) => x.linha), ...linhasCena.map((x) => x.linha)),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Junto da personagem: as peças feitas para o mesmo corpo (com os mesmos ossos) são vestidas nela; as peças soltas vão no osso em que estavam. Item: vai para a mochila. Cenário: vai para Movimento › Cenário."),
+        erro),
+      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Importar", primario: true, antes: () => { const r = ler(); if (r.erro) erro.textContent = C.t(r.erro); return !r.erro; }, valor: () => ler() }] });
+    return r || null;
+  }
+  /** Os modelos do pacote que viram itens (mochila) e cenários. Devolve a lista do que foi guardado (para o resumo). */
+  async function importarExtrasDoPacote(arquivos, comoItem, comoCenario) {
+    const feitos = [];
+    if (!comoItem.length && !comoCenario.length) return feitos;
+    const prog = LNUX.progresso("Convertendo os itens e cenários do pacote");
+    const nomeDe = (n) => LNUX.nomeSemExtensao(n.split("/").pop());
+    const total = comoItem.length + comoCenario.length;
+    let i = 0;
+    try {
+      await LNUX.esperar(40);
+      for (const n of comoItem) {
+        prog.definir(i++ / total, nomeDe(n));
+        try {
+          const r = await C.conversor.paraGLB(arquivos, n);
+          await C.itens.guardar({ nome: nomeDe(n), origem: "meu" }, r.glb);
+          feitos.push(C.t("item {nome}", { nome: nomeDe(n) }));
+        } catch (e) { LNUX.aviso(C.t("{nome} não virou item: {erro}", { nome: nomeDe(n), erro: (e && e.message) || e }), "erro"); }
+      }
+      for (const n of comoCenario) {
+        prog.definir(i++ / total, nomeDe(n));
+        try {
+          const r = /\.unity$/i.test(n) ? await C.conversor.juntarGLB(arquivos, { cena: n }) : await C.conversor.paraGLB(arquivos, n);
+          const arq = nomeDe(n) + ".glb";
+          await C.mapas.guardar(nomeDe(n), new Map([[arq, r.glb]]), arq);
+          feitos.push(C.t("cenário {nome}", { nome: nomeDe(n) }));
+        } catch (e) { LNUX.aviso(C.t("{nome} não virou cenário: {erro}", { nome: nomeDe(n), erro: (e && e.message) || e }), "erro"); }
+      }
+    } finally { prog.fechar(); }
+    return feitos;
   }
   async function importarPacote(arquivos, zip, { semAviso = false, abrir = true } = {}) {
     pronto = false;

@@ -123,7 +123,9 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
     ajustável.
 - **Boneco de pano** (*ragdoll*): a tecla **R** (ou *Opções › Controle*) faz a personagem cair mole, com o corpo solto,
   batendo no cenário; **R** de novo, ou andar, levanta. Despencar de muito alto (uns 6 m) também derruba (dá para
-  desligar). Os outros na sala veem o corpo caído.
+  desligar). Os outros na sala veem o corpo caído. O corpo **bate nele mesmo** (cápsulas em cada parte: o braço não
+  entra no peito, as pernas não se cruzam por dentro) e **quem passa por cima arrasta** o corpo caído, na direção e
+  na velocidade em que andava (sem botão de chutar: é só andar contra ele).
 - **Ninguém atravessa ninguém**: as personagens da sala são sólidas. Quem anda contra outra pessoa para encostado (ou
   desliza em volta dela).
 - **Clicar na personagem de alguém** abre **três bolinhas** em cima dela (do alto para o lado): **Adicionar amigo**,
@@ -452,7 +454,9 @@ movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
   `Left knee`...). O avatar é posto **de pé, de frente, em metros** (os `.fbx` costumam vir em centímetros), sem as
   escalas escondidas no esqueleto, com os braços e as pernas na **pose em T** (avatares em A também servem).
 - **Materiais e texturas**: os materiais `.mat` do Unity são ligados às texturas do pacote (pela ficha e pelo
-  nome): cor, textura principal, recorte (cabelo, cílios), transparência, dois lados e brilho próprio. Entram no
+  nome; as propriedades da cor principal do Standard, URP, HDRP, lilToon, Poiyomi e UTS). Material sem `.mat` ganha
+  a imagem cujo nome mais combina com o dele (`Body` ↔ `T_Body_BaseColor.png`), deixando de fora as que não são de
+  cor (normal, máscara, matcap, rugosidade...); o resumo avisa quantas foram ligadas assim. Entra: cor, textura principal, recorte (cabelo, cílios), transparência, dois lados e brilho próprio. Entram no
   estilo de desenho das personagens VRoid (MToon). PNG e JPEG entram como vieram; **TGA** e **PSD** (do Photoshop)
   são convertidos. Num avatar convertido, cada material é uma peça em *Personagem › Roupas* (para esconder o que
   sobrar ou trocar a textura).
@@ -462,7 +466,15 @@ movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
 - **Balanço**: os ossos soltos de **cabelo, saia, rabo, orelhas e fitas** (pelo nome) ganham balanço, com
   colisores na cabeça, no corpo e nas coxas. Os olhos (ossos `LeftEye`/`RightEye`) seguem a pessoa.
 - Antes de importar, um **resumo** mostra o que foi reconhecido (ossos, expressões, texturas, balanço) e o que não
-  veio. Se o pacote tem mais de um modelo, o WEBC pergunta qual é o avatar.
+  veio.
+- **Pacotes com vários modelos** (a personagem, roupas, cabelos, itens e às vezes um mundo): a janela
+  *"O que é cada modelo?"* dá um papel para cada um, e tudo entra numa importação só:
+  - **Personagem**: o modelo convertido para `.vrm` (o WEBC chuta o que tem a ficha de pessoa do Unity);
+  - **Junto da personagem**: roupas e acessórios feitos para o mesmo corpo. As malhas com os mesmos ossos (pelo
+    nome) passam a seguir o esqueleto da personagem; as peças rígidas (chapéu, óculos) vão no osso em que estavam;
+  - **Item**: convertido para `.glb` e guardado em *Opções › Itens* (a mochila);
+  - **Cenário**: guardado em *Movimento › Cenário* (uma cena `.unity` é montada com cada peça no lugar);
+  - **Não importar**: animações, colisores e outras versões da personagem.
 - **Não vêm**: os efeitos dos shaders do Unity (lilToon, Poiyomi: contornos, brilhos, matcaps), as físicas do
   VRChat (PhysBones, que ficam no prefab, não no modelo), as animações, os menus e as peças ligadas ou desligadas
   pelo prefab.
@@ -643,7 +655,7 @@ mapa aberto em *Cenário › Abrir cenário* é convertido para ele; **Salvar em
 | **`.blend`** (Blender) | **Com a ponte e o Blender instalado no aparelho** (o programa `blender` ou o módulo `bpy` do Python; `LNUX_APPS_BLENDER` aponta outro), é o próprio Blender que abre o arquivo e exporta: sai igual ao que ele mostra, com os modificadores aplicados. O arquivo é aberto sem rodar os scripts que traz. **Sem o Blender** (no celular, por exemplo), entra o **leitor próprio** de `.blend`, que roda no navegador |
 | `.fbx`, `.obj` (+ `.mtl`), `.dae`, `.stl`, `.ply`, `.3ds`, `.3mf`, `.usdz` | pelos carregadores do three.js; os materiais viram materiais do glTF |
 | `.gltf` com `.bin` e texturas soltas, `.glb` | juntados num arquivo só |
-| `.zip`, `.unitypackage` | abertos antes; se houver vários modelos, você escolhe qual é o mapa |
+| `.zip`, `.unitypackage` | abertos antes; se houver vários modelos (ou uma cena `.unity`), você escolhe: **montar a cena do Unity**, **todos os modelos lado a lado** ou só um |
 
 O **leitor próprio de `.blend`** lê o "DNA" que cada arquivo traz (a descrição das estruturas da versão que o
 gravou), então abre arquivos do Blender 2.6 ao 5.x, compactados (gzip ou zstd) ou não. Ele tira: as malhas, a
@@ -660,9 +672,11 @@ shaders e scripts num formato do próprio motor, que não abre fora dele (e baix
 termos do VRChat). O que dá para usar aqui são os **arquivos do projeto** do mundo: o `.blend` do Blender, os
 modelos `.fbx`/`.obj`/`.dae` (direto ou de dentro do `.unitypackage`) ou a cena exportada do Unity com o
 [UnityGLTF](https://github.com/KhronosGroup/UnityGLTF) ("Export scene as GLB") — o WEBC converte para `.glb`. De um `.unitypackage`, o WEBC
-abre **um modelo** como mapa; as peças soltas de uma cena montada no Unity (`.unity`, prefabs) não são
-reposicionadas, e os materiais do Unity (`.mat`, shaders) não são convertidos — as texturas entram quando o
-próprio modelo aponta para elas. Use só mapas que você tem o direito de usar.
+**monta a cena** (`.unity`): cada peça no lugar, girada e no tamanho que o Unity guardou (as instâncias de
+prefab, com as mudanças da cena, e os prefabs dentro de prefabs), os cubos, esferas, cilindros e planos do próprio
+Unity e os materiais `.mat` (cor e textura principal). Sem cena, dá para trazer **todos os modelos** do pacote lado a
+lado. Os modelos sem `.mat` ganham as texturas pelo nome. Não vêm: os shaders do Unity, os terrenos (Terrain), as
+luzes assadas (lightmaps) e os scripts. Use só mapas que você tem o direito de usar.
 
 ### Ajustar esqueleto
 
@@ -847,7 +861,9 @@ js/movimentos.js   pacotes de movimento: .vrma, .fbx, .bvh e .glb viram moviment
 js/gltf.js         o carregador de glTF dos mapas (Draco, Meshopt e o material specular/glossiness das exportações antigas)
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
 js/luzes.js        as luzes do mapa (do arquivo, as que brilham, pelo nome, as suas), as mais perto acesas e a luz calculada por raios
-js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb
+js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb (um modelo ou todos juntos)
+js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity e os materiais .mat
+js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
@@ -893,6 +909,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil
 python3 tests/testar_navegador.py companhia_sketchfab  # Sketchfab de mentira: buscar, licenças, trazer para a loja, mapa com movimento numa sala

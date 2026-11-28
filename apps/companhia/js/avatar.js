@@ -301,7 +301,7 @@
      * Converte o modelo `principal` do pacote (Map caminho → Blob; de um .unitypackage vem com .metas e .guids)
      * num .vrm. Devolve {vrm: Blob, nome, resumo: {...}, avisos: [texto]}.
      */
-    async paraVRM(arquivos, principal, { nome, aoProgresso = () => {} } = {}) {
+    async paraVRM(arquivos, principal, { nome, aoProgresso = () => {}, juntos = [] } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
       if (ext(principal) === "blend") {
@@ -366,6 +366,52 @@
         for (const b of copias) { for (const f of [...b.children]) b.parent.add(f); b.parent.remove(b); }
       }
       objeto.updateMatrixWorld(true);
+      // as peças de outros arquivos do pacote (roupas, cabelos, acessórios feitos para este corpo): entram na personagem
+      let pecasJuntas = 0;
+      if (juntos.length) {
+        const ossosBase = new Map();
+        objeto.traverse((o) => { if (o.isBone && !ossosBase.has(o.name)) ossosBase.set(o.name, o); });
+        for (const extra of juntos) {
+          const b2 = arquivos.get(extra);
+          if (!b2) continue;
+          let o2;
+          try {
+            if (ext(extra) === "fbx") o2 = new V.FBXLoader(gerente).parse(await b2.arrayBuffer(), "");
+            else if (ext(extra) === "glb" || ext(extra) === "gltf") {
+              const carregador = C.carregadorGLTF(gerente), u = URL.createObjectURL(b2);
+              urls.push(u);
+              try { o2 = (await carregador.loadAsync(u)).scene; } finally { carregador.soltar(); }
+            } else { avisos.push(`${base(extra)}: só peças .fbx ou .glb entram junto da personagem.`); continue; }
+          } catch (e) { avisos.push(`${base(extra)} não abriu: ${(e && e.message) || e}`); continue; }
+          // na mesma escala da personagem (os .fbx podem vir em outra unidade)
+          if (ehFBX && ext(extra) === "fbx" && o2.userData.unitScaleFactor && objeto.userData.unitScaleFactor) o2.scale.multiplyScalar(o2.userData.unitScaleFactor / objeto.userData.unitScaleFactor);
+          o2.updateMatrixWorld(true);
+          const pecas = [];
+          o2.traverse((m) => { if (m.isMesh && m.geometry && m.geometry.attributes.position) pecas.push(m); });
+          let presas = 0;
+          for (const m of pecas) {
+            if (m.isSkinnedMesh && m.skeleton) {
+              const novos = m.skeleton.bones.map((b) => ossosBase.get(b.name));
+              if (novos.every(Boolean)) {
+                // o mesmo esqueleto (pelos nomes): a peça segue os ossos da personagem
+                const inversas = m.skeleton.boneInverses.map((x) => x.clone()), bind = m.bindMatrix.clone();
+                objeto.attach(m);
+                m.bind(new T.Skeleton(novos, inversas), bind);
+                presas++;
+                continue;
+              }
+            }
+            // uma peça rígida (um chapéu, uma arma): vai no osso da personagem com o nome do osso em que estava
+            let pai = m.parent;
+            while (pai && !(pai.isBone && ossosBase.has(pai.name))) pai = pai.parent;
+            (pai ? ossosBase.get(pai.name) : objeto).attach(m);
+            presas++;
+          }
+          if (presas) pecasJuntas++;
+          else avisos.push(`${base(extra)} não tem malhas para juntar.`);
+        }
+        objeto.updateMatrixWorld(true);
+      }
 
       // 2. malhas e ossos
       const malhas = [], comPele = [], ossos = [];
@@ -559,7 +605,8 @@
       };
       const imagens = [...arquivos.keys()].filter((n) => IMAGEM.test(n) && !/(^|\/)(__MACOSX|\.)/.test(n));
       const texturas = new Map(), diretas = []; // caminho → Texture; [{nome, blob, mime}]
-      let semTextura = 0, naoAbriu = 0;
+      let semTextura = 0, naoAbriu = 0, peloNome = 0;
+      const usadas = new Set();
       const texturaDoArquivo = async (caminho) => {
         if (texturas.has(caminho)) return texturas.get(caminho);
         const lida = await abrirImagem(arquivos.get(caminho), caminho);
@@ -607,8 +654,9 @@
         const mat = acharMat(m.name);
         let tex = null;
         if (mat) {
-          const chave = ["_MainTex", "_BaseMap", "_BaseColorMap", "_BaseTexture", "_MainTexture", "_Albedo", "_DiffuseMap", "_Diffuse"].find((k) => mat.texturas[k] && guids.has(mat.texturas[k]));
-          if (chave && IMAGEM.test(guids.get(mat.texturas[chave]))) tex = await texturaDoArquivo(guids.get(mat.texturas[chave]));
+          // a cor principal do shader (Standard, URP, HDRP, lilToon, Poiyomi, UTS...: js/texturas.js)
+          const doMat = C.texturas.doMaterialUnity(mat.texturas, (g) => guids.has(g) && IMAGEM.test(guids.get(g)));
+          if (doMat.cor) { tex = await texturaDoArquivo(guids.get(doMat.cor)); usadas.add(guids.get(doMat.cor)); }
           const cor = mat.cores._Color || mat.cores._BaseColor;
           if (cor) { n.color.setRGB(Math.min(1, cor[0]), Math.min(1, cor[1]), Math.min(1, cor[2]), T.SRGBColorSpace); if (cor[3] < 0.999) n.opacity = Math.max(0, cor[3]); }
           const modo = modoAlfa(mat);
@@ -628,9 +676,9 @@
           if (m.side === T.DoubleSide) n.side = T.DoubleSide;
         }
         if (!tex) tex = await texturaDoModelo(m.map);
-        if (!tex && !mat) { // pelo nome: uma imagem chamada como o material
-          const l = liso(m.name), c = l.length >= 3 && imagens.find((x) => liso(x) === l || liso(x).includes(l));
-          if (c) tex = await texturaDoArquivo(c);
+        if (!tex) { // pelo nome: a imagem de cor que mais combina com o material ("Body" ↔ "T_Body_BaseColor.png"), sem as de relevo, máscara...
+          const c = C.texturas.melhorPara(m.name || (mat && mat.nome) || "", imagens, { usadas }) || (mat && mat.nome ? C.texturas.melhorPara(mat.nome, imagens, { usadas }) : null);
+          if (c) { tex = await texturaDoArquivo(c); if (tex) { peloNome++; usadas.add(c); } }
         }
         if (tex) { n.map = tex; if (!mat) n.color.set(0xffffff); } else semTextura++;
         novos.set(m, n);
@@ -639,6 +687,7 @@
       for (const m of malhas) m.material = Array.isArray(m.material) ? await Promise.all(m.material.map(converter)) : await converter(m.material);
       // um pacote com uma textura só e nenhum material ligado: é a textura de tudo
       if (semTextura === novos.size && imagens.length === 1) { const unica = await texturaDoArquivo(imagens[0]); if (unica) for (const n of novos.values()) { n.map = unica; n.color.set(0xffffff); semTextura--; } }
+      if (peloNome) avisos.push(`${peloNome} textura(s) foram ligadas pelo nome (o material não dizia qual era): confira as cores em Personagem › Roupas.`);
       if (naoAbriu) avisos.push(`${naoAbriu} textura(s) estão num formato que não abre aqui (use PNG, JPEG, TGA ou PSD comum).`);
       if (semTextura > 0 && imagens.length) avisos.push(`${semTextura} de ${novos.size} materiais ficaram só com a cor: o pacote não diz qual textura é de cada um. Dá para pôr as texturas em Personagem › Roupas.`);
 
@@ -711,7 +760,7 @@
       let triangulos = 0;
       for (const m of malhas) triangulos += m.geometry.index ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3;
       return { vrm, nome, avisos,
-        resumo: { modelo: base(principal), comoMapeou, ossos: Object.keys(humanBones).length, dedos: Object.keys(humanBones).filter((n) => /Thumb|Index|Middle|Ring|Little/.test(n)).length,
+        resumo: { modelo: base(principal), pecasJuntas, comoMapeou, ossos: Object.keys(humanBones).length, dedos: Object.keys(humanBones).filter((n) => /Thumb|Index|Middle|Ring|Little/.test(n)).length,
           olhos: !!lookAt, poseEmT: girou > 0.05 ? Math.round(girou * 180 / Math.PI) : 0, altura: +altura.toFixed(2), escala: fator, triangulos: Math.round(triangulos),
           expressoes: Object.keys(preset), atalhos: Object.keys(custom), formas: new Set(todas).size, materiais: novos.size, comTextura: novos.size - Math.max(0, semTextura), doUnity: [...novos.keys()].filter((m) => acharMat(m.name)).length,
           balanco: molas ? molas.resumo : [], tamanho: vrm.size } };
