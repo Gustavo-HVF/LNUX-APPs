@@ -651,11 +651,21 @@
       if (extrasFeitos.length) LNUX.aviso(C.t("Do pacote: {lista}.", { lista: extrasFeitos.join(", ") }), "ok");
       return null;
     }
+    // converte; se o esqueleto não for reconhecido (ou a pessoa pedir no resumo), escolhe os ossos à mão e converte de novo
+    let ossos = null;
+    for (;;) {
     const prog = LNUX.progresso("Convertendo o avatar para VRM");
     let r;
     try {
       await LNUX.esperar(40); // a janela aparece antes do trabalho pesado
-      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, juntos, aoProgresso: (f, t) => prog.definir(f, t) });
+      r = await C.avatar.paraVRM(arquivos, principal, { nome: candidatos.length > 1 ? LNUX.nomeSemExtensao(principal.split("/").pop()) : nome, juntos, ossos, aoProgresso: (f, t) => prog.definir(f, t) });
+    } catch (e) {
+      prog.fechar();
+      if (!e.semEsqueleto || !e.ossosDoModelo || !e.ossosDoModelo.length) throw e;
+      const escolha = await escolherOssos(e.ossosDoModelo, { ...e.palpite, ...(ossos || {}) }, e.message);
+      if (!escolha) return null;
+      ossos = escolha;
+      continue;
     } finally { prog.fechar(); }
     const x = r.resumo, item = (...t) => el("li", {}, ...t);
     const ok = await LNUX.dialogo({ titulo: `Avatar convertido: ${r.nome}`, largo: true,
@@ -663,16 +673,98 @@
         el("ul", { style: { margin: 0, paddingLeft: "20px", display: "grid", gap: "4px" } },
           item(el("b", {}, "Esqueleto: "), `${x.ossos} ossos reconhecidos ${x.comoMapeou}, ${x.olhos ? "com" : "sem"} os olhos e ${x.dedos ? `com os dedos (${x.dedos} ossos)` : "sem os dedos"}; ${x.altura.toLocaleString("pt-BR")} m de altura` + (x.poseEmT ? `; braços e pernas postos na pose em T (${x.poseEmT}°)` : "") + "."),
           item(el("b", {}, "Rosto: "), x.expressoes.length ? `${x.expressoes.length} ${x.expressoes.length > 1 ? "expressões" : "expressão"} (${x.expressoes.join(", ")})${x.atalhos.length ? ` e ${x.atalhos.length} ${x.atalhos.length > 1 ? "atalhos" : "atalho"} (${x.atalhos.join(", ")})` : ""}, das ${x.formas} formas do modelo.` : x.formas ? `nenhuma das ${x.formas} formas do rosto tem um nome que eu conheça: ela não vai mexer a boca nem piscar.` : "o modelo não tem formas de rosto: ela não vai mexer a boca nem piscar."),
-          item(el("b", {}, "Materiais: "), `${x.comTextura} de ${x.materiais} com textura${x.doUnity ? ` (${x.doUnity} pelos materiais do Unity)` : ""}, no estilo de desenho das personagens VRoid.`),
+          item(el("b", {}, "Materiais: "), `${x.comTextura} de ${x.materiais} com textura${x.doUnity ? ` (${x.doUnity} pelos materiais do Unity${x.pelaCena ? C.t(", {n} como a cena do Unity põe", { n: x.pelaCena }) : ""})` : ""}.`),
+          item(el("b", {}, "Shaders: "), x.shaders && x.shaders.nomes.length
+            ? C.t("{n} material(is) traduzidos do shader do Unity ({lista}): sombra, brilho na borda, contorno, relevo e metal quando o material usa.", { n: x.shaders.traduzidos, lista: [...new Set(x.shaders.nomes.map((s) => s.nome + " — " + C.t({ toon: "desenho", pbr: "realista", unlit: "sem luz", desconhecido: "não reconhecido" }[s.familia])))].slice(0, 4).join("; ") })
+            : C.t("o pacote não diz o shader (ou ele não está na biblioteca: Personagem › Shaders do Unity). Ficou no estilo das personagens VRoid.")),
+          x.variacoes ? item(el("b", {}, "Versões: "), C.t("{n} material(is) têm outras versões no pacote (outro tom de pele, outra cor): elas vão para Personagem › Roupas › Textura de cada peça, em vez de se misturarem.", { n: x.variacoes })) : null,
           x.pecasJuntas ? item(el("b", {}, "Peças juntas: "), C.t("{n} modelo(s) do pacote vestidos na personagem (roupas e acessórios).", { n: x.pecasJuntas })) : null,
           extrasFeitos.length ? item(el("b", {}, "Também do pacote: "), extrasFeitos.join(", ") + ".") : null,
           item(el("b", {}, "Balanço: "), x.balanco.length ? x.balanco.join(", ") + "." : "nenhum osso de cabelo, saia ou rabo reconhecido pelo nome."),
           item(el("b", {}, "Arquivo: "), `${LNUX.bytes(x.tamanho)}, ${x.triangulos.toLocaleString("pt-BR")} triângulos.`)),
         r.avisos.length ? el("div", { class: "fraco" }, r.avisos.map((a) => el("p", { style: { margin: "4px 0 0" } }, "⚠ " + a))) : null,
-        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Não vêm: os efeitos dos shaders do Unity (lilToon, Poiyomi...), as físicas do VRChat e as peças ligadas e desligadas pelo prefab (esconda as que sobrarem em Personagem › Roupas). " +
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Não vêm: os efeitos que dependem do código do shader (glitter, dissolve, AudioLink, matcap e rampa), as físicas do VRChat e as peças ligadas e desligadas pelo prefab (esconda as que sobrarem em Personagem › Roupas). " +
           "O pacote não diz a licença: avatares comprados quase nunca deixam redistribuir. A personagem fica só neste aparelho, marcada como \"não redistribuir\"; confira os termos de quem fez antes de mostrar para outras pessoas.")),
-      botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Importar", primario: true, valor: true }] });
-    return ok ? new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]) : null;
+      botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Escolher os ossos...", valor: "ossos" }, { rotulo: "Importar", primario: true, valor: true }] });
+    if (ok === "ossos") {
+      const escolha = await escolherOssos(x.ossosDoModelo, x.mapaOssos, null);
+      if (escolha) ossos = escolha;
+      continue;
+    }
+    if (!ok) return null;
+    const saida = new Map([[r.nome.replace(/[\\/:*?"<>|]/g, "_") + ".vrm", r.vrm]]);
+    // as outras peles e cores do pacote (os .mat que não foram usados): viram variações em Personagem › Roupas
+    for (const v of r.variacoes || []) for (const [n, b] of Object.entries(v.imagens)) saida.set(`${v.nome.replace(/[\\/:*?"<>|]/g, "_")}/${n}`, b);
+    return saida;
+    }
+  }
+  /** Personagem › Shaders do Unity: a biblioteca de shaders (carregar .shader ou o .unitypackage deles, ver, tirar). */
+  async function abrirShaders() {
+    const lista = el("div", { class: "ajustes", id: "lista-shaders", style: { maxHeight: "45vh", overflow: "auto" } });
+    const familias = { toon: "desenho (MToon)", pbr: "realista (PBR)", unlit: "sem luz", desconhecido: "não reconhecido (fica no estilo VRoid)" };
+    const desenhar = async () => {
+      const l = await C.shaders.lista();
+      lista.replaceChildren(...(l.length ? l.map((s) => el("div", { class: "linha", style: { justifyContent: "space-between", gap: "8px" } },
+        el("span", {}, el("b", { translate: "no" }, s.nome), el("span", { class: "fraco pequeno" }, ` · ${C.t(familias[s.familia] || s.familia)} · ${s.props.length} ${C.t("propriedades")}`)),
+        el("button", { type: "button", class: "lnux-botao pequeno", onclick: async () => { await C.shaders.apagar(s.guid || "nome:" + s.nome); desenhar(); } }, C.t("Tirar")))) : [el("p", { class: "fraco", style: { margin: 0 } }, C.t("Nenhum shader carregado ainda."))]));
+    };
+    const carregar = async () => {
+      const arqs = await LNUX.arquivos.abrir({ titulo: C.t("Shaders do Unity (.shader ou .unitypackage)"), aceitar: ".shader,.unitypackage,.zip", multiplos: true });
+      if (!arqs.length) return;
+      const mapa = new Map();
+      for (const a of arqs) {
+        const b = await a.blob();
+        if (/\.unitypackage$/i.test(a.nome)) { const p = await C.lerUnityPackage(b); for (const [n, x] of p) mapa.set(n, x); mapa.guids = new Map([...(mapa.guids || []), ...p.guids]); mapa.metas = new Map([...(mapa.metas || []), ...p.metas]); }
+        else if (/\.zip$/i.test(a.nome)) { for (const [n, x] of await C.pacoteDoZip(b)) mapa.set(n, x); }
+        else mapa.set(a.nome, b);
+      }
+      const r = await C.shaders.carregar(mapa);
+      LNUX.aviso(C.t("Shaders: {novos} novo(s), {atualizados} atualizado(s){ignorados}.", { novos: r.novos, atualizados: r.atualizados, ignorados: r.ignorados ? C.t(", {n} sem nome (ignorados)", { n: r.ignorados }) : "" }), r.novos + r.atualizados ? "ok" : "alerta");
+      desenhar();
+    };
+    await desenhar();
+    await LNUX.dialogo({ titulo: "Shaders do Unity", largo: true,
+      corpo: el("div", { class: "ajustes" },
+        el("p", { style: { margin: 0 } }, "Os materiais dos avatares do Unity apontam para um shader. Com ele conhecido, a conversão leva o que ele quer dizer: a cor da sombra, o brilho na borda, o contorno e o relevo (shaders de desenho: Poiyomi, lilToon, UTS...) ou o metal e a rugosidade (realistas: Standard, Rero Standard...)."),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Quando o shader vem no pacote do avatar, ele já é usado. Carregue aqui os que o avatar usa mas não traz (o .shader ou o .unitypackage deles): ficam guardados neste aparelho para os próximos avatares. Só o nome e as propriedades são lidos — o código do shader não roda no navegador."),
+        el("div", { class: "linha" }, el("button", { type: "button", class: "lnux-botao primario", id: "carregar-shaders", onclick: () => carregar().catch(LNUX.erro) }, C.t("Carregar shaders..."))),
+        lista),
+      botoes: [{ rotulo: "Fechar", primario: true, valor: true }] });
+  }
+  /**
+   * A janela "Escolher os ossos": para cada osso de pessoa (quadril, coluna, braços...), qual osso do arquivo ele é.
+   * ossosDoModelo: [{nome, pai}]; atual: {ossoVRM: nome}. Devolve {ossoVRM: nome ou ""} ou null se desistiu.
+   */
+  async function escolherOssos(ossosDoModelo, atual = {}, motivo = null) {
+    // os ossos do arquivo em árvore (com recuo pela profundidade), para achar pelo lugar no corpo
+    const filhos = new Map(), nomes = new Set(ossosDoModelo.map((o) => o.nome));
+    for (const o of ossosDoModelo) { const p = o.pai && nomes.has(o.pai) ? o.pai : ""; if (!filhos.has(p)) filhos.set(p, []); filhos.get(p).push(o.nome); }
+    const ordem = [];
+    (function andar(p, nivel) { for (const n of filhos.get(p) || []) { ordem.push([n, nivel]); if (nivel < 40) andar(n, nivel + 1); } })("", 0);
+    const obrig = new Set(C.avatar.OBRIGATORIOS);
+    const linhas = C.avatar.OSSOS_DA_JANELA.map((vrm) => {
+      const s = el("select", { class: "lnux-selecao", "data-osso": vrm, "aria-label": C.avatar.nomeDoOsso(vrm) },
+        el("option", { value: "" }, obrig.has(vrm) ? C.t("(escolha)") : C.t("(nenhum)")),
+        ordem.map(([n, nivel]) => el("option", { value: n, selected: atual[vrm] === n }, "\u00a0\u00a0".repeat(Math.min(nivel, 12)) + n)));
+      return { vrm, s, linha: el("label", { class: "lnux-campo", style: { gridTemplateColumns: "150px 1fr", display: "grid", alignItems: "center", gap: "8px" } },
+        el("span", {}, C.avatar.nomeDoOsso(vrm), obrig.has(vrm) ? el("b", { title: C.t("obrigatório") }, " *") : null), s) };
+    });
+    const erro = el("p", { class: "fraco", style: { margin: 0, color: "var(--perigo, #c33)" } });
+    const ler = () => Object.fromEntries(linhas.map((l) => [l.vrm, l.s.value]));
+    const r = await LNUX.dialogo({ titulo: "Escolher os ossos", largo: true,
+      corpo: el("div", { class: "ajustes", id: "escolher-ossos" },
+        motivo ? el("p", { class: "fraco", style: { margin: 0 } }, motivo) : null,
+        el("p", { style: { margin: 0 } }, "Diga qual osso do arquivo é cada parte do corpo. Os marcados com * são obrigatórios; a lista mostra os ossos do arquivo em árvore (cada nível um pouco para dentro)."),
+        el("div", { style: { display: "grid", gap: "6px", maxHeight: "55vh", overflow: "auto", paddingRight: "6px" } }, ...linhas.map((l) => l.linha)),
+        erro),
+      botoes: [{ rotulo: "Cancelar", valor: null }, { rotulo: "Converter com estes ossos", primario: true,
+        antes: () => {
+          const m = ler(), faltam = C.avatar.OBRIGATORIOS.filter((n) => !m[n]);
+          const repetidos = Object.values(m).filter((v, i, a) => v && a.indexOf(v) !== i);
+          erro.textContent = faltam.length ? C.t("Faltam: {lista}.", { lista: faltam.map(C.avatar.nomeDoOsso).join(", ") }) : repetidos.length ? C.t("O mesmo osso está em duas partes: {osso}.", { osso: repetidos[0] }) : "";
+          return !erro.textContent;
+        }, valor: () => ler() }] });
+    return r || null;
   }
   /**
    * A janela "O que é cada modelo?": um papel para cada modelo do pacote (e cada cena do Unity). Devolve
@@ -1925,6 +2017,7 @@
     { rotulo: "Personagem", itens: [
       { rotulo: "Importar ZIP ou .vrm...", atalho: "Ctrl+O", acao: () => importar("zip") },
       { rotulo: "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...", acao: () => importar("avatar") },
+      { rotulo: "Shaders do Unity (para converter avatares)...", acao: () => abrirShaders().catch(LNUX.erro) },
       { rotulo: "Importar pasta...", acao: () => importar("pasta") },
       { rotulo: "Loja: personagens, mapas e animações...", acao: () => (jogando() && C.webc ? C.webc.ir("loja") : abrirLoja()), ativo: () => lojaDisponivel },
       { rotulo: "Trocar de personagem...", atalho: "Ctrl+P", acao: janelaTrocar },

@@ -32,7 +32,7 @@ import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
-APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video", "companhia_luzes", "companhia_webc", "companhia_sketchfab", "companhia_ik", "companhia_pessoas", "companhia_nulos", "companhia_cameras", "companhia_itens", "companhia_blend_personagem", "companhia_pacote", "companhia_fisica", "companhia_texturas"]  # render e audio: partes do Vídeo testadas sozinhas
+APPS = ["som", "video", "render", "audio", "efeitos", "vlc", "companhia", "companhia_vrm", "companhia_corpo", "companhia_mapas", "companhia_sala", "companhia_avatar", "companhia_loja", "companhia_contas", "companhia_cenario", "companhia_video", "companhia_luzes", "companhia_webc", "companhia_sketchfab", "companhia_ik", "companhia_pessoas", "companhia_nulos", "companhia_cameras", "companhia_itens", "companhia_blend_personagem", "companhia_pacote", "companhia_fisica", "companhia_texturas", "companhia_avatar_extras"]  # render e audio: partes do Vídeo testadas sozinhas
 
 
 def porta_livre() -> int:
@@ -81,7 +81,7 @@ def main(argv: list) -> int:
         tmp = Path(tmp)
         gerar_midias(tmp / "midias")
         porta_sketchfab = porta_livre()  # um Sketchfab de mentira, que o teste companhia_sketchfab sobe nessa porta
-        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados"), "LNUX_SALA_SUMIU": "240",  # sem placa de vídeo, a página trava ao desenhar o cenário
+        env = {**os.environ, "LNUX_APPS_DADOS": str(tmp / "dados"), "LNUX_SALA_SUMIU": "240", "LNUX_SALA_VAZIA": "600",  # sem placa de vídeo, a página trava ao desenhar o cenário
                "LNUX_SKETCHFAB_API": f"http://127.0.0.1:{porta_sketchfab}/v3"}
         env.pop("SKETCHFAB_TOKEN", None)
         porta = porta_livre()

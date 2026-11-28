@@ -118,6 +118,17 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(Math.abs(aberto.pos[0]) < 0.05 && Math.abs(aberto.pos[2] - 1) < 0.05 && Math.abs(aberto.pos[1]) < 0.05 && aberto.escala === 1, `nasce no ponto do VRChat, em pé no chão: ${JSON.stringify(aberto.pos)} (rumo ${aberto.rumo})`);
     ok(aberto.frente > 4.5 && aberto.frente < 5 && aberto.gatilho === null, `a colisão: a grama e o gatilho não seguram (o raio só bate na parede, a ${aberto.frente} m)`);
     ok(aberto.plantas === 1 && aberto.dobra && aberto.corpos === 2, `a grama dobra (o efeito no material) e os 2 corpos passam a ter física`);
+    // o céu do cenário é do mundo: trocar o tema da pessoa não muda
+    const ceu = await ev(async () => {
+      const m = window.Companhia.palco.mundo, antes = m.palco.cena.background, atual = C.temas.atual;
+      const outro = (C.temas.lista ? Object.keys(C.temas.lista) : ["contrast", "webc"]).find((t) => t !== atual) || "contrast";
+      C.temas.definir(outro);
+      await new Promise((r) => setTimeout(r, 200));
+      const depois = m.palco.cena.background;
+      C.temas.definir(atual);
+      return { ceu: !!(antes && antes.userData && antes.userData.ceuDoMundo), igual: antes === depois, tema: outro };
+    });
+    ok(ceu.ceu && ceu.igual, `o céu do cenário é do mundo: trocar o tema (para ${ceu.tema}) não muda o céu`);
 
     // a bola cai, quica (o material de física dela quica 0,7) e fica no chão
     await pagina.waitForFunction(() => { const c = window.Companhia.palco.mundo.fisica.corpos.find((x) => /Ball/.test(x.id)); return c.dormindo; }, null, { timeout: 20000 }).catch(() => {});

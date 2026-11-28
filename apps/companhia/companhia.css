@@ -804,12 +804,13 @@
 :root[data-modo="jogar"] .controles-mundo { bottom: calc(108px * var(--webc-escala)); }
 
 /* a janela Opções: o título no alto, os seis cartões; cada um abre a sua lista */
-.jogo-opcoes-fundo { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .55); animation: jogo-esmaece .2s ease; }
+.jogo-opcoes-fundo { position: fixed; inset: 0; z-index: 1600; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, calc(.55 * var(--webc-menu-opacidade, 1))); animation: jogo-esmaece .2s ease; }
 @keyframes jogo-esmaece { from { opacity: 0; } }
 /* a janela Opções: no computador, as categorias (em grupos) numa coluna à esquerda e a escolhida à direita; no celular,
    os quadrados das categorias e, tocando num, a categoria com o voltar */
 .jogo-opcoes { width: min(calc(1060px * var(--webc-escala)), 100%); height: min(86vh, 760px); display: grid; grid-template-rows: auto minmax(0, 1fr); border-radius: 34px; overflow: hidden;
-  background: var(--panel); color: var(--text); border: 3px solid var(--jogo-barra); box-shadow: 0 30px 80px rgba(0, 0, 0, .45); font-size: calc(1rem * var(--webc-escala)); }
+  background: color-mix(in srgb, var(--panel) calc(var(--webc-menu-opacidade, 1) * 100%), transparent); color: var(--text); border: 3px solid var(--jogo-barra); box-shadow: 0 30px 80px rgba(0, 0, 0, calc(.45 * var(--webc-menu-opacidade, 1))); font-size: calc(1rem * var(--webc-escala));
+  backdrop-filter: blur(calc((1 - var(--webc-menu-opacidade, 1)) * 14px)); }
 .jogo-opcoes.entrando { animation: jogo-abre .28s cubic-bezier(.2, .8, .2, 1); }
 @keyframes jogo-abre { from { opacity: 0; transform: translateY(18px) scale(.97); } }
 .jogo-opcoes-topo { display: flex; align-items: center; gap: 10px; padding: 12px 16px 12px 24px; background: var(--jogo-barra); color: var(--jogo-barra-texto); }
@@ -822,7 +823,7 @@
 .jogo-opcoes-voltar { margin-left: -12px; display: none; }
 .jogo-opcoes-corpo { display: grid; grid-template-columns: minmax(220px, 270px) minmax(0, 1fr); min-height: 0; }
 .jogo-opcoes-nav { overflow-y: auto; padding: 14px 12px 20px; display: grid; gap: 14px; align-content: start;
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel)); border-right: 2px solid color-mix(in srgb, var(--jogo-barra) 22%, transparent); }
+  background: color-mix(in srgb, color-mix(in srgb, var(--accent) 6%, var(--panel)) calc(var(--webc-menu-opacidade, 1) * 100%), transparent); border-right: 2px solid color-mix(in srgb, var(--jogo-barra) 22%, transparent); }
 .jogo-opcoes-grupo { display: grid; gap: 4px; }
 .jogo-opcoes-grupo > h3 { margin: 0 10px 2px; font-size: .74em; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
 .jogo-opcoes-grade { display: grid; gap: 3px; }
@@ -883,7 +884,7 @@
   .jogo-opcoes-dica { display: none; }
   .jogo-opcoes.com-secao .jogo-opcoes-voltar { display: inline-block; }
   .jogo-opcoes-corpo { grid-template-columns: minmax(0, 1fr); }
-  .jogo-opcoes-nav { border-right: 0; padding: 14px; background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+  .jogo-opcoes-nav { border-right: 0; padding: 14px; background: color-mix(in srgb, color-mix(in srgb, var(--accent) 7%, var(--panel)) calc(var(--webc-menu-opacidade, 1) * 100%), transparent); }
   .jogo-opcoes.com-secao .jogo-opcoes-nav { display: none; }
   .jogo-opcoes:not(.com-secao) .jogo-opcoes-conteudo { display: none; }
   .jogo-opcoes-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
@@ -1251,3 +1252,6 @@ html[data-webc="site"] .mira-item { display: none; }
 .jogo-inv-mini svg { width: 100%; height: 100%; }
 .jogo-inv-nome { display: grid; min-width: 0; }
 .jogo-inv-botoes { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* a opacidade do menu (Opções › Acessibilidade): os menus que abrem no jogo */
+.lnux-menu { background: color-mix(in srgb, var(--painel) calc(var(--webc-menu-opacidade, 1) * 100%), transparent); backdrop-filter: blur(calc((1 - var(--webc-menu-opacidade, 1)) * 14px)); }

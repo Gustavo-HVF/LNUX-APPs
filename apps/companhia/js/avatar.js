@@ -38,8 +38,67 @@
   const IMAGEM = /\.(png|jpe?g|webp|bmp|gif|tga|psd)$/i;
   const OBRIGATORIOS = ["hips", "spine", "head", "leftUpperArm", "leftLowerArm", "leftHand", "rightUpperArm", "rightLowerArm", "rightHand",
     "leftUpperLeg", "leftLowerLeg", "leftFoot", "rightUpperLeg", "rightLowerLeg", "rightFoot"];
-  const NOME_PT = { hips: "quadril", spine: "coluna", head: "cabeça", UpperArm: "braço", LowerArm: "antebraço", Hand: "mão", UpperLeg: "coxa", LowerLeg: "canela", Foot: "pé" };
-  const nomeDoOsso = (n) => NOME_PT[n] || (NOME_PT[n.replace(/^(left|right)/, "")] + (n.startsWith("left") ? " esquerdo" : " direito")).replace(/a (esquerd|direit)o$/, "a $1a");
+  const NOME_PT = { hips: "quadril", spine: "coluna", head: "cabeça", chest: "peito", upperChest: "peito de cima", neck: "pescoço", UpperArm: "braço", LowerArm: "antebraço", Hand: "mão", UpperLeg: "coxa", LowerLeg: "canela", Foot: "pé",
+    Shoulder: "ombro", Toes: "dedos do pé", Eye: "olho" };
+  /** Os ossos que a janela de escolher mostra (os obrigatórios e os que ajudam). */
+  const OSSOS_DA_JANELA = [...OBRIGATORIOS.slice(0, 3), "chest", "upperChest", "neck", "leftShoulder", "rightShoulder", ...OBRIGATORIOS.slice(3), "leftToes", "rightToes", "leftEye", "rightEye"];
+  const FEMININOS = new Set(["mão", "coxa", "canela"]);
+  const nomeDoOsso = (n) => {
+    if (NOME_PT[n]) return NOME_PT[n];
+    const parte = NOME_PT[n.replace(/^(left|right)/, "")] || n, fem = FEMININOS.has(parte);
+    return parte + (n.startsWith("left") ? (fem ? " esquerda" : " esquerdo") : (fem ? " direita" : " direito"));
+  };
+
+  /**
+   * Os materiais que a cena (ou o prefab) do Unity põe em cada malha do modelo: Map nome da malha → [caminho do .mat
+   * ou null, um por submalha]. É o que o autor escolheu: o nome sozinho erra quando o pacote traz várias versões do
+   * mesmo material (peles de tons diferentes, "Sweet1", "Sweet1 1", "Sweet1 7"...).
+   */
+  async function materiaisDaCena(arquivos, principal) {
+    const guids = arquivos.guids || new Map(), metas = arquivos.metas || new Map();
+    let guidModelo = null;
+    for (const [g, c] of guids) if (c === principal) { guidModelo = g; break; }
+    if (!guidModelo) return new Map();
+    // o nome de cada malha do modelo pelo fileID (a ficha .meta do modelo)
+    const nomes = new Map(), ficha = metas.get(principal) || "";
+    for (const m of ficha.matchAll(/-\s*first:\s*\r?\n\s*(\d+):\s*(-?\d+)\s*\r?\n\s*second:[ \t]*(.*)/g)) if (m[1] === "43") nomes.set(m[2], semAspas(m[3]));
+    for (const m of ficha.matchAll(/^\s*(43\d{5}):[ \t]*(\S.*)$/gm)) if (!nomes.has(m[1])) nomes.set(m[1], semAspas(m[2]));
+    const saida = new Map(), ativosAntes = new Set();
+    const cenas = [...arquivos.keys()].filter((n) => /\.(unity|prefab)$/i.test(n)).sort((a, b) => (/\.unity$/i.test(b) - /\.unity$/i.test(a)) || arquivos.get(b).size - arquivos.get(a).size);
+    for (const c of cenas) {
+      let texto;
+      try { texto = await arquivos.get(c).text(); } catch (e) { continue; }
+      if (!texto.includes(guidModelo)) continue;
+      const docs = texto.split(/\r?\n--- !u!/).slice(1).map((d) => { const cab = /^(\d+) &(-?\d+)/.exec(d); return cab ? { classe: +cab[1], id: cab[2], corpo: d } : null; }).filter(Boolean);
+      const ativo = new Map(), nomeDoObjeto = new Map(), malhaDe = new Map(), matsDe = new Map();
+      const go = (d) => (/m_GameObject:\s*\{fileID:\s*(-?\d+)/.exec(d.corpo) || [])[1];
+      const lerMats = (d) => { const b = /m_Materials:\s*\r?\n((?:\s*-\s*\{[^}]*\}\s*\r?\n?)+)/.exec(d.corpo); return b ? [...b[1].matchAll(/\{[^}]*\}/g)].map((x) => { const g = (/guid:\s*([0-9a-f]{32})/.exec(x[0]) || [])[1]; return g && guids.has(g) && /\.mat$/i.test(guids.get(g)) ? guids.get(g) : null; }) : []; };
+      for (const d of docs) {
+        if (d.classe === 1) { ativo.set(d.id, !/m_IsActive:\s*0/.test(d.corpo)); nomeDoObjeto.set(d.id, semAspas((/^\s*m_Name:[ \t]*(.*)$/m.exec(d.corpo) || [, ""])[1])); }
+        else if (d.classe === 33 || d.classe === 137) {
+          const m = /m_Mesh:\s*\{fileID:\s*(-?\d+)(?:,\s*guid:\s*([0-9a-f]{32}))?/.exec(d.corpo);
+          // a malha do modelo: pelo nome da ficha (versões antigas do Unity) ou pelo nome do objeto na cena (o objeto
+          // de um modelo arrastado para a cena tem o nome do nó do .fbx, que é o nome da malha)
+          if (m && m[2] === guidModelo) malhaDe.set(go(d), nomes.get(m[1]) || null);
+          if (d.classe === 137) matsDe.set(go(d), lerMats(d));
+        } else if (d.classe === 23) matsDe.set(go(d), lerMats(d));
+      }
+      for (const [g, nomeFicha] of malhaDe) {
+        const nome = nomeFicha || nomeDoObjeto.get(g);
+        if (!nome) continue;
+        const lista = matsDe.get(g);
+        if (!lista || !lista.some(Boolean)) continue;
+        const ligado = ativo.get(g) !== false;
+        // a primeira cena que diz vale; uma peça ligada vale mais que uma desligada (outra roupa, outra versão)
+        if (saida.has(nome) && (ativosAntes.has(nome) || !ligado)) continue;
+        saida.set(nome, lista);
+        if (ligado) ativosAntes.add(nome);
+      }
+    }
+    return saida;
+  }
+  /** O nome da "família" de um material ("Sweet1 7" → "sweet1", "Skin (2)" → "skin", "Body_B" fica): para achar as versões. */
+  const familiaDoMaterial = (n) => String(n || "").toLowerCase().replace(/[\s_.-]*(\(\d+\)|\d+)$/, "").trim();
 
   // ── As fichas do Unity (YAML), lidas só no que interessa ────────────
 
@@ -68,7 +127,9 @@
     const COR = "\\{r:\\s*([-\\d.eE+]+),\\s*g:\\s*([-\\d.eE+]+),\\s*b:\\s*([-\\d.eE+]+),\\s*a:\\s*([-\\d.eE+]+)\\}";
     for (const m of texto.matchAll(new RegExp("^[ \\t]*(?:-\\s*)?(_\\w+):[ \\t]*" + COR, "gm"))) cores[m[1]] = [+m[2], +m[3], +m[4], +m[5]];
     for (const m of texto.matchAll(new RegExp("name:\\s*(_\\w+)\\s*\\r?\\n\\s*second:\\s*" + COR, "g"))) cores[m[1]] = [+m[2], +m[3], +m[4], +m[5]];
-    return { nome: semAspas((texto.match(/^\s*m_Name:[ \t]*(.*)$/m) || [, ""])[1]), texturas, numeros, cores,
+    const sh = /^\s*m_Shader:\s*\{([^}]*)\}/m.exec(texto);
+    const shader = sh ? { id: (/fileID:\s*(-?\d+)/.exec(sh[1]) || [])[1] || "0", guid: (/guid:\s*([0-9a-f]{32})/.exec(sh[1]) || [])[1] || null } : null;
+    return { nome: semAspas((texto.match(/^\s*m_Name:[ \t]*(.*)$/m) || [, ""])[1]), texturas, numeros, cores, shader,
       tipo: (texto.match(/RenderType:\s*(\w+)/) || [])[1] || "", fila: +((texto.match(/m_CustomRenderQueue:\s*(-?\d+)/) || [])[1] || -1),
       palavras: texto.match(/_ALPHATEST_ON|_ALPHABLEND_ON|_ALPHAPREMULTIPLY_ON|_EMISSION\b/g) || [] };
   }
@@ -284,6 +345,7 @@
   C.avatar = {
     MODELO,
     ACEITAR: ".unitypackage,.fbx,.glb,.blend",
+    OBRIGATORIOS, OSSOS_DA_JANELA, nomeDoOsso: (n) => nomeDoOsso(n),
     lerMat, modoAlfa, lerMetaDoModelo, lerTGA, lerPSD, acharExpressoes, ossoDoUnity,
 
     /** O pacote tem cara de avatar (e não de cenário)? Um .vrm dentro, ou um modelo que o Unity marcou como pessoa. */
@@ -302,7 +364,7 @@
      * Converte o modelo `principal` do pacote (Map caminho → Blob; de um .unitypackage vem com .metas e .guids)
      * num .vrm. Devolve {vrm: Blob, nome, resumo: {...}, avisos: [texto]}.
      */
-    async paraVRM(arquivos, principal, { nome, aoProgresso = () => {}, juntos = [] } = {}) {
+    async paraVRM(arquivos, principal, { nome, aoProgresso = () => {}, juntos = [], ossos: ossosEscolhidos = null } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
       if (ext(principal) === "blend") {
@@ -461,6 +523,15 @@
         const lado = C.ladoDoOsso ? C.ladoDoOsso(original(o)) : null;
         if (lado && !mapa[lado + "Eye"] && mapa.head && (function sobe(x) { return x === mapa.head || (x.parent && sobe(x.parent)); })(o)) { mapa[lado + "Eye"] = o; jaUsados.add(o); }
       }
+      // os ossos escolhidos à mão (janela "Escolher os ossos"): valem por cima do reconhecimento; "" tira o osso
+      if (ossosEscolhidos) {
+        for (const [vrm, n] of Object.entries(ossosEscolhidos)) {
+          if (!validos.has(vrm)) continue;
+          const no = n ? porNomeDeOsso.get(n) : null;
+          if (no) mapa[vrm] = no; else delete mapa[vrm];
+        }
+        comoMapeou = "escolhidos à mão";
+      }
       if (!mapa.leftEye || !mapa.rightEye) { delete mapa.leftEye; delete mapa.rightEye; }
       if (mapa.upperChest && !mapa.chest) { mapa.chest = mapa.upperChest; delete mapa.upperChest; }
       const faltam = OBRIGATORIOS.filter((n) => !mapa[n]);
@@ -468,8 +539,14 @@
         const e = new Error(`Não reconheci o esqueleto de uma pessoa em "${base(principal)}": ${faltam.length === OBRIGATORIOS.length ? "nenhum osso bateu" : "faltou " + faltam.map(nomeDoOsso).join(", ")}. ` +
           `Ossos do arquivo: ${ossos.slice(0, 14).map(original).join(", ")}${ossos.length > 14 ? "..." : ""}. Se o pacote tem outro modelo, escolha ele; se é um cenário, abra em Movimento › Cenário.`);
         e.semEsqueleto = true;
+        // para a janela de escolher os ossos: a lista do arquivo (com o pai) e o que já foi reconhecido
+        e.ossosDoModelo = ossos.map((o) => ({ nome: original(o), pai: o.parent && ehOsso.has(o.parent) ? original(o.parent) : null }));
+        e.palpite = Object.fromEntries(Object.entries(mapa).map(([k, o]) => [k, original(o)]));
+        e.faltam = faltam;
         throw e;
       }
+      const mapaEscolhido = Object.fromEntries(Object.entries(mapa).map(([k, o]) => [k, original(o)]));
+      const listaDeOssos = ossos.map((o) => ({ nome: original(o), pai: o.parent && ehOsso.has(o.parent) ? original(o.parent) : null }));
 
       // 4. de pé, olhando para a frente (+Z), braço esquerdo em +X, pés no chão, em metros
       aoProgresso(0.3, "Ajustando o esqueleto...");
@@ -594,6 +671,11 @@
       const mats = new Map(); // caminho do .mat → lido
       for (const n of arquivos.keys()) if (/\.mat$/i.test(n)) { try { mats.set(n, lerMat(await arquivos.get(n).text())); } catch (e) { /* ilegível: fica de fora */ } }
       const matPorNome = new Map([...mats].map(([c, m]) => [liso(m.nome || c), c]));
+      const daCena = await materiaisDaCena(arquivos, principal); // o que o autor pôs em cada malha (a cena ou o prefab)
+      const caminhoDoMat = new Map([...mats].map(([c, m]) => [m, c]));
+      const biblioteca = C.shaders ? await C.shaders.lista() : [];
+      const shadersUsados = new Map(); // nome do shader → família
+      let traduzidos = 0, pelaCena = 0;
       const acharMat = (nomeMaterial) => {
         const g = meta.materiais[nomeMaterial];
         if (g && guids.has(g) && mats.has(guids.get(g))) return mats.get(guids.get(g));
@@ -608,9 +690,11 @@
       const texturas = new Map(), diretas = []; // caminho → Texture; [{nome, blob, mime}]
       let semTextura = 0, naoAbriu = 0, peloNome = 0;
       const usadas = new Set();
-      const texturaDoArquivo = async (caminho) => {
+      const texturaDoArquivo = async (caminho, dados = false) => {
+        if (dados) caminho = caminho + "\u0000dados"; // a mesma imagem como dado (relevo: sem a conversão de cor)
         if (texturas.has(caminho)) return texturas.get(caminho);
-        const lida = await abrirImagem(arquivos.get(caminho), caminho);
+        const real = caminho.replace(/\u0000dados$/, "");
+        const lida = await abrirImagem(arquivos.get(real), real);
         let tex = null;
         if (lida && lida.direto) {
           const tela = document.createElement("canvas");
@@ -621,7 +705,7 @@
           diretas.push({ nome: tex.name, ...lida.direto });
         } else if (lida) { tex = new T.CanvasTexture(lida.tela); tex.name = semExt(caminho); }
         else naoAbriu++;
-        if (tex) { tex.flipY = false; tex.colorSpace = T.SRGBColorSpace; tex.wrapS = tex.wrapT = T.RepeatWrapping; }
+        if (tex) { tex.flipY = false; tex.colorSpace = dados ? T.NoColorSpace : T.SRGBColorSpace; tex.wrapS = tex.wrapT = T.RepeatWrapping; }
         texturas.set(caminho, tex);
         return tex;
       };
@@ -648,11 +732,16 @@
         if (ehFBX) { tex.flipY = false; tex.needsUpdate = true; }
         return tex;
       };
-      const novos = new Map();
-      const converter = async (m) => {
-        if (novos.has(m)) return novos.get(m);
-        const n = new T.MeshStandardMaterial({ name: m.name || "Material", roughness: 0.9, metalness: 0 });
-        const mat = acharMat(m.name);
+      const novos = new Map(), porMat = new Map();
+      const converter = async (m, malha, i) => {
+        // o .mat que a cena do Unity pôs nesta malha (nesta submalha), se houver; senão pelo nome
+        const lista = malha && daCena.get(malha.name), daLista = lista ? lista[Math.min(i, lista.length - 1)] : null;
+        const matCena = daLista && mats.has(daLista) ? mats.get(daLista) : null;
+        if (matCena && porMat.has(matCena)) return porMat.get(matCena);
+        if (!matCena && novos.has(m)) return novos.get(m);
+        const n = new T.MeshStandardMaterial({ name: (matCena && matCena.nome) || m.name || "Material", roughness: 0.9, metalness: 0 });
+        const mat = matCena || acharMat(m.name);
+        if (matCena) pelaCena++;
         let tex = null;
         if (mat) {
           // a cor principal do shader (Standard, URP, HDRP, lilToon, Poiyomi, UTS...: js/texturas.js)
@@ -665,6 +754,23 @@
           else if (modo === "BLEND") n.transparent = true;
           const corte = mat.numeros._Cull !== undefined ? mat.numeros._Cull : mat.numeros._CullMode !== undefined ? mat.numeros._CullMode : mat.numeros._Culling;
           if (corte === 0) n.side = T.DoubleSide;
+          // o shader do material (js/shaders.js): sombra, borda, contorno, metal, rugosidade, relevo
+          if (C.shaders && mat.shader) {
+            const perfil = await C.shaders.perfil(mat.shader, arquivos, biblioteca);
+            if (perfil) {
+              const tr = C.shaders.traduzir(mat, perfil);
+              shadersUsados.set(perfil.nome, tr.familia);
+              if (tr.relevo && guids.has(tr.relevo) && IMAGEM.test(guids.get(tr.relevo))) {
+                const rt = await texturaDoArquivo(guids.get(tr.relevo), true);
+                if (rt) { n.normalMap = rt; n.normalScale.set(tr.relevoEscala, tr.relevoEscala); }
+              }
+              if (tr.familia === "pbr") { n.metalness = tr.metal; n.roughness = tr.rugosidade; }
+              const { relevo, ...semTextura } = tr;
+              void relevo;
+              n.userData.webcShader = semTextura;
+              if (tr.familia !== "desconhecido") traduzidos++;
+            }
+          }
           const brilho = mat.texturas._EmissionMap && guids.has(mat.texturas._EmissionMap) && (mat.palavras.includes("_EMISSION") || mat.numeros._UseEmission === 1 || mat.numeros._EnableEmission === 1);
           if (brilho && IMAGEM.test(guids.get(mat.texturas._EmissionMap))) {
             const e = await texturaDoArquivo(guids.get(mat.texturas._EmissionMap)), c = mat.cores._EmissionColor || [1, 1, 1, 1];
@@ -682,10 +788,36 @@
           if (c) { tex = await texturaDoArquivo(c); if (tex) { peloNome++; usadas.add(c); } }
         }
         if (tex) { n.map = tex; if (!mat) n.color.set(0xffffff); } else semTextura++;
-        novos.set(m, n);
+        if (matCena) porMat.set(matCena, n); else novos.set(m, n);
+        if (mat) n.userData.matUnity = caminhoDoMat.get(mat) || null;
         return n;
       };
-      for (const m of malhas) m.material = Array.isArray(m.material) ? await Promise.all(m.material.map(converter)) : await converter(m.material);
+      for (const m of malhas) m.material = Array.isArray(m.material) ? await Promise.all(m.material.map((x, i) => converter(x, m, i))) : await converter(m.material, m, 0);
+      for (const n of porMat.values()) novos.set(n, n); // (para contar e soltar no fim)
+      // as outras versões dos materiais usados (peles de outro tom, outras cores): viram variações de textura, para trocar
+      // em Personagem › Roupas — em vez de uma ser escolhida pelo nome e misturar com a outra
+      const variacoes = [];
+      {
+        const usadosMat = new Set([...novos.values()].map((n) => n.userData.matUnity).filter(Boolean));
+        const corDe = (mt) => { const d = C.texturas.doMaterialUnity(mt.texturas, (g) => guids.has(g) && IMAGEM.test(guids.get(g))); return d.cor ? guids.get(d.cor) : null; };
+        const porFamilia = new Map();
+        for (const [c, mt] of mats) { const f = familiaDoMaterial(mt.nome || semExt(c)); if (!porFamilia.has(f)) porFamilia.set(f, []); porFamilia.get(f).push([c, mt]); }
+        for (const usado of usadosMat) {
+          const mt = mats.get(usado), f = familiaDoMaterial(mt.nome || semExt(usado)), irmaos = porFamilia.get(f) || [];
+          const minha = corDe(mt), imagensV = {};
+          for (const [c, outro] of irmaos) {
+            if (c === usado) continue;
+            const img = corDe(outro);
+            if (!img || img === minha) continue;
+            const lida = await abrirImagem(arquivos.get(img), img);
+            if (!lida) continue;
+            const blob = lida.direto ? lida.direto.blob : await new Promise((ok) => lida.tela.toBlob(ok, "image/png"));
+            if (blob) imagensV[(outro.nome || semExt(c)) + (lida.direto && lida.direto.mime === "image/jpeg" ? ".jpg" : ".png")] = blob;
+          }
+          if (Object.keys(imagensV).length) variacoes.push({ nome: "Versões de " + (mt.nome || semExt(usado)), imagens: imagensV });
+        }
+      }
+      for (const n of novos.values()) delete n.userData.matUnity;
       // um pacote com uma textura só e nenhum material ligado: é a textura de tudo
       if (semTextura === novos.size && imagens.length === 1) { const unica = await texturaDoArquivo(imagens[0]); if (unica) for (const n of novos.values()) { n.map = unica; n.color.set(0xffffff); semTextura--; } }
       if (peloNome) avisos.push(`${peloNome} textura(s) foram ligadas pelo nome (o material não dizia qual era): confira as cores em Personagem › Roupas.`);
@@ -718,12 +850,21 @@
         }
       }
       // materiais no estilo das personagens VRoid (MToon)
+      // (com o shader do Unity traduzido, js/shaders.js: realista fica no material padrão; desenho e sem luz, MToon)
       for (const m of json.materials || []) {
         const pbr = m.pbrMetallicRoughness || (m.pbrMetallicRoughness = {}), cor = pbr.baseColorFactor || [1, 1, 1, 1];
+        const sh = (m.extras && m.extras.webcShader) || null;
+        if (m.extras) { delete m.extras.webcShader; if (!Object.keys(m.extras).length) delete m.extras; }
+        if (sh && sh.familia === "pbr") { pbr.metallicFactor = sh.metal ?? 0; pbr.roughnessFactor = sh.rugosidade ?? 0.9; continue; }
         pbr.metallicFactor = 0; pbr.roughnessFactor = 0.9;
-        m.extensions = { ...(m.extensions || {}), VRMC_materials_mtoon: { specVersion: "1.0", transparentWithZWrite: false, renderQueueOffsetNumber: 0,
-          shadeColorFactor: [cor[0] * 0.84, cor[1] * 0.8, cor[2] * 0.86].map((v) => +v.toFixed(4)), ...(pbr.baseColorTexture ? { shadeMultiplyTexture: { index: pbr.baseColorTexture.index } } : {}),
-          shadingShiftFactor: -0.05, shadingToonyFactor: 0.9, giEqualizationFactor: 0.9, outlineWidthMode: "none" } };
+        const sombra = sh && sh.sombra ? sh.sombra : [0.84, 0.8, 0.86], semSombra = sh && sh.semSombra;
+        const mtoon = { specVersion: "1.0", transparentWithZWrite: false, renderQueueOffsetNumber: 0,
+          shadeColorFactor: (semSombra ? cor.slice(0, 3) : [cor[0] * sombra[0], cor[1] * sombra[1], cor[2] * sombra[2]]).map((v) => +Math.min(1, v).toFixed(4)),
+          ...(pbr.baseColorTexture ? { shadeMultiplyTexture: { index: pbr.baseColorTexture.index } } : {}),
+          shadingShiftFactor: semSombra ? -1 : -0.05, shadingToonyFactor: 0.9, giEqualizationFactor: semSombra ? 1 : 0.9, outlineWidthMode: "none" };
+        if (sh && sh.rim) Object.assign(mtoon, { parametricRimColorFactor: sh.rim.cor.map((v) => +Math.min(1, v).toFixed(4)), parametricRimFresnelPowerFactor: sh.rim.potencia, parametricRimLiftFactor: 0, rimLightingMixFactor: 1 });
+        if (sh && sh.contorno) Object.assign(mtoon, { outlineWidthMode: "worldCoordinates", outlineWidthFactor: sh.contorno.largura, outlineColorFactor: sh.contorno.cor.map((v) => +Math.min(1, v).toFixed(4)), outlineLightingMixFactor: 1 });
+        m.extensions = { ...(m.extensions || {}), VRMC_materials_mtoon: mtoon };
       }
       // ossos de pessoa
       const humanBones = {};
@@ -761,7 +902,9 @@
       let triangulos = 0;
       for (const m of malhas) triangulos += m.geometry.index ? m.geometry.index.count / 3 : m.geometry.attributes.position.count / 3;
       return { vrm, nome, avisos,
-        resumo: { modelo: base(principal), pecasJuntas, comoMapeou, ossos: Object.keys(humanBones).length, dedos: Object.keys(humanBones).filter((n) => /Thumb|Index|Middle|Ring|Little/.test(n)).length,
+        variacoes,
+        resumo: { modelo: base(principal), pecasJuntas, comoMapeou, mapaOssos: mapaEscolhido, ossosDoModelo: listaDeOssos,
+          shaders: { traduzidos, nomes: [...shadersUsados].map(([n, f]) => ({ nome: C.shaders.nomeCurto(n), familia: f })) }, pelaCena, variacoes: variacoes.length, ossos: Object.keys(humanBones).length, dedos: Object.keys(humanBones).filter((n) => /Thumb|Index|Middle|Ring|Little/.test(n)).length,
           olhos: !!lookAt, poseEmT: girou > 0.05 ? Math.round(girou * 180 / Math.PI) : 0, altura: +altura.toFixed(2), escala: fator, triangulos: Math.round(triangulos),
           expressoes: Object.keys(preset), atalhos: Object.keys(custom), formas: new Set(todas).size, materiais: novos.size, comTextura: novos.size - Math.max(0, semTextura), doUnity: [...novos.keys()].filter((m) => acharMat(m.name)).length,
           balanco: molas ? molas.resumo : [], tamanho: vrm.size } };

@@ -159,8 +159,9 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
     - **Conta**: entrar, criar conta, meu perfil, editar o perfil, trocar o nome (sem conta), sair e, no aparelho do
       servidor, as contas e o e-mail.
     - **Aparência**: o tema e o idioma.
-    - **Acessibilidade**: tamanho da interface (normal, grande, maior), alto contraste, reduzir animações e mostrar os
-      números das expressões.
+    - **Acessibilidade**: tamanho da interface (normal, grande, maior), alto contraste, reduzir animações, mostrar os
+      números das expressões e a **opacidade do menu e das opções** (100% a 40%: o fundo fica translúcido e dá para
+      ver o jogo atrás; o texto continua inteiro).
   - **Ajustes**
     - **Gráfico**: a resolução do desenho (50%, 75%, 100%), luz e sombras realistas, sombras, as luzes do mapa, a
       qualidade das texturas, o fundo, a foto e a tela cheia.
@@ -231,7 +232,9 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Vídeo numa tela**: veja "Vídeo na tela", abaixo.
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
   personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
-  some por 45 segundos sai da sala (quem fecha a aba sai na hora); uma sala vazia fecha depois de 15 minutos.
+  some por 45 segundos sai da sala (quem fecha a aba sai na hora); uma sala vazia **fecha sozinha** depois de
+  30 segundos (a folga é para quem recarrega a página ou cai e volta). Com um cenário (ou andando), o **céu é do
+  mundo**: um degradê próprio, igual em todos os temas — o tema da pessoa só pinta o fundo do retrato da personagem.
 
 ### Vídeo na tela
 
@@ -488,7 +491,24 @@ movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
   - **Item**: convertido para `.glb` e guardado em *Opções › Itens* (a mochila);
   - **Cenário**: guardado em *Movimento › Cenário* (uma cena `.unity` é montada com cada peça no lugar);
   - **Não importar**: animações, colisores e outras versões da personagem.
-- **Não vêm**: os efeitos dos shaders do Unity (lilToon, Poiyomi: contornos, brilhos, matcaps), as físicas do
+- **Materiais como a cena põe**: quando o pacote traz a cena (ou o prefab) do avatar, cada parte do corpo recebe o
+  `.mat` que o autor pôs ali — e não um parecido pelo nome. As **outras versões** do mesmo material que vêm no pacote
+  (outro tom de pele, outra cor de cabelo: "Pele", "Pele 1", "Pele 2"...) viram **variações** em *Personagem › Roupas*
+  (a textura de cada peça), em vez de se misturarem.
+- **Shaders**: cada material aponta para um shader. Reconhecido (pelo `.shader` que vem no pacote, pelos embutidos do
+  Unity ou pela biblioteca em *Personagem › Shaders do Unity*), ele vira o material do WEBC:
+  - **desenho** (Poiyomi, lilToon, UTS, Sunao, Arktoon, MToon...) → MToon com a **cor da sombra**, o **brilho na
+    borda** (rim), o **contorno** (outline) e o **relevo** (normal map) do material;
+  - **realista** (Standard, Rero Standard, URP/HDRP Lit...) → o material padrão do glTF com **metal** e **rugosidade**;
+  - **sem luz** (Unlit) → MToon sem sombra.
+  A biblioteca: *Personagem › Shaders do Unity › Carregar shaders...* aceita o `.shader` ou o `.unitypackage` dos
+  shaders (só o nome e as propriedades são lidos; o código não roda no navegador) e guarda no aparelho para os
+  próximos avatares que usem esses shaders sem trazê-los. O resumo diz quais shaders foram traduzidos.
+- **Escolher os ossos**: quando o esqueleto não é reconhecido (ossos de nomes que não dizem nada, sem a ficha de
+  pessoa do Unity), abre a janela *Escolher os ossos*: para cada parte do corpo (quadril, coluna, cabeça, braços,
+  pernas...; os obrigatórios com \*), um osso do arquivo, numa lista em árvore. O botão *Escolher os ossos...* do
+  resumo também abre a janela para corrigir um reconhecimento errado.
+- **Não vêm**: os efeitos que dependem do código do shader (glitter, dissolve, AudioLink, matcap e rampa), as físicas do
   VRChat (PhysBones, que ficam no prefab, não no modelo), as animações, os menus e as peças ligadas ou desligadas
   pelo prefab.
 - **Licença**: um pacote do Unity não diz o que o autor deixa fazer, e avatares comprados quase nunca deixam
@@ -910,6 +930,7 @@ js/ktx2.js         texturas KTX2 (Basis Universal): abrir cenários com elas e r
 js/colisao.js      o que segura a pessoa no cenário, e as plantas que dobram com o vento e com quem passa
 js/fisica.js       os objetos com física do mapa: cair, rolar, ser empurrado, pegar (E), jogar, e o mesmo para todos na sala
 js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
+js/shaders.js      os shaders do Unity nos avatares: a família (desenho, realista, sem luz), a biblioteca e a tradução para MToon/PBR
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
@@ -958,6 +979,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_avatar_extras  # avatares: ossos à mão, materiais pela cena, shaders (pacote e biblioteca), peles como variações; opacidade do menu
 python3 tests/testar_navegador.py companhia_texturas  # texturas do cenário: tamanho máximo, JPEG/PNG automático e KTX2 (gravar e abrir)
 python3 tests/testar_navegador.py companhia_fisica  # mundo do Unity sem .fbx: malhas/texturas .asset, colisores, plantas, bola, pegar e jogar
 python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome

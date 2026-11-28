@@ -665,6 +665,21 @@ def _():
     lnux_apps.SALAS[velha["codigo"]].vista -= lnux_apps.SALA_VAZIA + 1
     S.json("GET", "/api/sala/qualquer", **visita)
     assert velha["codigo"] not in lnux_apps.SALAS
+    # todos sumiram (fecharam a aba sem avisar): saem, e a sala fecha depois da folga
+    _, sumida, _ = S.json("POST", "/api/sala", json_corpo={})
+    cs = sumida["codigo"]
+    _, quem, _ = S.json("POST", f"/api/sala/{cs}/entrar", json_corpo={"nome": "Cleo"}, **visita)
+    sala = lnux_apps.SALAS[cs]
+    assert len(sala.pessoas) == 1
+    for j in sala.pessoas.values():
+        j["visto"] -= lnux_apps.SALA_SUMIU + 1
+    sala.vista -= lnux_apps.SALA_SUMIU + 1
+    lnux_apps.salas_limpar(time.time())
+    assert cs in lnux_apps.SALAS and not lnux_apps.SALAS[cs].pessoas  # saiu; a sala espera a folga (quem recarrega a página volta)
+    lnux_apps.SALAS[cs].vista -= lnux_apps.SALA_VAZIA + 1
+    S.json("GET", "/api/sala/qualquer", **visita)
+    assert cs not in lnux_apps.SALAS
+    del quem
     assert S.json("GET", "/api/estado")[1]["recursos"]["salas"] is True
 
 

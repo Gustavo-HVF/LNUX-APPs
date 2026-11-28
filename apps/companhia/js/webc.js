@@ -296,6 +296,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Avatares do Unity: escolha os ossos à mão quando o esqueleto não é reconhecido, os shaders (Poiyomi, lilToon, Standard...) viram sombra, borda, contorno e metal, os materiais vêm como a cena do Unity põe e as outras peles viram variações. E a opacidade do menu, o céu do cenário que não muda com o tema e a sala vazia que fecha sozinha.",
     "Cenários mais leves: as texturas são reduzidas (1024 px por padrão), vão em JPEG onde não há transparência e podem virar KTX2 (comprimidas na placa de vídeo). Cenários com KTX2 abrem.",
     "Mundos do Unity sem .fbx abrem (malhas e texturas guardadas pelo Unity), com a física: só o que tinha colisor segura, as plantas dobram quando você passa, e bolas, copos e enfeites caem, rolam e podem ser pegos (E).",
     "O Y Bot é a personagem de quem não escolhe nenhuma, e o boneco do estúdio de itens (a mão fechada no cabo e o corpo inteiro).",
