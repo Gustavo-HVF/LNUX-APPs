@@ -154,7 +154,7 @@
      * carregarModelo(caminho) → Promise<Object3D> (o modelo inteiro, em metros, com as texturas). Devolve {grupo,
      * colocados, faltaram (modelos que não abriram)}.
      */
-    async montar(arquivos, cena, { carregarModelo, aoProgresso = () => {} } = {}) {
+    async montar(arquivos, cena, { carregarModelo, aoProgresso = () => {}, maiorTextura = 1024 } = {}) {
       const T = window.THREE, guids = arquivos.guids || new Map(), metas = arquivos.metas || new Map();
       const grupo = new T.Group();
       grupo.name = cena.split("/").pop().replace(/\.unity$/i, "");
@@ -187,7 +187,7 @@
         try {
           const blob = arquivos.get(img);
           if (/\.asset$/i.test(img)) {
-            const r = C.unityTextura ? await C.unityTextura.imagem(await blob.text(), previas.get(img)) : null;
+            const r = C.unityTextura ? await C.unityTextura.imagem(await blob.text(), previas.get(img), { maior: maiorTextura }) : null;
             if (r) { tela = r.tela; if (r.como === "lida") texturasLidas++; else texturasPrevia++; }
           } else {
             tela = document.createElement("canvas");

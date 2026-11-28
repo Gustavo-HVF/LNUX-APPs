@@ -670,6 +670,20 @@ mapa aberto em *Cenário › Abrir cenário* é convertido para ele; **Salvar em
 | `.gltf` com `.bin` e texturas soltas, `.glb` | juntados num arquivo só |
 | `.zip`, `.unitypackage` | abertos antes; se houver vários modelos (ou uma cena `.unity`), você escolhe: **montar a cena do Unity**, **todos os modelos lado a lado** ou só um |
 
+**As texturas do cenário convertido** (*Movimento › Cenário › Texturas do cenário convertido*, e na janela de
+conversão; a escolha fica guardada):
+
+| Escolha | O que faz |
+|---|---|
+| **Tamanho máximo** (512, **1024**, 2048, 4096 px) | reduz as texturas maiores que isso (1024 é o padrão; 512 para celular) |
+| **JPEG/PNG automático** (o padrão) | JPEG nas texturas que parecem foto (madeira, pedra, tecido: bem menores) e PNG onde há transparência usada (folhas, grades, vidro) ou áreas lisas (letreiros, logotipos: menores e sem borrão em PNG) |
+| **KTX2** | as texturas viram KTX2 com Basis Universal (`KHR_texture_basisu`): comprimidas na própria placa de vídeo (bem menos memória de vídeo) e o arquivo menor. A cor em ETC1S, o relevo (normal map) em UASTC, com mipmaps. Mais lento para converter (o mapa do Popcorn Palace: ~50 s); o codificador (~3,4 MB) só é baixado na primeira vez. Um `.glb` pronto também pode ser regravado assim |
+| **Como vieram** | PNG, sem reduzir (como antes) |
+
+Cenários que já vêm com texturas **KTX2/Basis** abrem (o transcodificador escolhe o formato que a placa entende). O
+resumo da conversão diz o que foi feito ("Texturas: 3 reduzidas para 1024 px, 12 em JPEG"). Num mundo do Unity, o
+segundo mapa UV (o das luzes assadas, que não vêm) fica de fora: quase 20% a menos no arquivo.
+
 O **leitor próprio de `.blend`** lê o "DNA" que cada arquivo traz (a descrição das estruturas da versão que o
 gravou), então abre arquivos do Blender 2.6 ao 5.x, compactados (gzip ou zstd) ou não. Ele tira: as malhas, a
 posição de cada objeto no mundo (inclusive filhos de outros objetos), o mapa UV, os materiais (cor, rugosidade,
@@ -892,6 +906,7 @@ js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3d
 js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity, os materiais .mat e a física (colisores, Rigidbody, VRC Pickup)
 js/unity-malha.js  as malhas guardadas pelo Unity (Mesh .asset, cruas ou comprimidas)
 js/unity-textura.js as texturas guardadas pelo Unity (Texture2D .asset: RGBA, RGB, DXT1, DXT5; as outras pela miniatura)
+js/ktx2.js         texturas KTX2 (Basis Universal): abrir cenários com elas e regravar um .glb com elas
 js/colisao.js      o que segura a pessoa no cenário, e as plantas que dobram com o vento e com quem passa
 js/fisica.js       os objetos com física do mapa: cair, rolar, ser empurrado, pegar (E), jogar, e o mesmo para todos na sala
 js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
@@ -922,6 +937,8 @@ js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
 modelos/ybot.vrm   o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
+vendor/basis/      o transcodificador Basis Universal (abrir texturas KTX2), do three.js
+vendor/ktx2-codificador.min.js e vendor/ktx2/  o codificador KTX2 (ktx2-encoder + Basis Universal), baixado só ao gravar em KTX2
 vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
                    (MIT, three-vrm-pacote.min.js); MediaPipe Tasks Vision (Apache-2.0, mediapipe-visao.min.js) e o
                    decodificador Draco (Apache-2.0, draco/) — o Cubism Core e os ~30 MB do MediaPipe não vêm junto
@@ -941,6 +958,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_texturas  # texturas do cenário: tamanho máximo, JPEG/PNG automático e KTX2 (gravar e abrir)
 python3 tests/testar_navegador.py companhia_fisica  # mundo do Unity sem .fbx: malhas/texturas .asset, colisores, plantas, bola, pegar e jogar
 python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho

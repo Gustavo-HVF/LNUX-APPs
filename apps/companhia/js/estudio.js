@@ -344,7 +344,8 @@
           cenas.length ? radio("cena", C.t("Montar a cena do Unity (cada modelo no lugar)"), C.t("Como o mundo foi feito no Unity: as peças nos lugares, com os materiais."), true) : null,
           cenas.length > 1 ? sCena : null,
           modelos.length > 1 ? radio("todos", C.t("Todos os modelos juntos ({n}), lado a lado", { n: modelos.length }), C.t("Para ver tudo o que veio no pacote."), !cenas.length) : null,
-          radio("um", C.t("Só um modelo:"), null, !cenas.length && modelos.length === 1), sModelo);
+          radio("um", C.t("Só um modelo:"), null, !cenas.length && modelos.length === 1), sModelo,
+          C.conversor.escolhaTexturas());
         const ok = await LNUX.dialogo({ titulo: "O que vira o cenário?", largo: true, corpo, botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Converter", primario: true, valor: true }] });
         if (!ok) return null;
         const tipo = (corpo.querySelector(`input[name="${nomeRadio}"]:checked`) || {}).value || "um";
@@ -475,6 +476,7 @@
         faixa("Velocidade ao andar", 0.5, 2.5, 0.1, m.cfg.velocidade, (v) => { m.cfg.velocidade = v; m.salvarCfg(); }, (v) => " " + v.toFixed(1) + "×"),
         el("p", { class: "fraco pequeno", style: { margin: 0 } }, "Abre e converte para .glb: " + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ", ZIP e .unitypackage. O .blend é convertido pelo Blender do aparelho (com a ponte) ou, sem ele, pelo leitor próprio."),
         botao("Só converter um mapa para .glb...", converterMapa),
+        C.conversor.escolhaTexturas(),
         el("details", {}, el("summary", {}, "Mapas do VRChat e do Unity"),
           el("p", { class: "fraco pequeno", style: { margin: "8px 0 0" } }, "Um mundo publicado do VRChat (.vrcw) é um pacote fechado do motor Unity e não abre fora dele. O que abre aqui: o cenário exportado em glTF/GLB " +
             "(no Unity, com o UnityGLTF ou \"Export GLB\"), o arquivo .blend do Blender, modelos .fbx, .obj e .dae, um ZIP com o modelo e as texturas, ou o .unitypackage do mundo — o WEBC abre o pacote, " +

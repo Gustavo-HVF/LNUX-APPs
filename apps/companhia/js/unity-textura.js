@@ -7,9 +7,9 @@
  *   - lidos de verdade: Alpha8, RGB24, RGBA32, ARGB32, BGRA32, RGB565, RGBA4444, DXT1 (BC1) e DXT5 (BC3);
  *   - os outros (DXT "crunched", BC7, BC6H, ASTC, ETC...) e os que guardam os bytes fora do arquivo (.resS): entra a
  *     miniatura que o pacote traz ao lado (preview.png, pequena mas com as cores certas), ou nada.
- * As maiores que 1024 são reduzidas (o mapa inteiro precisa caber no .glb).
+ * As maiores que 1024 (ou o tamanho escolhido na conversão) são reduzidas (o mapa inteiro precisa caber no .glb).
  *
- * C.unityTextura = { imagem(texto, previa?) → Promise<{tela, como: "lida"|"previa"}|null>, FORMATOS_LIDOS }
+ * C.unityTextura = { imagem(texto, previa?, {maior}) → Promise<{tela, como: "lida"|"previa"}|null>, FORMATOS_LIDOS }
  */
 (function () {
   "use strict";
@@ -85,14 +85,14 @@
   const FORMATOS_LIDOS = [1, 3, 4, 5, 7, 10, 12, 13, 14];
 
   /** Um canvas com a imagem, reduzido para caber em MAIOR, de cabeça para cima (as linhas do Unity vêm de baixo). */
-  function paraTela(px, w, h) {
+  function paraTela(px, w, h, maior = MAIOR) {
     const t = document.createElement("canvas");
     t.width = w; t.height = h;
     const ctx = t.getContext("2d"), img = new ImageData(w, h), linha = w * 4;
     for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * linha, (h - y) * linha), y * linha);
     ctx.putImageData(img, 0, 0);
-    if (Math.max(w, h) <= MAIOR) return t;
-    const k = MAIOR / Math.max(w, h), r = document.createElement("canvas");
+    if (Math.max(w, h) <= maior) return t;
+    const k = maior / Math.max(w, h), r = document.createElement("canvas");
     r.width = Math.max(1, Math.round(w * k)); r.height = Math.max(1, Math.round(h * k));
     r.getContext("2d").drawImage(t, 0, 0, r.width, r.height);
     return r;
@@ -100,7 +100,7 @@
 
   C.unityTextura = {
     FORMATOS_LIDOS,
-    async imagem(texto, previa = null) {
+    async imagem(texto, previa = null, { maior = MAIOR } = {}) {
       if (/^\s*Texture2D:\s*$/m.test(texto)) {
         const w = +(campo(texto, "m_Width") || 0), h = +(campo(texto, "m_Height") || 0), fmt = +(campo(texto, "m_TextureFormat") || -1);
         const fora = (/m_StreamData:[\s\S]*?path:[ \t]*(\S+)/.exec(texto) || [])[1];
@@ -110,7 +110,7 @@
             const ini = i + 14 + (texto.slice(i + 14, i + 20).match(/^[ \t]*/)[0].length), fim = texto.indexOf("\n", ini);
             const bytes = hexParaBytes(texto.slice(ini, fim < 0 ? undefined : fim), 8 * w * h);
             const px = decodificar(fmt, bytes, w, h);
-            if (px) return { tela: paraTela(px, w, h), como: "lida" };
+            if (px) return { tela: paraTela(px, w, h, maior), como: "lida" };
           }
         }
       }

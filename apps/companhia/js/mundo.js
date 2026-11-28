@@ -800,7 +800,7 @@
           const u = URL.createObjectURL(arquivos.get(principal));
           urls.push(u);
           try { const gltf = await carregador.loadAsync(u); objeto = gltf.scene; objeto.animations = gltf.animations || []; }
-          catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o cenário: " + e.message); }
+          catch (e) { throw new Error("Não consegui abrir o cenário: " + e.message); }
           finally { carregador.soltar(); }
         } else if (tipo === "fbx") {
           objeto = new V.FBXLoader(gerente).parse(await arquivos.get(principal).arrayBuffer(), "");

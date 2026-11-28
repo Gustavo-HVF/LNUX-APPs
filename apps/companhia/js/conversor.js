@@ -241,7 +241,7 @@
       if (tipo === "glb" || tipo === "gltf") {
         const carregador = C.carregadorGLTF(g.gerente); // com o specular/glossiness (vira o material padrão no .glb)
         try { const gltf = await carregador.loadAsync(g.url(principal)); objeto = gltf.scene; objeto.animations = gltf.animations || []; } // as animações do mapa vão junto
-        catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o modelo: " + e.message); }
+        catch (e) { throw new Error("Não consegui abrir o modelo: " + e.message); }
         finally { carregador.soltar(); }
       } else if (tipo === "fbx") objeto = new V.FBXLoader(g.gerente).parse(await blob.arrayBuffer(), "");
       else if (tipo === "obj") {
@@ -364,7 +364,121 @@
     return Math.round(triangulos);
   }
 
+  // ── as texturas: o tamanho, JPEG onde não há transparência e (se a pessoa quiser) KTX2 ──────────────────
+  // texturas: {maior: 512 | 1024 | 2048 | 4096 (px no lado maior), formato: "auto" (JPEG/PNG) | "ktx2" | "original" (como antes: PNG, até 4096)}
+  const PREF_TEXTURAS = "companhia.texturas", TEXTURAS_PADRAO = { maior: 1024, formato: "auto" };
+  function texturasEscolhidas(t) {
+    let p = null;
+    try { p = JSON.parse(LNUX.preferencia.ler(PREF_TEXTURAS, "null")); } catch (e) { p = null; }
+    const r = { ...TEXTURAS_PADRAO, ...(p || {}), ...(t || {}) };
+    if (![512, 1024, 2048, 4096].includes(+r.maior)) r.maior = 1024;
+    if (!["auto", "ktx2", "original"].includes(r.formato)) r.formato = "auto";
+    r.maior = +r.maior;
+    return r;
+  }
+  const CHAVES_TEXTURA = ["map", "emissiveMap", "normalMap", "roughnessMap", "metalnessMap", "aoMap", "alphaMap", "lightMap", "bumpMap", "specularMap"];
+  /**
+   * Prepara as texturas antes de gravar: reduz as maiores que "maior" e marca as que não precisam de transparência para
+   * irem em JPEG (bem menor que PNG para fotos de madeira, pedra, tecido...). PNG fica onde a transparência é usada
+   * (recorte de folhas, grades, vidro). Devolve {total, jpeg, reduzidas}.
+   */
+  function otimizarTexturas(raiz, { maior = 1024, formato = "auto" } = {}) {
+    const usos = new Map(); // textura → precisa de transparência?
+    raiz.traverse((o) => {
+      if (!o.isMesh) return;
+      for (const m of [].concat(o.material || [])) {
+        if (!m) continue;
+        for (const k of CHAVES_TEXTURA) {
+          const t = m[k];
+          if (!t || !t.isTexture) continue;
+          const alfa = (k === "map" || k === "alphaMap") && (m.transparent || m.alphaTest > 0);
+          usos.set(t, (usos.get(t) || false) || alfa);
+        }
+      }
+    });
+    let jpeg = 0, reduzidas = 0;
+    const amostra = document.createElement("canvas");
+    amostra.width = amostra.height = 64;
+    const ctxA = amostra.getContext("2d", { willReadFrequently: true });
+    for (const [t, querAlfa] of usos) {
+      if (t.isCompressedTexture || t.isDataTexture) continue; // o exportador descomprime e reduz (maxTextureSize)
+      const img = t.image;
+      const w = img && (img.naturalWidth || img.videoWidth || img.width), h = img && (img.naturalHeight || img.videoHeight || img.height);
+      if (!w || !h || typeof img.getContext !== "function" && !(img instanceof ImageBitmap) && !(typeof HTMLImageElement !== "undefined" && img instanceof HTMLImageElement)) continue;
+      if (formato !== "original" && Math.max(w, h) > maior) {
+        const k = maior / Math.max(w, h), c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(h * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        t.image = c;
+        t.needsUpdate = true;
+        reduzidas++;
+      }
+      if (formato === "original") continue;
+      // numa amostra (64 × 64, do meio da imagem, sem reduzir): tem pixels transparentes? e é "foto" (os vizinhos
+      // variam: madeira, pedra, tecido — bem menor em JPEG) ou "desenho" (áreas lisas: logotipo, letreiro, cor
+      // lisa — menor e sem borrão em PNG)?
+      let temAlfa = false, foto = false;
+      try {
+        const iw = t.image.width, ih = t.image.height, sx = Math.max(0, (iw - 64) / 2), sy = Math.max(0, (ih - 64) / 2);
+        ctxA.clearRect(0, 0, 64, 64);
+        ctxA.drawImage(t.image, sx, sy, Math.min(64, iw), Math.min(64, ih), 0, 0, Math.min(64, iw), Math.min(64, ih));
+        const d = ctxA.getImageData(0, 0, Math.min(64, iw), Math.min(64, ih)).data, larg = Math.min(64, iw);
+        let pares = 0, variam = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 250) temAlfa = true;
+          if ((i / 4) % larg === larg - 1) continue;
+          const dif = Math.abs(d[i] - d[i + 4]) + Math.abs(d[i + 1] - d[i + 5]) + Math.abs(d[i + 2] - d[i + 6]);
+          pares++;
+          if (dif > 6) variam++;
+        }
+        foto = pares > 0 && variam / pares > 0.25;
+      } catch (e) { temAlfa = true; }
+      if (!(querAlfa && temAlfa) && foto) { t.userData.mimeType = "image/jpeg"; jpeg++; }
+    }
+    return { total: usos.size, jpeg, reduzidas };
+  }
+  /** Grava a cena em .glb com as escolhas de textura (e, se for KTX2, regrava as imagens). Devolve {glb, info}. */
+  async function gravarGLB(cena, texturas, { animacoes = [], aoProgresso = () => {} } = {}) {
+    const V = window.CompanhiaVRM, t = texturasEscolhidas(texturas);
+    const info = otimizarTexturas(cena, t);
+    const exp = new V.GLTFExporter();
+    if (V.TextureUtils && exp.setTextureUtils) exp.setTextureUtils(V.TextureUtils); // texturas KTX2 de um mapa que já veio assim
+    let saida = await exp.parseAsync(cena, { binary: true, onlyVisible: true, maxTextureSize: t.formato === "original" ? 4096 : t.maior, animations: animacoes });
+    if (t.formato === "ktx2" && C.ktx2) {
+      const r = await C.ktx2.glbComKTX2(saida, { aoProgresso });
+      saida = r.buffer;
+      info.ktx2 = { convertidas: r.convertidas, antes: r.antes, depois: r.depois };
+    }
+    info.escolha = t;
+    return { glb: new Blob([saida], { type: "model/gltf-binary" }), info };
+  }
+  /** O aviso do que foi feito com as texturas (para o resumo da conversão). */
+  function avisoTexturas(info) {
+    if (!info || !info.total) return null;
+    const t = info.escolha, partes = [];
+    if (t.formato === "original") return null;
+    if (info.reduzidas) partes.push(C.t("{n} reduzida(s) para {px} px", { n: info.reduzidas, px: t.maior }));
+    if (info.ktx2 && info.ktx2.convertidas) partes.push(C.t("{n} em KTX2 ({antes} → {depois})", { n: info.ktx2.convertidas, antes: LNUX.bytes(info.ktx2.antes), depois: LNUX.bytes(info.ktx2.depois) }));
+    else if (info.jpeg) partes.push(C.t("{n} em JPEG (sem transparência)", { n: info.jpeg }));
+    return partes.length ? C.t("Texturas: {lista}.", { lista: partes.join(", ") }) : null;
+  }
+  /** A escolha das texturas na tela (tamanho e formato), guardada para as próximas conversões. */
+  function escolhaTexturas() {
+    const { el } = LNUX, t = texturasEscolhidas();
+    const gravar = () => { try { LNUX.preferencia.gravar(PREF_TEXTURAS, JSON.stringify({ maior: +tam.value, formato: fmt.value })); } catch (e) { /* sem armazenamento */ } };
+    const tam = el("select", { class: "lnux-selecao", "aria-label": C.t("Tamanho máximo das texturas"), "data-texturas": "maior", onchange: gravar },
+      [[512, "512 px (leve, celular)"], [1024, "1024 px (recomendado)"], [2048, "2048 px (mais nítido)"], [4096, "4096 px (máximo)"]].map(([v, r]) => el("option", { value: v, selected: v === t.maior }, C.t(r))));
+    const fmt = el("select", { class: "lnux-selecao", "aria-label": C.t("Formato das texturas"), "data-texturas": "formato", onchange: gravar },
+      [["auto", "JPEG/PNG automático (recomendado)"], ["ktx2", "KTX2 (comprimida na placa de vídeo; mais lento para converter)"], ["original", "Como vieram (PNG, sem reduzir)"]].map(([v, r]) => el("option", { value: v, selected: v === t.formato }, C.t(r))));
+    return el("details", { class: "escolha-texturas" }, el("summary", {}, C.t("Texturas do cenário convertido")),
+      el("div", { class: "ajustes", style: { marginTop: "8px" } },
+        el("label", { class: "lnux-campo" }, el("span", {}, C.t("Tamanho máximo")), tam),
+        el("label", { class: "lnux-campo" }, el("span", {}, C.t("Formato")), fmt),
+        el("p", { class: "fraco pequeno", style: { margin: 0 } }, C.t("JPEG onde não há transparência e PNG onde há (folhas, grades, vidro). KTX2 ocupa menos memória de vídeo e o arquivo fica menor; baixa um codificador de uns 3 MB na primeira vez."))));
+  }
+
   C.conversor = {
+    texturasEscolhidas, escolhaTexturas, otimizarTexturas,
     FORMATOS, MODELO, ligarTexturas,
     ACEITAR: FORMATOS.map((f) => "." + f[0]).join(",") + ",.mtl,.bin,.zip,.unitypackage,.png,.jpg,.jpeg,.webp,.bmp,.vrcw",
     /** Os modelos de um pacote, do mais provável para o menos (o .blend na frente; depois o maior). */
@@ -376,7 +490,7 @@
      * Junta vários modelos num .glb só: a cena do Unity montada (opcoes.cena: o caminho do .unity, js/unity-cena.js) ou
      * todos os modelos lado a lado (opcoes.modelos). Devolve {glb, triangulos, avisos, como, colocados}.
      */
-    async juntarGLB(arquivos, { cena = null, modelos = null, aoProgresso = () => {} } = {}) {
+    async juntarGLB(arquivos, { cena = null, modelos = null, aoProgresso = () => {}, texturas = null } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
       const carregarModelo = async (caminho) => {
@@ -390,7 +504,7 @@
       let colocados = 0, como = "", fisica = null;
       if (cena) {
         aoProgresso(0.1, "Montando a cena do Unity...");
-        const r = await C.unityCena.montar(arquivos, cena, { carregarModelo, aoProgresso: (f) => aoProgresso(0.1 + f * 0.6, "Montando a cena do Unity...") });
+        const r = await C.unityCena.montar(arquivos, cena, { carregarModelo, maiorTextura: Math.max(1024, texturasEscolhidas(texturas).maior), aoProgresso: (f) => aoProgresso(0.1 + f * 0.6, "Montando a cena do Unity...") });
         raiz.add(r.grupo);
         colocados = r.colocados;
         if (r.faltaram.length) avisos.push(`${r.faltaram.length} modelo(s) da cena não abriram: ${r.faltaram.slice(0, 5).join(", ")}${r.faltaram.length > 5 ? "..." : ""}.`);
@@ -426,14 +540,17 @@
       const cenaT = new T.Scene();
       cenaT.add(raiz);
       cenaT.updateMatrixWorld(true);
-      const saida = await new V.GLTFExporter().parseAsync(cenaT, { binary: true, onlyVisible: true, maxTextureSize: 4096 });
-      return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como, colocados, fisica };
+      const { glb, info } = await gravarGLB(cenaT, texturas, { aoProgresso: (f, t) => aoProgresso(0.8 + f * 0.19, t) });
+      const av = avisoTexturas(info);
+      if (av) avisos.push(av);
+      void V;
+      return { glb, triangulos, avisos, como, colocados, fisica, texturas: info };
     },
     /**
      * Converte um modelo para .glb. arquivos: Map caminho → Blob (o modelo e o que vier ao lado dele).
      * Devolve {glb: Blob, triangulos, avisos: [texto], como: texto}.
      */
-    async paraGLB(arquivos, principal, { aoProgresso = () => {}, personagem = false } = {}) {
+    async paraGLB(arquivos, principal, { aoProgresso = () => {}, personagem = false, texturas = null } = {}) {
       await C.prepararVRM();
       const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
       const tipo = ext(principal), blob = arquivos.get(principal);
@@ -443,12 +560,22 @@
         // material specular/glossiness (exportações antigas do Sketchfab): escreve a alternativa padrão, que todo programa abre
         const padrao = C.glbSemEspecular(await blob.arrayBuffer());
         if (padrao) avisos.push("Os materiais specular/glossiness (exportações antigas do Sketchfab) ganharam a versão padrão: as texturas aparecem em qualquer programa.");
-        return { glb: padrao ? new Blob([padrao], { type: "model/gltf-binary" }) : blob, triangulos: null, avisos, como: "já estava em .glb" };
+        let pronto = padrao || null;
+        // KTX2 escolhido: as imagens de dentro do .glb são regravadas (o resto do arquivo fica como estava)
+        if (!personagem && texturasEscolhidas(texturas).formato === "ktx2" && C.ktx2) {
+          const r = await C.ktx2.glbComKTX2(pronto || (await blob.arrayBuffer()), { aoProgresso });
+          if (r.convertidas) { pronto = r.buffer; avisos.push(avisoTexturas({ total: r.convertidas, escolha: texturasEscolhidas(texturas), ktx2: r })); }
+        }
+        return { glb: pronto ? new Blob([pronto], { type: "model/gltf-binary" }) : blob, triangulos: null, avisos, como: "já estava em .glb" };
       }
       if (tipo === "blend" && !personagem) { // (uma personagem passa pelo leitor próprio: ele refaz o esqueleto e mantém os pesos)
         let pronto = null;
         try { pronto = await blendPelaPonte(principal, blob, arquivos, aoProgresso); }
         catch (e) { avisos.push("O Blender do aparelho não conseguiu (" + e.message + "); usei o leitor próprio."); }
+        if (pronto && texturasEscolhidas(texturas).formato === "ktx2" && C.ktx2) {
+          const r = await C.ktx2.glbComKTX2(await pronto.arrayBuffer(), { aoProgresso });
+          if (r.convertidas) { pronto = new Blob([r.buffer], { type: "model/gltf-binary" }); avisos.push(avisoTexturas({ total: r.convertidas, escolha: texturasEscolhidas(texturas), ktx2: r })); }
+        }
         if (pronto) return { glb: pronto, triangulos: null, avisos, como: "pelo Blender do aparelho" };
       }
       aoProgresso(0.2, "Lendo o modelo...");
@@ -460,12 +587,15 @@
       const cena = new T.Scene();
       cena.add(objeto);
       cena.updateMatrixWorld(true);
-      const saida = await new V.GLTFExporter().parseAsync(cena, { binary: true, onlyVisible: true, maxTextureSize: 4096, animations: objeto.animations || [] });
-      if (personagem) return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como: "pelo leitor próprio de .blend" };
+      // (uma personagem segue para o conversor de VRM: as texturas ficam como estão)
+      const { glb, info } = await gravarGLB(cena, personagem ? { formato: "original" } : texturas, { animacoes: objeto.animations || [], aoProgresso: (f, t) => aoProgresso(0.7 + f * 0.29, t) });
+      if (personagem) return { glb, triangulos, avisos, como: "pelo leitor próprio de .blend" };
+      const av = avisoTexturas(info);
+      if (av) avisos.push(av);
       const nAnim = (objeto.animations || []).length;
       if (nAnim) avisos.push(nAnim === 1 ? C.t("Com 1 animação: ela toca no jogo.") : C.t("Com {n} animações: elas tocam no jogo.", { n: nAnim }));
       objeto.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); for (const m of [].concat(o.material)) { if (m.map) m.map.dispose(); m.dispose(); } } });
-      return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como: tipo === "blend" ? "pelo leitor próprio de .blend" : "de ." + tipo };
+      return { glb, triangulos, avisos, como: tipo === "blend" ? "pelo leitor próprio de .blend" : "de ." + tipo, texturas: info };
     },
   };
 })();
