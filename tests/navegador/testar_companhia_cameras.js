@@ -127,6 +127,19 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     ok(caido.ativo && caido.estado === "caido" && caido.quadril < pe0 + 0.45 && caido.cabeca < pe0 + 0.6,
       `R: cai como boneco de pano e fica no chão (quadril a ${(caido.quadril - pe0).toFixed(2)} m, cabeça a ${(caido.cabeca - pe0).toFixed(2)} m do chão)`);
     ok(caido.sala.e === "caido" && caido.sala.pose && Object.keys(caido.sala.pose).length >= 12 && Array.isArray(caido.sala.qd), "a pose do corpo caído vai para as outras pessoas da sala");
+    const corpo = await ev(() => window.Companhia.palco.mundo.ragdoll.penetracao());
+    ok(corpo < 0.03, `caído, o corpo não entra em si mesmo (o pior encontro entre partes: ${(corpo * 100).toFixed(1)} cm dentro)`);
+    // alguém da sala anda por cima do corpo caído: ele é empurrado e arrastado na direção em que a pessoa anda
+    const arrastado = await ev(() => new Promise((ok) => {
+      const p = window.Companhia.palco, m = p.mundo, r = m.ragdoll, c0 = r.centro(new THREE.Vector3());
+      const outra = { p: c0.clone().add(new THREE.Vector3(-1.2, 0, 0)).setY(c0.y - 0.3), raio: 0.26, altura: 1.6, vel: new THREE.Vector3(1.8, 0, 0), caido: false };
+      const antes = m.outros;
+      m.outros = () => [outra];
+      const t0 = performance.now();
+      const andar = () => { const dt = (performance.now() - t0) / 1000; outra.p.x = c0.x - 1.2 + Math.min(2.4, dt * 1.8); if (dt < 1.6) requestAnimationFrame(andar); else { m.outros = antes; setTimeout(() => { const c1 = r.centro(new THREE.Vector3()); ok({ dx: c1.x - c0.x, ativo: r.ativo }); }, 300); } };
+      andar();
+    }));
+    ok(arrastado.ativo && arrastado.dx > 0.25, `quem passa por cima do corpo caído o arrasta junto (andou ${arrastado.dx.toFixed(2)} m na direção da pessoa)`);
     await pagina.keyboard.press("KeyR");
     await pagina.waitForTimeout(1200);
     const depe = await ev(() => { const p = window.Companhia.palco; return { ativo: p.mundo.ragdoll.ativo, cabeca: p.posicao("head").y - p.raiz.position.y, altura: p.mundo.altura }; });

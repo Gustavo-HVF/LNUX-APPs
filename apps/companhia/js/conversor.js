@@ -263,6 +263,72 @@
     return objeto;
   }
 
+  /**
+   * Os materiais sem textura ganham a dela: pelo material do Unity (.mat, achado pela ficha .meta do modelo ou pelo
+   * nome) ou pelo nome da imagem que mais combina (js/texturas.js). TGA e PSD também abrem. Devolve quantas ligou.
+   */
+  async function ligarTexturas(objeto, arquivos, principal, tipo, avisos) {
+    const T = window.THREE, A = C.avatar;
+    const imagens = [...arquivos.keys()].filter((n) => /\.(png|jpe?g|webp|bmp|gif|tga|psd)$/i.test(n) && !/(^|\/)(__MACOSX|\.)/.test(n));
+    if (!imagens.length || !C.texturas) return 0;
+    const metas = arquivos.metas || new Map(), guids = arquivos.guids || new Map();
+    const meta = A && metas.has(principal) ? A.lerMetaDoModelo(metas.get(principal)) : { materiais: {} };
+    const liso = (n) => base(n).replace(/\.[^.]+$/, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const matsPorNome = new Map([...arquivos.keys()].filter((n) => /\.mat$/i.test(n)).map((n) => [liso(n), n]));
+    const lidos = new Map();
+    const lerMat = async (caminho) => { if (!lidos.has(caminho)) { try { lidos.set(caminho, A.lerMat(await arquivos.get(caminho).text())); } catch (e) { lidos.set(caminho, null); } } return lidos.get(caminho); };
+    const texturas = new Map(), usadas = new Set(), virar = tipo !== "glb" && tipo !== "gltf";
+    const abrir = async (caminho) => {
+      if (texturas.has(caminho)) return texturas.get(caminho);
+      let tex = null;
+      try {
+        const blob = arquivos.get(caminho), tela = document.createElement("canvas");
+        if (/\.(tga|psd)$/i.test(caminho) && A) {
+          const d = new Uint8Array(await blob.arrayBuffer()), img = /\.psd$/i.test(caminho) ? A.lerPSD(d) : A.lerTGA(d);
+          tela.width = img.width; tela.height = img.height; tela.getContext("2d").putImageData(img, 0, 0);
+        } else { const bmp = await createImageBitmap(blob); tela.width = bmp.width; tela.height = bmp.height; tela.getContext("2d").drawImage(bmp, 0, 0); bmp.close(); }
+        tex = new T.CanvasTexture(tela);
+        tex.colorSpace = T.SRGBColorSpace;
+        tex.wrapS = tex.wrapT = T.RepeatWrapping;
+        tex.flipY = virar;
+        tex.name = base(caminho);
+      } catch (e) { tex = null; }
+      texturas.set(caminho, tex);
+      return tex;
+    };
+    let porMat = 0, porNome = 0;
+    const feitos = new Set();
+    const malhas = [];
+    objeto.traverse((o) => { if (o.isMesh) malhas.push(o); });
+    for (const o of malhas) {
+      for (const m of [].concat(o.material || [])) {
+        if (!m || feitos.has(m) || (m.map && m.map.image && (m.map.image.width || 0) > 1)) continue;
+        feitos.add(m);
+        let caminho = null;
+        // 1. o .mat do Unity (pela ficha do modelo ou pelo nome)
+        const g = meta.materiais[m.name], doMeta = g && guids.has(g) ? guids.get(g) : null;
+        const camMat = doMeta && /\.mat$/i.test(doMeta) ? doMeta : matsPorNome.get(liso(m.name || ""));
+        if (camMat && A) {
+          const mat = await lerMat(camMat);
+          const c = mat && C.texturas.doMaterialUnity(mat.texturas, (x) => guids.has(x) && imagens.includes(guids.get(x)));
+          if (c && c.cor) { caminho = guids.get(c.cor); porMat++; }
+        }
+        // 2. pelo nome
+        if (!caminho) { caminho = C.texturas.melhorPara(m.name || "", imagens, { usadas }); if (caminho) porNome++; }
+        if (!caminho) continue;
+        const tex = await abrir(caminho);
+        if (!tex) continue;
+        usadas.add(caminho);
+        m.map = tex;
+        if (m.color) m.color.set(0xffffff);
+        m.needsUpdate = true;
+      }
+    }
+    if (porMat) avisos.push(`${porMat} material(is) ganharam a textura pelos materiais do Unity (.mat).`);
+    if (porNome) avisos.push(`${porNome} material(is) ganharam a textura pelo nome da imagem (o modelo não dizia qual era).`);
+    return porMat + porNome;
+  }
+
   /** Deixa a cena pronta para virar glTF: só malhas, com materiais que o glTF entende. Devolve o número de triângulos. */
   function preparar(objeto) {
     const T = window.THREE, tirar = [], trocados = new Map();
@@ -299,12 +365,66 @@
   }
 
   C.conversor = {
-    FORMATOS, MODELO,
+    FORMATOS, MODELO, ligarTexturas,
     ACEITAR: FORMATOS.map((f) => "." + f[0]).join(",") + ",.mtl,.bin,.zip,.unitypackage,.png,.jpg,.jpeg,.webp,.bmp,.vrcw",
     /** Os modelos de um pacote, do mais provável para o menos (o .blend na frente; depois o maior). */
     modelos(arquivos) {
       const ordem = FORMATOS.map((f) => f[0]);
       return [...arquivos.keys()].filter((n) => MODELO.test(n)).sort((a, b) => (ext(a) === "blend" ? 0 : 1) - (ext(b) === "blend" ? 0 : 1) || arquivos.get(b).size - arquivos.get(a).size || ordem.indexOf(ext(a)) - ordem.indexOf(ext(b)));
+    },
+    /**
+     * Junta vários modelos num .glb só: a cena do Unity montada (opcoes.cena: o caminho do .unity, js/unity-cena.js) ou
+     * todos os modelos lado a lado (opcoes.modelos). Devolve {glb, triangulos, avisos, como, colocados}.
+     */
+    async juntarGLB(arquivos, { cena = null, modelos = null, aoProgresso = () => {} } = {}) {
+      await C.prepararVRM();
+      const T = window.THREE, V = window.CompanhiaVRM, avisos = [];
+      const carregarModelo = async (caminho) => {
+        const tipo = ext(caminho), aviso = [];
+        const o = await carregar(arquivos, caminho, aviso);
+        if (tipo !== "blend" && tipo !== "glb" && tipo !== "gltf") await ligarTexturas(o, arquivos, caminho, tipo, aviso);
+        return o;
+      };
+      const raiz = new T.Group();
+      raiz.name = "Cenário";
+      let colocados = 0, como = "";
+      if (cena) {
+        aoProgresso(0.1, "Montando a cena do Unity...");
+        const r = await C.unityCena.montar(arquivos, cena, { carregarModelo, aoProgresso: (f) => aoProgresso(0.1 + f * 0.6, "Montando a cena do Unity...") });
+        raiz.add(r.grupo);
+        colocados = r.colocados;
+        if (r.faltaram.length) avisos.push(`${r.faltaram.length} modelo(s) da cena não abriram: ${r.faltaram.slice(0, 5).join(", ")}${r.faltaram.length > 5 ? "..." : ""}.`);
+        if (!colocados) throw new Error("A cena do Unity não tem nenhum modelo que eu consiga pôr no lugar (só terreno, luzes ou peças de fora do pacote).");
+        como = "montando a cena do Unity";
+      } else {
+        // lado a lado, numa fileira, com um espaço entre eles
+        let x = 0;
+        for (let i = 0; i < modelos.length; i++) {
+          aoProgresso(0.1 + 0.6 * i / modelos.length, `Abrindo ${base(modelos[i])}...`);
+          let o;
+          try { o = await carregarModelo(modelos[i]); } catch (e) { avisos.push(`${base(modelos[i])} não abriu: ${e.message}`); continue; }
+          const g = new T.Group();
+          g.name = base(modelos[i]).replace(/\.[^.]+$/, "");
+          g.add(o);
+          if (ext(modelos[i]) === "fbx") g.scale.setScalar((o.userData.unitScaleFactor || 1) / 100);
+          g.updateMatrixWorld(true);
+          const caixa = new T.Box3().setFromObject(g), tam = caixa.getSize(new T.Vector3());
+          if (caixa.isEmpty()) continue;
+          g.position.set(x - caixa.min.x, -caixa.min.y, -(caixa.min.z + caixa.max.z) / 2);
+          x += tam.x + 0.5;
+          raiz.add(g);
+          colocados++;
+        }
+        if (!colocados) throw new Error("Nenhum dos modelos abriu.");
+        como = `com ${colocados} modelos lado a lado`;
+      }
+      const triangulos = preparar(raiz);
+      aoProgresso(0.8, "Gravando o .glb...");
+      const cenaT = new T.Scene();
+      cenaT.add(raiz);
+      cenaT.updateMatrixWorld(true);
+      const saida = await new V.GLTFExporter().parseAsync(cenaT, { binary: true, onlyVisible: true, maxTextureSize: 4096 });
+      return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como, colocados };
     },
     /**
      * Converte um modelo para .glb. arquivos: Map caminho → Blob (o modelo e o que vier ao lado dele).
@@ -330,6 +450,7 @@
       }
       aoProgresso(0.2, "Lendo o modelo...");
       const objeto = await carregar(arquivos, principal, avisos, { personagem });
+      if (tipo !== "blend" && tipo !== "glb" && tipo !== "gltf") await ligarTexturas(objeto, arquivos, principal, tipo, avisos);
       const triangulos = preparar(objeto);
       if (!triangulos) throw new Error("Esse arquivo não tem nenhuma malha (só câmeras, luzes ou pontos).");
       aoProgresso(0.7, "Gravando o .glb...");

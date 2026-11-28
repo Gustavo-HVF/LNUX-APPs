@@ -328,21 +328,36 @@
         LNUX.dialogo({ titulo: "Esse arquivo não abre aqui", corpo: e.message, largo: true, botoes: [{ rotulo: "Entendi", primario: true, valor: true }] });
         return null;
       }
-      const modelos = C.conversor.modelos(arquivos);
+      const modelos = C.conversor.modelos(arquivos), cenas = C.unityCena ? C.unityCena.cenas(arquivos) : [];
       if (!modelos.length) { LNUX.aviso("Não achei um modelo 3D nesses arquivos (" + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ").", "alerta", 8000); return null; }
-      let principal = modelos[0];
-      if (modelos.length > 1) {
-        const s = el("select", { class: "lnux-selecao", size: Math.min(10, modelos.length), style: { width: "100%" } }, modelos.map((m, i) => el("option", { value: m, selected: i === 0 }, `${m} (${LNUX.bytes(arquivos.get(m).size)})`)));
-        const ok = await LNUX.dialogo({ titulo: "Qual modelo é o cenário?", largo: true, corpo: el("div", { class: "ajustes" },
-          el("p", { class: "fraco", style: { margin: 0 } }, C.t("O pacote tem {n} modelos. Escolha o que é o mapa (em geral, o maior). Os outros (objetos soltos) não são colocados.", { n: modelos.length })), s),
-          botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Converter", primario: true, valor: true }] });
+      // vários modelos (ou uma cena do Unity): montar a cena, juntar todos ou escolher um
+      let escolha = { tipo: "um", modelo: modelos[0] };
+      if (modelos.length > 1 || cenas.length) {
+        const nomeRadio = "conv-" + Math.random().toString(36).slice(2, 7);
+        const radio = (valor, rotulo, dica, marcado) => el("label", { class: "lnux-alternar", style: { alignItems: "flex-start" } },
+          el("input", { type: "radio", name: nomeRadio, value: valor, checked: marcado, "data-escolha": valor }), el("span", {}, el("b", {}, rotulo), dica ? el("span", { class: "fraco pequeno", style: { display: "block" } }, dica) : null));
+        const sCena = el("select", { class: "lnux-selecao", "aria-label": "Cena do Unity" }, cenas.map((c) => el("option", { value: c }, c.split("/").pop())));
+        const sModelo = el("select", { class: "lnux-selecao", size: Math.min(8, modelos.length), style: { width: "100%" }, "aria-label": "Modelo" }, modelos.map((m, i) => el("option", { value: m, selected: i === 0 }, `${m} (${LNUX.bytes(arquivos.get(m).size)})`)));
+        const corpo = el("div", { class: "ajustes", id: "conversao-escolha" },
+          el("p", { class: "fraco", style: { margin: 0 } }, C.t("O pacote tem {n} modelos{cena}. O que vira o cenário?", { n: modelos.length, cena: cenas.length ? C.t(" e {c} cena(s) do Unity", { c: cenas.length }) : "" })),
+          cenas.length ? radio("cena", C.t("Montar a cena do Unity (cada modelo no lugar)"), C.t("Como o mundo foi feito no Unity: as peças nos lugares, com os materiais."), true) : null,
+          cenas.length > 1 ? sCena : null,
+          modelos.length > 1 ? radio("todos", C.t("Todos os modelos juntos ({n}), lado a lado", { n: modelos.length }), C.t("Para ver tudo o que veio no pacote."), !cenas.length) : null,
+          radio("um", C.t("Só um modelo:"), null, !cenas.length && modelos.length === 1), sModelo);
+        const ok = await LNUX.dialogo({ titulo: "O que vira o cenário?", largo: true, corpo, botoes: [{ rotulo: "Cancelar", valor: false }, { rotulo: "Converter", primario: true, valor: true }] });
         if (!ok) return null;
-        principal = s.value || modelos[0];
+        const tipo = (corpo.querySelector(`input[name="${nomeRadio}"]:checked`) || {}).value || "um";
+        escolha = { tipo, modelo: sModelo.value || modelos[0], cena: sCena.value || cenas[0] };
       }
       const prog = LNUX.progresso("Convertendo para .glb");
       try {
-        const r = await C.conversor.paraGLB(arquivos, principal, { aoProgresso: (f, t) => prog.definir(f, t) });
-        return { ...r, nome: nome || LNUX.nomeSemExtensao(principal.split("/").pop()), origem: principal };
+        if (escolha.tipo === "cena" || escolha.tipo === "todos") {
+          const r = await C.conversor.juntarGLB(arquivos, { cena: escolha.tipo === "cena" ? escolha.cena : null, modelos: escolha.tipo === "todos" ? modelos : null, aoProgresso: (f, t) => prog.definir(f, t) });
+          const nomeBase = escolha.tipo === "cena" ? escolha.cena.split("/").pop().replace(/\.unity$/i, "") : LNUX.nomeSemExtensao(modelos[0].split("/").pop());
+          return { ...r, nome: nome || nomeBase, origem: escolha.tipo === "cena" ? escolha.cena : modelos[0] };
+        }
+        const r = await C.conversor.paraGLB(arquivos, escolha.modelo, { aoProgresso: (f, t) => prog.definir(f, t) });
+        return { ...r, nome: nome || LNUX.nomeSemExtensao(escolha.modelo.split("/").pop()), origem: escolha.modelo };
       } finally { prog.fechar(); }
     }
     const avisarConversao = (r) => {

@@ -585,6 +585,7 @@
       if (!this.outros || this.voando) return;
       const raiz = this.palco.raiz, p = raiz.position;
       for (const o of this.outros()) {
+        if (o.caido) continue; // quem está caído (boneco de pano) não segura ninguém: dá para passar por cima e arrastar
         if (Math.abs(p.y - o.p.y) > Math.max(this.altura, o.altura) * 0.9) continue; // um em cima do outro (num andar de cima)
         const dx = p.x - o.p.x, dz = p.z - o.p.z, dist = Math.hypot(dx, dz), raio = this.raio + o.raio;
         if (dist >= raio) continue;
@@ -912,12 +913,18 @@
           e.explicacao = true;
           throw e;
         }
-        if (/\.unity$/i.test(nome)) { const e = new Error("Uma cena do Unity (.unity) só diz onde cada peça fica; os modelos estão em outros arquivos. Exporte a cena em glTF/GLB (UnityGLTF) e abra o .glb aqui."); e.explicacao = true; throw e; }
+        if (/\.unity$/i.test(nome) && arquivos.size === 1) { const e = new Error("Uma cena do Unity (.unity) só diz onde cada peça fica; os modelos estão em outros arquivos. Exporte a cena em glTF/GLB (UnityGLTF) e abra o .glb aqui."); e.explicacao = true; throw e; }
         if (/\.zip$/i.test(nome)) for (const [c, b] of await LNUX.Zip.ler(blob)) saida.set(c, b);
-        else if (/\.unitypackage$/i.test(nome)) for (const [c, b] of await C.lerUnityPackage(blob)) saida.set(c, b);
-        else saida.set(nome, blob);
+        else if (/\.unitypackage$/i.test(nome)) {
+          // a ficha (.meta) e os guids de cada arquivo vão junto: a cena (.unity), os prefabs e os materiais (.mat) usam
+          const pacote = await C.lerUnityPackage(blob);
+          for (const [c, b] of pacote) saida.set(c, b);
+          saida.metas = new Map([...(saida.metas || []), ...pacote.metas]);
+          saida.guids = new Map([...(saida.guids || []), ...pacote.guids]);
+        } else saida.set(nome, blob);
       }
-      for (const n of [...saida.keys()]) if (/(^|\/)(__MACOSX|\.DS_Store)/.test(n) || /\.(meta|cs|shader|mat|prefab|unity|asset|anim|controller|dll)$/i.test(n)) saida.delete(n);
+      // ficam as cenas, os prefabs e os materiais do Unity (montar a cena e achar as texturas); o resto do Unity sai
+      for (const n of [...saida.keys()]) if (/(^|\/)(__MACOSX|\.DS_Store)/.test(n) || /\.(meta|cs|shader|asset|anim|controller|dll|overrideController|mask|physicMaterial|lighting|cginc|hlsl)$/i.test(n)) saida.delete(n);
       return saida;
     },
     modelos(arquivos) { return C.conversor.modelos(arquivos); },

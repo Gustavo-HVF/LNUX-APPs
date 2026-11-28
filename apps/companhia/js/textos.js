@@ -450,7 +450,7 @@
     "Você está na sua sala: o tamanho, o giro, a posição e o começo do cenário vão para todos. Para trocar o cenário, use Sala › Trocar o cenário da sala.": ["You're in your room: the map's size, rotation, position and start point apply to everyone. To change the map, use Rooms › Change the room map.", "自分のルームにいます。マップのサイズ・回転・位置・スタート地点は全員に反映されます。マップを変えるには「ルーム › ルームのマップを変更」を使ってください。"],
     "Cenário \"{nome}\": {n} triângulos, {x} × {z} m.": ["Map \"{nome}\": {n} triangles, {x} × {z} m.", "マップ「{nome}」: {n} ポリゴン、{x} × {z} m。"],
     "Qual modelo é o cenário?": ["Which model is the map?", "どのモデルがマップですか？"], "O pacote tem {n} modelos. Escolha o que é o mapa (em geral, o maior). Os outros (objetos soltos) não são colocados.": ["The package has {n} models. Choose the one that is the map (usually the biggest). The others (loose objects) aren't placed.", "パッケージには {n} 個のモデルがあります。マップになるもの（たいてい一番大きいもの）を選んでください。ほか（単体のオブジェクト）は配置されません。"],
-    "Esse arquivo não abre aqui": ["This file doesn't open here", "このファイルはここでは開けません"], "Mapas do VRChat e do Unity": ["VRChat and Unity maps", "VRChat と Unity のマップ"],
+    "Esse arquivo não abre aqui": ["This file doesn't open here", "このファイルはここでは開けません"], "Mapas do VRChat e do Unity": ["VRChat and Unity maps", "VRChat と Unity のシーン"],
     "Converter": ["Convert", "変換"], "Convertendo para .glb": ["Converting to .glb", ".glb に変換中"], "Salvar em .glb": ["Save as .glb", ".glb で保存"], "Salvar o cenário (.glb)": ["Save the map (.glb)", "マップを保存（.glb）"],
     "Salvar o mapa convertido (.glb)": ["Save the converted map (.glb)", "変換したマップを保存（.glb）"], "\"{nome}\" convertido {como}: {tamanho}.": ["\"{nome}\" converted {como}: {tamanho}.", "「{nome}」を{como}変換しました: {tamanho}。"],
     "\"{nome}\" convertido {como}: {tamanho}, {n} triângulos.": ["\"{nome}\" converted {como}: {tamanho}, {n} triangles.", "「{nome}」を{como}変換しました: {tamanho}、{n} ポリゴン。"],
@@ -1068,5 +1068,35 @@
   const C = window.C;
   Object.assign(C.TEXTOS, {
     "Personagens do Blender (.blend) viram personagens VRM: com a armadura ou só com os grupos de vértices (o esqueleto é refeito).": ["Blender characters (.blend) become VRM characters: with the armature or with only the vertex groups (the skeleton is rebuilt).", "Blender のキャラクター（.blend）が VRM キャラクターに。アーマチュア付きでも、頂点グループだけでも（骨格を再構築）。"],
+  });
+})();
+
+// Pacotes com vários modelos, cenas do Unity e texturas pelo nome
+(function () {
+  "use strict";
+  const C = window.C;
+  Object.assign(C.TEXTOS, {
+    "Pacotes do Unity com vários modelos entram de uma vez: a personagem, as roupas vestidas nela, os itens e o cenário. As cenas do Unity (.unity) viram mapas com cada peça no lugar.": ["Unity packages with several models come in at once: the character, the clothes put on her, the items and the map. Unity scenes (.unity) become maps with every piece in place.", "複数のモデルが入った Unity パッケージをまとめて取り込み: キャラクター、着せる服、アイテム、マップ。Unity のシーン（.unity）は各パーツを元の位置に置いたマップに。"],
+    "Boneco de pano melhor: o corpo bate nele mesmo (sem braço entrando no peito) e quem passa por cima arrasta.": ["Better ragdoll: the body collides with itself (no arm going into the chest) and whoever walks over it drags it.", "ラグドールを改善: 体どうしがぶつかり（腕が胸にめり込まない）、上を通るとひきずられます。"],
+    "O pacote tem {n} modelos{cena}. O que vira o cenário?": ["The package has {n} models{cena}. What becomes the map?", "パッケージに {n} 個のモデルがあります{cena}。どれをマップにしますか？"],
+    " e {c} cena(s) do Unity": [" and {c} Unity scene(s)", "（Unity のシーン {c} 個）"],
+    "Montar a cena do Unity (cada modelo no lugar)": ["Assemble the Unity scene (each model in place)", "Unity のシーンを組み立てる（各モデルを元の位置に）"],
+    "Como o mundo foi feito no Unity: as peças nos lugares, com os materiais.": ["The way the world was made in Unity: the pieces in place, with the materials.", "Unity で作られたとおりのワールド: パーツを元の位置に、マテリアル付きで。"],
+    "Todos os modelos juntos ({n}), lado a lado": ["All the models together ({n}), side by side", "すべてのモデル（{n} 個）を並べる"],
+    "Para ver tudo o que veio no pacote.": ["To see everything that came in the package.", "パッケージの中身をすべて見るために。"],
+    "Só um modelo:": ["Only one model:", "モデルを 1 つだけ:"], "O que vira o cenário?": ["What becomes the map?", "どれをマップにしますか？"],
+    "O que é cada modelo?": ["What is each model?", "それぞれのモデルは何ですか？"],
+    "O pacote tem mais de um modelo. Diga o que cada um é: tudo entra de uma vez.": ["The package has more than one model. Say what each one is: everything comes in at once.", "パッケージに複数のモデルがあります。それぞれが何かを選んでください。まとめて取り込みます。"],
+    "Junto da personagem (roupa, acessório)": ["With the character (clothing, accessory)", "キャラクターと一緒に（服・アクセサリー）"],
+    "Não importar": ["Don't import", "取り込まない"], "esqueleto de pessoa": ["human skeleton", "人型の骨格"], "cena do Unity": ["Unity scene", "Unity のシーン"],
+    "Junto da personagem: as peças feitas para o mesmo corpo (com os mesmos ossos) são vestidas nela; as peças soltas vão no osso em que estavam. Item: vai para a mochila. Cenário: vai para Movimento › Cenário.":
+      ["With the character: pieces made for the same body (with the same bones) are put on her; loose pieces go on the bone they were on. Item: goes to the backpack. Map: goes to Movement › Map.", "キャラクターと一緒に: 同じ体（同じボーン）用のパーツは着せ、単体のパーツは元のボーンに付けます。アイテム: バッグへ。マップ: 動き › マップへ。"],
+    "Só um modelo pode ser a personagem.": ["Only one model can be the character.", "キャラクターにできるモデルは 1 つだけです。"], "Nada foi escolhido para importar.": ["Nothing was chosen to import.", "取り込むものが選ばれていません。"],
+    "As peças \"junto da personagem\" precisam de uma personagem.": ["The \"with the character\" pieces need a character.", "「キャラクターと一緒に」のパーツにはキャラクターが必要です。"],
+    "Convertendo os itens e cenários do pacote": ["Converting the package's items and map", "パッケージのアイテムとマップを変換中"],
+    "item {nome}": ["item {nome}", "アイテム {nome}"], "cenário {nome}": ["map {nome}", "マップ {nome}"], "Do pacote: {lista}.": ["From the package: {lista}.", "パッケージから: {lista}。"],
+    "{nome} não virou item: {erro}": ["{nome} did not become an item: {erro}", "{nome} はアイテムになりませんでした: {erro}"], "{nome} não virou cenário: {erro}": ["{nome} did not become map: {erro}", "{nome} はマップになりませんでした: {erro}"],
+    "Peças juntas: ": ["Pieces added: ", "一緒のパーツ: "], "Também do pacote: ": ["Also from the package: ", "パッケージからほかに: "],
+    "{n} modelo(s) do pacote vestidos na personagem (roupas e acessórios).": ["{n} model(s) from the package put on the character (clothes and accessories).", "パッケージのモデル {n} 個をキャラクターに着せました（服とアクセサリー）。"],
   });
 })();

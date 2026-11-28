@@ -296,6 +296,8 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "Pacotes do Unity com vários modelos entram de uma vez: a personagem, as roupas vestidas nela, os itens e o cenário. As cenas do Unity (.unity) viram mapas com cada peça no lugar.",
+    "Boneco de pano melhor: o corpo bate nele mesmo (sem braço entrando no peito) e quem passa por cima arrasta.",
     "Personagens do Blender (.blend) viram personagens VRM: com a armadura ou só com os grupos de vértices (o esqueleto é refeito).",
     "Câmeras em primeira e terceira pessoa (e no ombro), boneco de pano (R) e ninguém atravessa ninguém na sala.",
     "O layout novo da loja e da sala: os cartões altos com o nome embaixo e as bolinhas no alto (pesquisar, filtro e mais).",
