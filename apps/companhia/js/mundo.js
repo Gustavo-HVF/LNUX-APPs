@@ -224,8 +224,28 @@
       this.chao.visible = !this.mapa;
       this.sombra.visible = true;
       this.mostrarControles(true);
+      this.atualizarCeu();
       this.palco.emit("mundo", true);
       return true;
+    }
+    /**
+     * O céu do cenário: um degradê próprio (azul claro no alto, claro no horizonte), igual para todos os temas. Sem
+     * cenário e sem andar (o retrato da personagem), fica o fundo do tema da pessoa.
+     */
+    atualizarCeu() {
+      const T = window.THREE, cena = this.palco.cena, quer = !!this.mapa || this.andando;
+      if (!quer) { if (cena.background && cena.background.userData && cena.background.userData.ceuDoMundo) cena.background = null; return; }
+      if (!Mundo.ceu) {
+        const c = document.createElement("canvas");
+        c.width = 4; c.height = 256;
+        const g = c.getContext("2d"), d = g.createLinearGradient(0, 0, 0, 256);
+        d.addColorStop(0, "#5f95d6"); d.addColorStop(0.45, "#a9c9ee"); d.addColorStop(0.62, "#dfe9f2"); d.addColorStop(1, "#c9ced3");
+        g.fillStyle = d; g.fillRect(0, 0, 4, 256);
+        Mundo.ceu = new T.CanvasTexture(c);
+        Mundo.ceu.colorSpace = T.SRGBColorSpace;
+        Mundo.ceu.userData.ceuDoMundo = true;
+      }
+      if (!cena.background || (cena.background.userData && cena.background.userData.ceuDoMundo)) cena.background = Mundo.ceu;
     }
     sair() {
       if (!this.andando) return;
@@ -239,6 +259,7 @@
       this.direcional.x = this.direcional.y = 0;
       this.chao.visible = false;
       this.sombra.visible = false;
+      this.atualizarCeu();
       this.pesoAndar = this.pesoCorrer = this.pesoPulo = 0;
       if (this.palco.anim.info && this.palco.anim.info.tipo === "andar") this.palco.anim.parar(0.2);
       this.clipTocando = null;
@@ -800,7 +821,7 @@
           const u = URL.createObjectURL(arquivos.get(principal));
           urls.push(u);
           try { const gltf = await carregador.loadAsync(u); objeto = gltf.scene; objeto.animations = gltf.animations || []; }
-          catch (e) { throw new Error(/KTX|basis/i.test(e.message) ? "Esse cenário usa texturas KTX2/Basis, que ainda não abrem aqui. Exporte com texturas PNG/JPEG." : "Não consegui abrir o cenário: " + e.message); }
+          catch (e) { throw new Error("Não consegui abrir o cenário: " + e.message); }
           finally { carregador.soltar(); }
         } else if (tipo === "fbx") {
           objeto = new V.FBXLoader(gerente).parse(await arquivos.get(principal).arrayBuffer(), "");
@@ -838,6 +859,7 @@
       this.luzDoAmbiente();
       this.aplicarAjuste();
       if (this.fisica) this.fisica.carregar(objeto); // os corpos saem do mapa e passam a cair, rolar e ser pegos
+      this.atualizarCeu();
       if (this.andando) { this.chao.visible = false; this.partida(); } else this.partida();
       this.palco.enquadrar();
       this.palco.emit("mapa", this.info);
@@ -941,6 +963,7 @@
       this.plantas = null;
       this.webc = null;
       this.mapa = null;
+      this.atualizarCeu();
       this.info = null;
       this.caixa.min.set(-30, 0, -30);
       this.caixa.max.set(30, 3, 30);

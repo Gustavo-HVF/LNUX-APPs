@@ -187,7 +187,9 @@ RESERVA_DISCO = 300 * 1024 * 1024  # envios (cenário, personagens, loja) não p
 # segundos sem notícia de uma pessoa: ela saiu (quem fecha a aba avisa na hora; isto é para quem some). Os testes no
 # navegador sem placa de vídeo pedem mais (LNUX_SALA_SUMIU): lá, desenhar o cenário pela primeira vez trava a página.
 SALA_SUMIU = int(os.environ.get("LNUX_SALA_SUMIU") or 45)
-SALA_VAZIA = 900           # segundos sem ninguém: a sala fecha
+# segundos sem ninguém: a sala fecha sozinha (uma folga para quem recarrega a página ou cai e volta). Os testes no
+# navegador pedem mais (LNUX_SALA_VAZIA): lá, a mesma pessoa sai e entra de novo em outra página.
+SALA_VAZIA = int(os.environ.get("LNUX_SALA_VAZIA") or 30)
 SALA_LETRAS = "abcdefghjkmnpqrstuvwxyz23456789"  # sem as que se confundem (i, l, o, 0, 1)
 
 # Companhia, loja: personagens, mundos e animações guardados NESTE aparelho, numa pasta própria (~/.lnux-apps/loja,
@@ -973,6 +975,12 @@ def sala_texto(valor, limite: int) -> str:
 
 def salas_limpar(agora: float):
     with SALAS_TRAVA:
+        # quem sumiu sai de todas as salas (sem isso, uma sala de onde todos sumiram ficaria "com gente" para sempre)
+        for sala in SALAS.values():
+            antes = bool(sala.pessoas)
+            sala.limpar(agora)
+            if antes and not sala.pessoas:
+                sala.vista = agora  # ficou vazia agora: a folga conta daqui
         for codigo in [c for c, sala in SALAS.items() if not sala.pessoas and agora - sala.vista > SALA_VAZIA]:
             shutil.rmtree(SALAS.pop(codigo).pasta, ignore_errors=True)
 

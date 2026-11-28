@@ -197,3 +197,36 @@ Veja o aviso de privacidade do MediaPipe em https://goo.gle/mediapipe-privacy �
 O decodificador de malhas [Draco](https://github.com/google/draco), copiado de `three/examples/jsm/libs/draco/gltf/`
 (three.js 0.180.0), para abrir cenários `.glb` comprimidos. Copyright The Draco Authors (Google) — licença
 **Apache License, Version 2.0** (https://www.apache.org/licenses/LICENSE-2.0), com o mesmo aviso reproduzido acima.
+
+## Basis Universal — transcodificador (basis/basis_transcoder.js e basis/basis_transcoder.wasm)
+
+O transcodificador de texturas [Basis Universal](https://github.com/BinomialLLC/basis_universal), copiado de
+`three/examples/jsm/libs/basis/` (three.js 0.180.0), para abrir cenários com texturas KTX2 (KHR_texture_basisu).
+Copyright © 2016–2026 Binomial LLC — licença **Apache License, Version 2.0**
+(https://www.apache.org/licenses/LICENSE-2.0). "Basis Universal" é marca registrada da Binomial LLC.
+
+## ktx2-encoder e Basis Universal — codificador (ktx2-codificador.min.js e ktx2/basis_encoder.wasm)
+
+O codificador de texturas KTX2 [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) 0.6.0 (Copyright Hu Song —
+licença **MIT**), empacotado sem alterações por `tools/montar_vrm.sh` (entrada `tools/companhia_ktx2_entrada.js`), com
+o codificador [Basis Universal](https://github.com/BinomialLLC/basis_universal) compilado para WebAssembly que vem no
+pacote (`dist/basis/basis_encoder.wasm`). O Basis Universal é licenciado sob a **Apache License, Version 2.0**
+(https://www.apache.org/licenses/LICENSE-2.0); o aviso dele, reproduzido como a licença pede:
+
+```
+Basis Universal™ Supercompressed GPU Texture Compression Library
+
+Copyright © 2016–2026 Binomial LLC.
+All rights reserved except as granted under the Apache 2.0 license
+(https://github.com/BinomialLLC/basis_universal/blob/master/LICENSE).
+"Basis Universal" is a trademark of Binomial LLC.
+
+The documents in the Basis Universal wiki, and the Basis Universal library,
+example, and tool source code, fall under the Apache 2.0 license, unless
+otherwise explicitly indicated.
+
+Redistributions or derivative works must include a readable copy of the
+attribution notices from this NOTICE file (see Apache License 2.0 §4(d)).
+```
+
+Só é baixado quando a pessoa escolhe gravar o cenário com texturas KTX2 (js/ktx2.js).

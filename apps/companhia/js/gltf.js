@@ -1,5 +1,5 @@
 /*
- * WEBC — o carregador de glTF dos mapas (o jogo, a vitrine da loja e o conversor): Draco, Meshopt e as extensões que o
+ * WEBC — o carregador de glTF dos mapas (o jogo, a vitrine da loja e o conversor): Draco, Meshopt, KTX2 e as extensões que o
  * three.js deixou de abrir.
  *
  * KHR_materials_pbrSpecularGlossiness: o material "specular/glossiness" das exportações antigas do Sketchfab (e de
@@ -82,6 +82,8 @@
     draco.setDecoderPath(new URL("vendor/draco/", location.href).href);
     carregador.setDRACOLoader(draco);
     carregador.setMeshoptDecoder(V.MeshoptDecoder);
+    const ktx2 = C.ktx2 && C.ktx2.carregador(); // texturas KTX2 (Basis Universal), js/ktx2.js
+    if (ktx2) carregador.setKTX2Loader(ktx2);
     carregador.register((parser) => new PluginEspecular(parser));
     carregador.soltar = () => draco.dispose();
     return carregador;

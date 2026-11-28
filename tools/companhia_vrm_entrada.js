@@ -1,4 +1,4 @@
-// Pacote do three.js + carregadores (glTF, FBX, BVH, OBJ/MTL, Collada, STL, PLY, 3DS, 3MF, USDZ, Draco, Meshopt) +
+// Pacote do three.js + carregadores (glTF, FBX, BVH, OBJ/MTL, Collada, STL, PLY, 3DS, 3MF, USDZ, Draco, Meshopt, KTX2) +
 // exportador de glTF + three-vrm + three-vrm-animation + three-mesh-bvh para a Companhia (montado por tools/montar_vrm.sh).
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -13,7 +13,9 @@ import { TDSLoader } from "three/examples/jsm/loaders/TDSLoader.js";
 import { ThreeMFLoader } from "three/examples/jsm/loaders/3MFLoader.js";
 import { USDZLoader } from "three/examples/jsm/loaders/USDZLoader.js";
 import { DRACOLoader } from "three/examples/jsm/loaders/DRACOLoader.js";
+import { KTX2Loader } from "three/examples/jsm/loaders/KTX2Loader.js";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
+import * as TextureUtils from "three/examples/jsm/utils/WebGLTextureUtils.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
 import { ZSTDDecoder } from "three/examples/jsm/libs/zstddec.module.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
@@ -24,6 +26,6 @@ import { MeshBVH, StaticGeometryGenerator } from "three-mesh-bvh";
 window.THREE = THREE;
 window.CompanhiaVRM = {
   GLTFLoader, FBXLoader, BVHLoader, OBJLoader, MTLLoader, ColladaLoader, STLLoader, PLYLoader, TDSLoader, ThreeMFLoader, USDZLoader,
-  DRACOLoader, GLTFExporter, MeshoptDecoder, ZSTDDecoder, RoomEnvironment, toCreasedNormals,
+  DRACOLoader, KTX2Loader, GLTFExporter, TextureUtils, MeshoptDecoder, ZSTDDecoder, RoomEnvironment, toCreasedNormals,
   VRMLoaderPlugin, VRMUtils, VRMAnimationLoaderPlugin, MeshBVH, StaticGeometryGenerator,
 };

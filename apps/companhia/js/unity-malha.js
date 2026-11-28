@@ -209,7 +209,7 @@
       if (v.normal) { const nn = v.normal.slice(0, v.n * 3); for (let i = 0; i < nn.length; i += 3) nn[i] = -nn[i]; g.setAttribute("normal", new T.BufferAttribute(nn, 3)); }
       // o V do Unity cresce para cima, como o do three com as texturas em flipY (o padrão): entra como está
       if (v.uv) g.setAttribute("uv", new T.BufferAttribute(v.uv.slice(0, v.n * 2), 2));
-      if (v.uv2) g.setAttribute("uv1", new T.BufferAttribute(v.uv2.slice(0, v.n * 2), 2));
+      // (o segundo UV é o das luzes assadas do Unity, que não vêm: fica de fora — quase 20% a menos no .glb)
       if (v.cor) g.setAttribute("color", new T.BufferAttribute(v.cor.slice(0, v.n * 4), 4));
       const maior = saida.reduce((m, x) => (x > m ? x : m), 0);
       if (maior >= v.n) return null; // índices fora dos vértices: arquivo quebrado

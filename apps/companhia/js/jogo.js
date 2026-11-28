@@ -76,6 +76,8 @@
   function aplicarAcesso(a = lerAcesso()) {
     const r = document.documentElement;
     r.style.setProperty("--webc-escala", String(a.tamanho || 1));
+    // a opacidade do fundo do menu e da janela Opções (o texto continua inteiro; dá para ver o jogo atrás)
+    r.style.setProperty("--webc-menu-opacidade", String(Math.min(1, Math.max(0.3, +a.opacidadeMenu || 1))));
     if (a.reduzir) r.dataset.reduzir = ""; else delete r.dataset.reduzir;
     if (a.numeros === false) r.dataset.semNumeros = ""; else delete r.dataset.semNumeros;
   }
@@ -328,6 +330,9 @@
           grupo(t("Movimento na tela"),
             chave("Reduzir animações", a.reduzir, (v) => gravarAcesso({ reduzir: v }), "Sem as transições entre as páginas e sem os efeitos que se mexem"),
             chave("Mostrar os números das expressões", a.numeros !== false, (v) => gravarAcesso({ numeros: v }))),
+          grupo(t("Menu e opções"),
+            segmentos("Opacidade do menu e das opções", [[1, "100%"], [0.85, "85%"], [0.7, "70%"], [0.55, "55%"], [0.4, "40%"]], [1, 0.85, 0.7, 0.55, 0.4].reduce((m, v) => (Math.abs(v - (+a.opacidadeMenu || 1)) < Math.abs(m - (+a.opacidadeMenu || 1)) ? v : m), 1), (v) => gravarAcesso({ opacidadeMenu: +v })),
+            el("p", { class: "jogo-nota" }, t("Menos opacidade deixa ver o jogo atrás do menu e da janela Opções; o texto continua igual."))),
         ];
       }
       if (secao === "grafico") {

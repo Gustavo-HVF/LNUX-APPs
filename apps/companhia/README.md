@@ -159,8 +159,9 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
     - **Conta**: entrar, criar conta, meu perfil, editar o perfil, trocar o nome (sem conta), sair e, no aparelho do
       servidor, as contas e o e-mail.
     - **Aparência**: o tema e o idioma.
-    - **Acessibilidade**: tamanho da interface (normal, grande, maior), alto contraste, reduzir animações e mostrar os
-      números das expressões.
+    - **Acessibilidade**: tamanho da interface (normal, grande, maior), alto contraste, reduzir animações, mostrar os
+      números das expressões e a **opacidade do menu e das opções** (100% a 40%: o fundo fica translúcido e dá para
+      ver o jogo atrás; o texto continua inteiro).
   - **Ajustes**
     - **Gráfico**: a resolução do desenho (50%, 75%, 100%), luz e sombras realistas, sombras, as luzes do mapa, a
       qualidade das texturas, o fundo, a foto e a tela cheia.
@@ -220,7 +221,7 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
   dos outros, nem eles a sua: ela vai junto ao entrar. Quem entra **sem escolher personagem** aparece como o
-  **Y Bot** (o boneco do Mixamo, em `modelos/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
+  **Y Bot** (o boneco do Mixamo, em `padrao/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
   e o tamanho, as peças escondidas e as texturas trocadas valem do mesmo jeito.
 - **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
   proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
@@ -231,7 +232,9 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Vídeo numa tela**: veja "Vídeo na tela", abaixo.
 - Limites: 12 salas abertas no servidor (3 por pessoa, menos o dono) e até 16 pessoas por sala. O cenário e as
   personagens não têm limite de tamanho; só não podem deixar o aparelho do servidor com menos de 300 MB livres. Quem
-  some por 45 segundos sai da sala (quem fecha a aba sai na hora); uma sala vazia fecha depois de 15 minutos.
+  some por 45 segundos sai da sala (quem fecha a aba sai na hora); uma sala vazia **fecha sozinha** depois de
+  30 segundos (a folga é para quem recarrega a página ou cai e volta). Com um cenário (ou andando), o **céu é do
+  mundo**: um degradê próprio, igual em todos os temas — o tema da pessoa só pinta o fundo do retrato da personagem.
 
 ### Vídeo na tela
 
@@ -488,7 +491,24 @@ movimento, andar e salas. Se o pacote já traz um `.vrm`, é ele que entra.
   - **Item**: convertido para `.glb` e guardado em *Opções › Itens* (a mochila);
   - **Cenário**: guardado em *Movimento › Cenário* (uma cena `.unity` é montada com cada peça no lugar);
   - **Não importar**: animações, colisores e outras versões da personagem.
-- **Não vêm**: os efeitos dos shaders do Unity (lilToon, Poiyomi: contornos, brilhos, matcaps), as físicas do
+- **Materiais como a cena põe**: quando o pacote traz a cena (ou o prefab) do avatar, cada parte do corpo recebe o
+  `.mat` que o autor pôs ali — e não um parecido pelo nome. As **outras versões** do mesmo material que vêm no pacote
+  (outro tom de pele, outra cor de cabelo: "Pele", "Pele 1", "Pele 2"...) viram **variações** em *Personagem › Roupas*
+  (a textura de cada peça), em vez de se misturarem.
+- **Shaders**: cada material aponta para um shader. Reconhecido (pelo `.shader` que vem no pacote, pelos embutidos do
+  Unity ou pela biblioteca em *Personagem › Shaders do Unity*), ele vira o material do WEBC:
+  - **desenho** (Poiyomi, lilToon, UTS, Sunao, Arktoon, MToon...) → MToon com a **cor da sombra**, o **brilho na
+    borda** (rim), o **contorno** (outline) e o **relevo** (normal map) do material;
+  - **realista** (Standard, Rero Standard, URP/HDRP Lit...) → o material padrão do glTF com **metal** e **rugosidade**;
+  - **sem luz** (Unlit) → MToon sem sombra.
+  A biblioteca: *Personagem › Shaders do Unity › Carregar shaders...* aceita o `.shader` ou o `.unitypackage` dos
+  shaders (só o nome e as propriedades são lidos; o código não roda no navegador) e guarda no aparelho para os
+  próximos avatares que usem esses shaders sem trazê-los. O resumo diz quais shaders foram traduzidos.
+- **Escolher os ossos**: quando o esqueleto não é reconhecido (ossos de nomes que não dizem nada, sem a ficha de
+  pessoa do Unity), abre a janela *Escolher os ossos*: para cada parte do corpo (quadril, coluna, cabeça, braços,
+  pernas...; os obrigatórios com \*), um osso do arquivo, numa lista em árvore. O botão *Escolher os ossos...* do
+  resumo também abre a janela para corrigir um reconhecimento errado.
+- **Não vêm**: os efeitos que dependem do código do shader (glitter, dissolve, AudioLink, matcap e rampa), as físicas do
   VRChat (PhysBones, que ficam no prefab, não no modelo), as animações, os menus e as peças ligadas ou desligadas
   pelo prefab.
 - **Licença**: um pacote do Unity não diz o que o autor deixa fazer, e avatares comprados quase nunca deixam
@@ -669,6 +689,20 @@ mapa aberto em *Cenário › Abrir cenário* é convertido para ele; **Salvar em
 | `.fbx`, `.obj` (+ `.mtl`), `.dae`, `.stl`, `.ply`, `.3ds`, `.3mf`, `.usdz` | pelos carregadores do three.js; os materiais viram materiais do glTF |
 | `.gltf` com `.bin` e texturas soltas, `.glb` | juntados num arquivo só |
 | `.zip`, `.unitypackage` | abertos antes; se houver vários modelos (ou uma cena `.unity`), você escolhe: **montar a cena do Unity**, **todos os modelos lado a lado** ou só um |
+
+**As texturas do cenário convertido** (*Movimento › Cenário › Texturas do cenário convertido*, e na janela de
+conversão; a escolha fica guardada):
+
+| Escolha | O que faz |
+|---|---|
+| **Tamanho máximo** (512, **1024**, 2048, 4096 px) | reduz as texturas maiores que isso (1024 é o padrão; 512 para celular) |
+| **JPEG/PNG automático** (o padrão) | JPEG nas texturas que parecem foto (madeira, pedra, tecido: bem menores) e PNG onde há transparência usada (folhas, grades, vidro) ou áreas lisas (letreiros, logotipos: menores e sem borrão em PNG) |
+| **KTX2** | as texturas viram KTX2 com Basis Universal (`KHR_texture_basisu`): comprimidas na própria placa de vídeo (bem menos memória de vídeo) e o arquivo menor. A cor em ETC1S, o relevo (normal map) em UASTC, com mipmaps. Mais lento para converter (o mapa do Popcorn Palace: ~50 s); o codificador (~3,4 MB) só é baixado na primeira vez. Um `.glb` pronto também pode ser regravado assim |
+| **Como vieram** | PNG, sem reduzir (como antes) |
+
+Cenários que já vêm com texturas **KTX2/Basis** abrem (o transcodificador escolhe o formato que a placa entende). O
+resumo da conversão diz o que foi feito ("Texturas: 3 reduzidas para 1024 px, 12 em JPEG"). Num mundo do Unity, o
+segundo mapa UV (o das luzes assadas, que não vêm) fica de fora: quase 20% a menos no arquivo.
 
 O **leitor próprio de `.blend`** lê o "DNA" que cada arquivo traz (a descrição das estruturas da versão que o
 gravou), então abre arquivos do Blender 2.6 ao 5.x, compactados (gzip ou zstd) ou não. Ele tira: as malhas, a
@@ -892,9 +926,11 @@ js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3d
 js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity, os materiais .mat e a física (colisores, Rigidbody, VRC Pickup)
 js/unity-malha.js  as malhas guardadas pelo Unity (Mesh .asset, cruas ou comprimidas)
 js/unity-textura.js as texturas guardadas pelo Unity (Texture2D .asset: RGBA, RGB, DXT1, DXT5; as outras pela miniatura)
+js/ktx2.js         texturas KTX2 (Basis Universal): abrir cenários com elas e regravar um .glb com elas
 js/colisao.js      o que segura a pessoa no cenário, e as plantas que dobram com o vento e com quem passa
 js/fisica.js       os objetos com física do mapa: cair, rolar, ser empurrado, pegar (E), jogar, e o mesmo para todos na sala
 js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
+js/shaders.js      os shaders do Unity nos avatares: a família (desenho, realista, sem luz), a biblioteca e a tradução para MToon/PBR
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
 js/sala.js         salas para jogar com outras pessoas: entrar, as personagens dos outros, posições, bate-papo
@@ -921,7 +957,9 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
-modelos/ybot.vrm   o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
+padrao/ybot.vrm    o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
+vendor/basis/      o transcodificador Basis Universal (abrir texturas KTX2), do three.js
+vendor/ktx2-codificador.min.js e vendor/ktx2/  o codificador KTX2 (ktx2-encoder + Basis Universal), baixado só ao gravar em KTX2
 vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
                    (MIT, three-vrm-pacote.min.js); MediaPipe Tasks Vision (Apache-2.0, mediapipe-visao.min.js) e o
                    decodificador Draco (Apache-2.0, draco/) — o Cubism Core e os ~30 MB do MediaPipe não vêm junto
@@ -941,6 +979,8 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_avatar_extras  # avatares: ossos à mão, materiais pela cena, shaders (pacote e biblioteca), peles como variações; opacidade do menu
+python3 tests/testar_navegador.py companhia_texturas  # texturas do cenário: tamanho máximo, JPEG/PNG automático e KTX2 (gravar e abrir)
 python3 tests/testar_navegador.py companhia_fisica  # mundo do Unity sem .fbx: malhas/texturas .asset, colisores, plantas, bola, pegar e jogar
 python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
