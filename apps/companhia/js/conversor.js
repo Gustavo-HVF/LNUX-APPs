@@ -330,6 +330,50 @@
   }
 
   /** Deixa a cena pronta para virar glTF: só malhas, com materiais que o glTF entende. Devolve o número de triângulos. */
+  /**
+   * Copia um objeto com as malhas de pele presas aos ossos DA CÓPIA. O clone(true) do three.js copia os ossos mas deixa
+   * as malhas presas aos ossos do original: gravado assim, o .glb aponta para ossos que não estão no arquivo e não abre
+   * ("Cannot set properties of undefined (setting 'isBone')").
+   */
+  function clonarComOssos(original) {
+    const T = window.THREE, copia = original.clone(true), par = new Map();
+    const andar = (a, b) => { par.set(a, b); for (let i = 0; i < a.children.length && i < b.children.length; i++) andar(a.children[i], b.children[i]); };
+    andar(original, copia);
+    copia.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.skeleton) return;
+      const ossos = o.skeleton.bones.map((b) => par.get(b) || b);
+      o.bind(new T.Skeleton(ossos, o.skeleton.boneInverses.map((m) => m.clone())), o.bindMatrix.clone());
+    });
+    return copia;
+  }
+  /**
+   * Antes de gravar: toda malha de pele precisa dos ossos dentro do que vai para o arquivo. Um osso de fora é achado
+   * pelo nome dentro do objeto; se não der, a malha perde a pele e fica parada na pose em que está (em vez de quebrar o
+   * arquivo inteiro). Devolve quantas malhas foram consertadas e quantas ficaram sem pele.
+   */
+  function consertarPeles(raiz) {
+    const T = window.THREE, dentro = new Set(), porNome = new Map();
+    raiz.traverse((o) => { dentro.add(o); if (o.isBone && o.name && !porNome.has(o.name)) porNome.set(o.name, o); });
+    const semPele = [];
+    let consertadas = 0;
+    raiz.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.skeleton) return;
+      const ossos = o.skeleton.bones;
+      if (ossos.every((b) => b && dentro.has(b))) return;
+      const trocados = ossos.map((b) => (b && dentro.has(b) ? b : b && porNome.get(b.name)));
+      if (trocados.every(Boolean)) { o.bind(new T.Skeleton(trocados, o.skeleton.boneInverses.map((m) => m.clone())), o.bindMatrix.clone()); consertadas++; }
+      else semPele.push(o);
+    });
+    for (const o of semPele) {
+      const m = new T.Mesh(o.geometry, o.material);
+      m.name = o.name; m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
+      m.userData = o.userData;
+      for (const f of [...o.children]) m.add(f);
+      const pai = o.parent; pai.add(m); pai.remove(o);
+    }
+    return { consertadas, semPele: semPele.length };
+  }
+
   function preparar(objeto) {
     const T = window.THREE, tirar = [], trocados = new Map();
     let triangulos = 0;
@@ -354,6 +398,7 @@
       triangulos += g.index ? g.index.count / 3 : g.attributes.position.count / 3;
     });
     for (const o of tirar) if (o.parent) o.parent.remove(o);
+    consertarPeles(objeto); // nenhuma malha de pele pode apontar para ossos fora do arquivo
     // as animações (moinhos, água, portas...) ficam, menos as trilhas de peças que saíram (câmeras, linhas)
     const nomes = new Set();
     objeto.traverse((o) => { if (o.name) nomes.add(o.name); nomes.add(o.uuid); });
@@ -478,7 +523,7 @@
   }
 
   C.conversor = {
-    texturasEscolhidas, escolhaTexturas, otimizarTexturas,
+    texturasEscolhidas, escolhaTexturas, otimizarTexturas, clonarComOssos, consertarPeles,
     FORMATOS, MODELO, ligarTexturas,
     ACEITAR: FORMATOS.map((f) => "." + f[0]).join(",") + ",.mtl,.bin,.zip,.unitypackage,.png,.jpg,.jpeg,.webp,.bmp,.vrcw",
     /** Os modelos de um pacote, do mais provável para o menos (o .blend na frente; depois o maior). */

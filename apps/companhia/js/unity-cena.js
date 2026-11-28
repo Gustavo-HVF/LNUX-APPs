@@ -381,7 +381,7 @@
               const s = new T.Vector3();
               achada.getWorldScale(s);
               peca.scale.copy(s);
-            } else peca = mod.clone(true);
+            } else peca = C.conversor.clonarComOssos(mod); // (com a pele presa aos ossos da cópia)
           }
           if (!peca) continue;
           const g = new T.Group();
@@ -464,7 +464,7 @@
           if (MODELO.test(caminho)) {
             const mod = await modelo(caminho);
             if (!mod) continue;
-            const g = mod.clone(true);
+            const g = C.conversor.clonarComOssos(mod);
             g.name = l.nome || caminho.split("/").pop();
             g.applyMatrix4(m);
             destino.add(g);

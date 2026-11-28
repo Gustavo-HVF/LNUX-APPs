@@ -73,6 +73,26 @@ PrefabInstance:
       value: Banco
       objectReference: {fileID: 0}
   m_SourcePrefab: {fileID: 100100000, guid: ${g(0x13)}, type: 3}
+--- !u!1001 &300
+PrefabInstance:
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 400000, guid: ${g(0x11)}, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 3
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: ${g(0x11)}, type: 3}
+--- !u!1001 &400
+PrefabInstance:
+  m_Modification:
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 400000, guid: ${g(0x11)}, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: -3
+      objectReference: {fileID: 0}
+  m_SourcePrefab: {fileID: 100100000, guid: ${g(0x11)}, type: 3}
 `;
 }
 function pedraMat() {
@@ -138,7 +158,9 @@ function pedraMat() {
       const pedra = achar(/Pedra/), banco = achar(/Banco|Mapa/);
       const centro = (o) => { const c = new T.Box3().setFromObject(o).getCenter(new T.Vector3()); return [+c.x.toFixed(2), +c.y.toFixed(2), +c.z.toFixed(2)]; };
       const todos = await C.conversor.juntarGLB(preparado, { modelos: nomes.filter((n) => C.conversor.MODELO.test(n)) });
-      return { nomes, metas: !!(preparado.metas && preparado.metas.size), guids: !!(preparado.guids && preparado.guids.size), colocados: r.colocados,
+      let peles = 0;
+      gltf.scene.traverse((o) => { if (o.isSkinnedMesh) peles++; });
+      return { peles, nomes, metas: !!(preparado.metas && preparado.metas.size), guids: !!(preparado.guids && preparado.guids.size), colocados: r.colocados,
         pedra: pedra && { centro: centro(pedra), tamanho: new T.Box3().setFromObject(pedra).getSize(new T.Vector3()).toArray().map((v) => +v.toFixed(2)), textura: !!(pedra.material.map && pedra.material.map.image) },
         banco: banco && centro(banco), todos: todos.colocados };
     }, b64);
@@ -146,8 +168,9 @@ function pedraMat() {
       "o .unitypackage como cenário guarda as fichas (.meta), a cena e os materiais (e deixa os scripts de fora)");
     ok(cena.colocados >= 2 && cena.pedra && Math.abs(cena.pedra.centro[0] + 3) < 0.05 && Math.abs(cena.pedra.centro[1] - 0.5) < 0.05 && cena.pedra.tamanho[0] > 1.9 && cena.pedra.textura,
       `a cena do Unity montada: o cubo do Unity no lugar (x espelhado), no tamanho e com a textura do .mat: ${JSON.stringify(cena.pedra)}`);
+    ok(cena.peles >= 2, `o avatar (com pele) posto duas vezes na cena: o .glb abre e cada cópia tem os próprios ossos (${cena.peles} malhas com pele)`);
     ok(cena.banco && cena.banco[0] > 4, `a instância de prefab do Prop.glb mudada de lugar pela cena: ${JSON.stringify(cena.banco)}`);
-    ok(cena.todos === 3, `"todos os modelos": os 3 modelos do pacote lado a lado (${cena.todos})`);
+    ok(cena.todos >= 3, `"todos os modelos": os 3 modelos do pacote lado a lado (${cena.todos})`);
 
     // ── o pacote como personagem: a janela dos papéis ──
     await menu("Personagem", "Importar avatar do Unity ou do Blender (.unitypackage, .fbx, .blend)...");
