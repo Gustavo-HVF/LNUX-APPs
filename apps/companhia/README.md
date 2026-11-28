@@ -82,8 +82,8 @@ pisca na tela).
     rugosidade, brilho, opacidade, aramado, faces chapadas, textura de uma imagem, desfazer e refazer, atalhos (W, E, R,
     X/Y/Z, F, Del, Ctrl+D, Ctrl+Z, Ctrl+Y), **Testar** (usar o item contra uma parede), foto automática, exportar e
     importar o `.glb`.
-  - **Encaixe no corpo**: mão direita ou esquerda, cabeça, peito, costas, quadril ou pés, com a **mão de boneco** (a
-    parte azul é onde fica o cabo) e o **boneco inteiro** para acertar. Quem baixa recebe o item no lugar que quem
+  - **Encaixe no corpo**: mão direita ou esquerda, cabeça, peito, costas, quadril ou pés, com a **mão do Y Bot** fechada
+    em volta do cabo (a parte azul é onde ele fica) e o **Y Bot inteiro** para acertar. Quem baixa recebe o item no lugar que quem
     criou deixou; em *Opções › Itens › Ajustar no meu corpo*, cada pessoa ajusta o dela (fica guardado no aparelho e
     os outros na sala veem no lugar novo).
   - **Guardar e publicar**: os itens ficam em *Meus itens* (no aparelho); *Publicar na loja* põe na categoria
@@ -126,6 +126,17 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
   desligar). Os outros na sala veem o corpo caído. O corpo **bate nele mesmo** (cápsulas em cada parte: o braço não
   entra no peito, as pernas não se cruzam por dentro) e **quem passa por cima arrasta** o corpo caído, na direção e
   na velocidade em que andava (sem botão de chutar: é só andar contra ele).
+- **Plantas que dobram**: grama, folhas, heras, flores e arbustos não seguram mais ninguém. Elas **balançam com o
+  vento e se afastam de quem passa** (você e as pessoas da sala), mais na ponta do que na base. Vale para qualquer
+  mapa: numa cena do Unity, só o que tinha colisor sólido segura; nos outros (`.glb`, `.fbx`, `.blend`...), uma peça
+  é planta pelo nome (dela, de um pai ou do material: *grass*, *grama*, *leaf*, *folha*, *ivy*, *flower*, *bush*,
+  *fern*, *vine*...) ou por ser pequena e de material recortado (capim e folhas feitos com imagem). Grades, cercas,
+  vasos e troncos continuam sólidos.
+- **Objetos com física**: num mundo do Unity, o que tinha **Rigidbody** cai, rola, quica (o material de física do
+  Unity diz quanto) e **é empurrado por quem anda contra** (uma bola baixa é chutada). O que tinha o **VRC Pickup** do
+  VRChat **dá para pegar**: **E** perto dele pega, **E** de novo põe na frente, **segurar E e soltar** joga (mais forte
+  quanto mais tempo segurou); no celular, o botão da mão. Com um item da mochila na mão, o E continua sendo do item.
+  Na sala, quem pegou ou mexeu num objeto manda onde ele está, e todos veem igual.
 - **Ninguém atravessa ninguém**: as personagens da sala são sólidas. Quem anda contra outra pessoa para encostado (ou
   desliza em volta dela).
 - **Clicar na personagem de alguém** abre **três bolinhas** em cima dela (do alto para o lado): **Adicionar amigo**,
@@ -182,7 +193,7 @@ tela de entrar.
 A página **Sala** lista as salas deste servidor (como a lista de servidores de um jogo): a miniatura do
 cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (👥 2/8), um 🔒 nas que têm senha e
 "Cheia" nas lotadas. Ela se atualiza sozinha. Em cima ficam o **seu nome** e a **sua personagem** (uma das suas,
-`.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou o boneco simples).
+`.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou, sem escolher nenhuma, o **Y Bot**).
 
 - **Entrar**: um clique na sala (pede a senha, se tiver). Uma sala **privada** não aparece na lista: entra quem
   tiver o link, que abre o WEBC já com ela em destaque ("A sala do seu link"); dá também para colar o link.
@@ -208,7 +219,9 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
   desiste e tenta de novo. Sair cancela o que ainda estava a caminho, então dá para sair e entrar de novo na hora.
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
-  dos outros, nem eles a sua: ela vai junto ao entrar.
+  dos outros, nem eles a sua: ela vai junto ao entrar. Quem entra **sem escolher personagem** aparece como o
+  **Y Bot** (o boneco do Mixamo, em `modelos/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
+  e o tamanho, as peças escondidas e as texturas trocadas valem do mesmo jeito.
 - **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
   proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
   correções dos ossos, as peças de roupa escondidas, as texturas trocadas e a roupa vestida.
@@ -675,8 +688,22 @@ modelos `.fbx`/`.obj`/`.dae` (direto ou de dentro do `.unitypackage`) ou a cena 
 **monta a cena** (`.unity`): cada peça no lugar, girada e no tamanho que o Unity guardou (as instâncias de
 prefab, com as mudanças da cena, e os prefabs dentro de prefabs), os cubos, esferas, cilindros e planos do próprio
 Unity e os materiais `.mat` (cor e textura principal). Sem cena, dá para trazer **todos os modelos** do pacote lado a
-lado. Os modelos sem `.mat` ganham as texturas pelo nome. Não vêm: os shaders do Unity, os terrenos (Terrain), as
-luzes assadas (lightmaps) e os scripts. Use só mapas que você tem o direito de usar.
+lado. Os modelos sem `.mat` ganham as texturas pelo nome.
+
+- **Mundos sem `.fbx`**: muitos pacotes de mundo trazem cada malha e cada textura no formato guardado pelo próprio
+  Unity (`Mesh.asset`, `Texture2D.asset`). O WEBC lê as malhas (cruas ou comprimidas) e as texturas RGBA, RGB, DXT1 e
+  DXT5; as comprimidas com *crunch* e as BC7 ainda não: no lugar entra a miniatura que o pacote traz (as cores
+  certas, com pouca resolução).
+- **Salas desligadas**: mundos com várias salas costumam guardá-las desligadas e ligar por script quando alguém
+  entra. Um grupo desligado com muitas peças entra no mapa; o que tem cara de sobra (versão *old*, *debug*,
+  *test*, a versão para *Quest*/celular, *occluder*) fica de fora.
+- **A física vai junto** (nos "extras" do `.glb`): os colisores sólidos do Unity (Box, Sphere, Capsule, Mesh, fora os
+  *Is Trigger* e as camadas que o VRChat deixa atravessar: *Pickup*, *Walkthrough*, *UI*...), os corpos com
+  **Rigidbody** e os objetos com **VRC Pickup**, e o **ponto de nascer** do *VRC Scene Descriptor*. Veja *Plantas que
+  dobram* e *Objetos com física* em Movimento.
+- **Não vêm**: os shaders do Unity, os terrenos (Terrain), as luzes assadas (lightmaps), as articulações (portas e
+  correntes com *HingeJoint*/*ConfigurableJoint*) e os scripts (Udon): portas, fechaduras e botões que um script
+  abre ou liga ficam parados. Use só mapas que você tem o direito de usar.
 
 ### Ajustar esqueleto
 
@@ -862,7 +889,11 @@ js/gltf.js         o carregador de glTF dos mapas (Draco, Meshopt e o material s
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
 js/luzes.js        as luzes do mapa (do arquivo, as que brilham, pelo nome, as suas), as mais perto acesas e a luz calculada por raios
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb (um modelo ou todos juntos)
-js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity e os materiais .mat
+js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity, os materiais .mat e a física (colisores, Rigidbody, VRC Pickup)
+js/unity-malha.js  as malhas guardadas pelo Unity (Mesh .asset, cruas ou comprimidas)
+js/unity-textura.js as texturas guardadas pelo Unity (Texture2D .asset: RGBA, RGB, DXT1, DXT5; as outras pela miniatura)
+js/colisao.js      o que segura a pessoa no cenário, e as plantas que dobram com o vento e com quem passa
+js/fisica.js       os objetos com física do mapa: cair, rolar, ser empurrado, pegar (E), jogar, e o mesmo para todos na sala
 js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
@@ -890,6 +921,7 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
+modelos/ybot.vrm   o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
 vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
                    (MIT, three-vrm-pacote.min.js); MediaPipe Tasks Vision (Apache-2.0, mediapipe-visao.min.js) e o
                    decodificador Draco (Apache-2.0, draco/) — o Cubism Core e os ~30 MB do MediaPipe não vêm junto
@@ -909,6 +941,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_fisica  # mundo do Unity sem .fbx: malhas/texturas .asset, colisores, plantas, bola, pegar e jogar
 python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil

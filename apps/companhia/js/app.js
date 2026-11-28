@@ -869,7 +869,7 @@
     autor: () => pref("sala-nome", ""),
     lembrarAutor: (n) => { if (n) gravarPref("sala-nome", n); },
     async fontes(tipo) {
-      if (tipo === "personagem") return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", "")).map((p) => ({ id: p.id, nome: p.nome }));
+      if (tipo === "personagem") return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && !ehBoneco(p.id)).map((p) => ({ id: p.id, nome: p.nome }));
       if (tipo === "mundo") return (await C.mapas.lista()).map((m) => ({ id: m.id, nome: m.nome }));
       if (tipo === "item") return (await C.itens.lista()).filter((x) => x.origem === "meu").map((x) => ({ id: x.id, nome: x.nome }));
       return (await C.movimentos.lista()).map((m) => ({ id: m.id, nome: m.nome }));
@@ -1633,25 +1633,27 @@
     ajustarCampo();
     sala.falar(texto).catch(LNUX.erro);
   }
-  /** O avatar padrão (um boneco de caixas), guardado como uma personagem qualquer na primeira vez. */
+  /** O avatar padrão (o Y Bot), guardado como uma personagem qualquer na primeira vez. */
   async function idDoBoneco() {
-    const id = pref("sala-boneco", "");
+    const id = pref("sala-boneco-ybot", "");
     if (id && (await C.listarPersonagens()).some((p) => p.id === id)) return id;
     await C.prepararVRM();
-    const p = await C.importarPacote(new Map([["Boneco.vrm", C.bonecoPadrao()]]));
-    gravarPref("sala-boneco", p.id);
+    const p = await C.importarPacote(new Map([["Y Bot.vrm", await C.bonecoYBot()]]));
+    gravarPref("sala-boneco-ybot", p.id);
     return p.id;
   }
+  /** É uma das personagens padrão (o Y Bot, ou o boneco de caixas de antes)? Elas não aparecem na lista de escolher. */
+  const ehBoneco = (id) => !!id && (id === pref("sala-boneco", "") || id === pref("sala-boneco-ybot", ""));
   /** O arquivo .vrm da minha personagem, para os outros me verem (ou null: eles veem um boneco simples). */
   /** Como a minha personagem está agora (a roupa, o ajuste do esqueleto, as peças escondidas e as texturas trocadas): vai para a sala. */
   function minhaAparencia() {
     if (!atual || atual.tipo !== "vrm" || !palco3d.vrm) return null;
     const r = roupaAtual();
-    return { avatar: r ? r.blob : null, ajuste: palco3d.ajuste || null, ocultas: palco3d.pecasOcultas(), texturas: (r && r.texturas) || {} };
+    return { avatar: r && !ehBoneco(atual.id) ? r.blob : null, ajuste: palco3d.ajuste || null, ocultas: palco3d.pecasOcultas(), texturas: (r && r.texturas) || {} };
   }
   /** O .vrm da minha personagem (a roupa que estou usando), que vai para as outras pessoas da sala. */
   function avatarParaOsOutros() {
-    if (!atual || atual.tipo !== "vrm") return null;
+    if (!atual || atual.tipo !== "vrm" || ehBoneco(atual.id)) return null; // o boneco padrão: cada um abre o seu
     const r = roupaAtual();
     return r ? r.blob : null;
   }
@@ -1711,8 +1713,8 @@
   const ctxSalas = {
     get lojaDisponivel() { return lojaDisponivel; },
     nome: () => pref("sala-nome", ""),
-    personagem: () => pref("sala-avatar", (atual && atual.tipo === "vrm" && atual.id !== pref("sala-boneco", "") && atual.id) || ""),
-    async personagens() { return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && p.id !== pref("sala-boneco", "")).map((p) => ({ id: p.id, nome: p.nome })); },
+    personagem: () => pref("sala-avatar", (atual && atual.tipo === "vrm" && !ehBoneco(atual.id) && atual.id) || ""),
+    async personagens() { return (await C.listarPersonagens()).filter((p) => p.tipo === "vrm" && !ehBoneco(p.id)).map((p) => ({ id: p.id, nome: p.nome })); },
     async escolherNaLoja() {
       let escolhida = null;
       await abrirLoja("personagem", async (item, blob) => { escolhida = await personagemDaLoja(item, blob); gravarPref("sala-avatar", escolhida); });
@@ -1816,11 +1818,15 @@
     const podeUsar = (e) => jogando() && !(C.webc && C.webc.visivel) && !editavel(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector(".lnux-fundo-modal, .jogo-opcoes-fundo") && palco3d && palco3d.mundo && palco3d.mundo.andando;
     window.addEventListener("keydown", (e) => {
       if (!podeUsar(e)) return;
-      if (e.code === "KeyE" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.usar(); }
+      if (e.code === "KeyE" && mochila.naMao && !e.defaultPrevented) { e.preventDefault(); if (!e.repeat) mochila.usar(); } // (o E que pegou ou soltou um objeto do mapa não usa o item)
       if (e.code === "KeyG" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.alternarVisivel(); }
     });
     window.addEventListener("keyup", (e) => { if (e.code === "KeyE") mochila.soltar(); });
     window.addEventListener("blur", () => mochila.soltar());
+    // com um item da mochila na mão, o E é dele (e não pega os objetos do mapa)
+    const ligarMundo = () => { if (palco3d && palco3d.mundo) palco3d.mundo.temItemNaMao = () => !!mochila.naMao; };
+    ligarMundo();
+    if (!palco3d) ouvintesPalco.push(["quadro", ligarMundo]);
     return mochila;
   }
   /** Opções › Itens: os meus e os baixados; segurar, ajustar no meu corpo, guardar. */
