@@ -387,7 +387,7 @@
       };
       const raiz = new T.Group();
       raiz.name = "Cenário";
-      let colocados = 0, como = "";
+      let colocados = 0, como = "", fisica = null;
       if (cena) {
         aoProgresso(0.1, "Montando a cena do Unity...");
         const r = await C.unityCena.montar(arquivos, cena, { carregarModelo, aoProgresso: (f) => aoProgresso(0.1 + f * 0.6, "Montando a cena do Unity...") });
@@ -396,6 +396,9 @@
         if (r.faltaram.length) avisos.push(`${r.faltaram.length} modelo(s) da cena não abriram: ${r.faltaram.slice(0, 5).join(", ")}${r.faltaram.length > 5 ? "..." : ""}.`);
         if (!colocados) throw new Error("A cena do Unity não tem nenhum modelo que eu consiga pôr no lugar (só terreno, luzes ou peças de fora do pacote).");
         como = "montando a cena do Unity";
+        fisica = r.fisica || null;
+        if (r.texturas && r.texturas.previas) avisos.push(`${r.texturas.previas} textura(s) estão num formato do Unity que não consigo ler (comprimidas com "crunch" ou BC7): entraram as miniaturas que o pacote traz, com as cores certas mas pouca resolução.`);
+        if (fisica && (fisica.colisores || fisica.corpos)) avisos.push(`Física do Unity: ${fisica.colisores} colisor(es) sólido(s) (o resto, como plantas e enfeites, dá para atravessar), ${fisica.corpos} objeto(s) com física, ${fisica.pegaveis} de pegar.`);
       } else {
         // lado a lado, numa fileira, com um espaço entre eles
         let x = 0;
@@ -424,7 +427,7 @@
       cenaT.add(raiz);
       cenaT.updateMatrixWorld(true);
       const saida = await new V.GLTFExporter().parseAsync(cenaT, { binary: true, onlyVisible: true, maxTextureSize: 4096 });
-      return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como, colocados };
+      return { glb: new Blob([saida], { type: "model/gltf-binary" }), triangulos, avisos, como, colocados, fisica };
     },
     /**
      * Converte um modelo para .glb. arquivos: Map caminho → Blob (o modelo e o que vier ao lado dele).

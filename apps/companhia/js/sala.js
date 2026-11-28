@@ -619,6 +619,8 @@
       const e = { p: [arred(r.x), arred(r.y), arred(r.z)], r: arred(m.rumo), e: m.estado, emo: p.emocao, g: this.gesto, c: arred(m.cam.giro) }; // c: para onde a câmera olha (a tela de vídeo que segue fica na frente dela)
       const it = this.mochila && this.mochila.paraSala();
       if (it) e.it = it; // o item na mão (js/mochila.js)
+      const fis = m.fisica && m.fisica.paraSala();
+      if (fis) e.fis = fis; // os objetos do mapa que eu peguei ou mexi (js/fisica.js)
       if (m.olharCabeca) e.o = arred(m.olharCabeca); // em primeira pessoa: a cabeça abaixa e levanta com o olhar
       const rd = m.ragdoll;
       if (rd && (rd.ativo || rd.saida > 0)) {
@@ -700,6 +702,9 @@
           let rem = this.remotos.get(j.id);
           if (!rem) { rem = new Remoto(this, j.id, j.nome); this.remotos.set(j.id, rem); this.aoMensagem({ sistema: true, texto: C.t("{nome} entrou.", { nome: j.nome }) }); this.aoMudar(); }
           rem.receber(j);
+          // os objetos do mapa que essa pessoa mexeu (js/fisica.js)
+          const fis = j.estado && j.estado.fis, fisica = this.palco.mundo && this.palco.mundo.fisica;
+          if (fis && fisica) fisica.receber(j.id, fis);
         }
         for (const [id, rem] of this.remotos) if (!vivos.has(id)) { this.aoMensagem({ sistema: true, texto: C.t("{nome} saiu.", { nome: rem.nome }) }); rem.descartar(); this.remotos.delete(id); this.aoMudar(); }
         if (r.privado) this.receberPrivado(r.privado);

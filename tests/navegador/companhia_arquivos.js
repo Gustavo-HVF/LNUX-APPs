@@ -391,6 +391,132 @@ function avatarDoUnity() {
   return { pacote, fbx, texturas };
 }
 
+// ── Mundo do Unity com física (malhas e texturas guardadas pelo Unity, colisores, Rigidbody, VRC Pickup) ──
+
+/** Bits LSB primeiro, como o PackedBitVector do Unity. */
+function empacotarBits(ints, bits) {
+  const saida = Buffer.alloc(Math.ceil(ints.length * bits / 8));
+  let pos = 0;
+  for (const v of ints) for (let b = 0; b < bits; b++, pos++) if ((v >>> b) & 1) saida[pos >> 3] |= 1 << (pos & 7);
+  return saida;
+}
+function pacoteFloats(vals, bits) {
+  const min = Math.min(...vals), max = Math.max(...vals), range = max - min || 1, m = (1 << bits) - 1;
+  return { n: vals.length, start: min, range, bits, dados: empacotarBits(vals.map((v) => Math.round((v - min) / range * m)), bits) };
+}
+const yamlPacote = (nome, p, comFaixa = true) => `    ${nome}:\n      m_NumItems: ${p.n}\n` + (comFaixa ? `      m_Range: ${p.range}\n      m_Start: ${p.start}\n` : "") + `      m_Data: ${p.dados.toString("hex")}\n      m_BitSize: ${p.bits}\n`;
+/**
+ * Uma malha .asset do Unity (no espaço do Unity, mão esquerda). pos: [[x,y,z]], normais: [[x,y,z]], uv: [[u,v]],
+ * tris: [a,b,c,...] (horário, como o Unity). comprimida: m_MeshCompression 2 (PackedBitVector) em vez dos bytes crus.
+ */
+function malhaUnity(nome, { pos, normais, uv, tris }, { comprimida = false } = {}) {
+  const n = pos.length;
+  let corpo;
+  if (comprimida) {
+    const signs = normais.map((v) => (v[2] >= 0 ? 1 : 0));
+    corpo = "  m_MeshCompression: 2\n  m_IndexFormat: 0\n  m_IndexBuffer: \n  m_VertexData:\n    serializedVersion: 3\n    m_VertexCount: 0\n    m_Channels: []\n    m_DataSize: 0\n    _typelessdata: \n  m_CompressedMesh:\n" +
+      yamlPacote("m_Vertices", pacoteFloats(pos.flat(), 16)) + yamlPacote("m_UV", pacoteFloats(uv.flat(), 12)) + yamlPacote("m_Normals", pacoteFloats(normais.map((v) => [v[0], v[1]]).flat(), 10)) +
+      yamlPacote("m_NormalSigns", { n, bits: 1, dados: empacotarBits(signs, 1) }, false) + yamlPacote("m_Triangles", { n: tris.length, bits: 8, dados: empacotarBits(tris, 8) }, false) + "    m_UVInfo: 5\n";
+  } else {
+    const passo = 32, buf = Buffer.alloc(n * passo);
+    pos.forEach((p, i) => { p.forEach((v, k) => buf.writeFloatLE(v, i * passo + k * 4)); normais[i].forEach((v, k) => buf.writeFloatLE(v, i * passo + 12 + k * 4)); uv[i].forEach((v, k) => buf.writeFloatLE(v, i * passo + 24 + k * 4)); });
+    const canal = (offset, dim) => `    - stream: 0\n      offset: ${offset}\n      format: 0\n      dimension: ${dim}\n`;
+    const ib = Buffer.alloc(tris.length * 2);
+    tris.forEach((v, i) => ib.writeUInt16LE(v, i * 2));
+    corpo = `  m_MeshCompression: 0\n  m_IndexFormat: 0\n  m_IndexBuffer: ${ib.toString("hex")}\n  m_VertexData:\n    serializedVersion: 3\n    m_VertexCount: ${n}\n    m_Channels:\n` +
+      canal(0, 3) + canal(12, 3) + canal(0, 0) + canal(0, 0) + canal(24, 2) + Array.from({ length: 9 }, () => canal(0, 0)).join("") + `    m_DataSize: ${buf.length}\n    _typelessdata: ${buf.toString("hex")}\n`;
+  }
+  return `%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!43 &4300000\nMesh:\n  serializedVersion: 11\n  m_Name: ${nome}\n  m_SubMeshes:\n  - serializedVersion: 2\n    firstByte: 0\n    indexCount: ${tris.length}\n    topology: 0\n    baseVertex: 0\n    firstVertex: 0\n    vertexCount: ${n}\n` + corpo;
+}
+/** Uma caixa (no Unity) de lado l, com as faces para fora. */
+function caixaUnity(l = 1) {
+  const h = l / 2, pos = [], normais = [], uv = [], tris = [];
+  const faces = [[[1, 0, 0], [0, 0, 1], [0, 1, 0]], [[-1, 0, 0], [0, 0, -1], [0, 1, 0]], [[0, 1, 0], [1, 0, 0], [0, 0, 1]], [[0, -1, 0], [1, 0, 0], [0, 0, -1]], [[0, 0, 1], [-1, 0, 0], [0, 1, 0]], [[0, 0, -1], [1, 0, 0], [0, 1, 0]]];
+  for (const [n, u, v] of faces) {
+    const b = pos.length;
+    for (const [su, sv] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { pos.push([0, 1, 2].map((k) => (n[k] + u[k] * su + v[k] * sv) * h)); normais.push(n); uv.push([(su + 1) / 2, (sv + 1) / 2]); }
+    // a face da frente no Unity é horária vista de frente: (v1 − v0) × (v2 − v0) dá o contrário da normal (conferido
+    // com as malhas de um mundo de verdade: o leitor vira para o three e as faces batem com as normais)
+    tris.push(b, b + 2, b + 1, b, b + 3, b + 2);
+  }
+  return { pos, normais, uv, tris };
+}
+/** Grama: dois "cartões" cruzados de 1,2 m × 0,8 m (dos dois lados). */
+function gramaUnity() {
+  const pos = [], normais = [], uv = [], tris = [];
+  for (const [dx, dz] of [[0.6, 0], [0, 0.6]]) {
+    const b = pos.length, n = dz ? [1, 0, 0] : [0, 0, 1];
+    for (const [s, y] of [[-1, 0], [1, 0], [1, 0.8], [-1, 0.8]]) { pos.push([dx * s, y, dz * s]); normais.push(n); uv.push([(s + 1) / 2, y / 0.8]); }
+    tris.push(b, b + 2, b + 1, b, b + 3, b + 2, b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  return { pos, normais, uv, tris };
+}
+/** Uma Texture2D .asset do Unity: formato 4 (RGBA32) ou 10 (DXT1); bytes já no formato, linhas de baixo para cima. */
+function texturaUnity(nome, w, h, formato, bytes) {
+  return `%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!28 &2800000\nTexture2D:\n  m_Name: ${nome}\n  serializedVersion: 2\n  m_Width: ${w}\n  m_Height: ${h}\n  m_CompleteImageSize: ${bytes.length}\n  m_TextureFormat: ${formato}\n  m_MipCount: 1\n` +
+    `  m_ColorSpace: 1\n  image data: ${bytes.length}\n  _typelessdata: ${Buffer.from(bytes).toString("hex")}\n  m_StreamData:\n    serializedVersion: 2\n    offset: 0\n    size: 0\n    path: \n`;
+}
+/**
+ * Um mundo do Unity sem .fbx (como os exportados com as peças separadas): a cena com o chão e uma parede (cubos do
+ * Unity com BoxCollider), uma moita de grama (malha .asset crua, material recortado com textura DXT1, sem colisor), uma
+ * bola (Rigidbody com gravidade, SphereCollider, material de física que quica), uma caixa de pegar (malha .asset
+ * comprimida, Rigidbody cinemático, BoxCollider e o VRC Pickup), uma sala desligada (ligada por script no VRChat) e o
+ * descritor do VRChat com o ponto de nascer. Devolve {pacote: Buffer}.
+ */
+function mundoUnityComFisica() {
+  const g = (n) => n.toString(16).padStart(32, "0");
+  const G = { cena: g(0x101), grama: g(0x102), caixa: g(0x103), matChao: g(0x104), matGrama: g(0x105), texChao: g(0x106), texGrama: g(0x107), fisBola: g(0x108) };
+  const mat = (nome, tex, extra = "") => `%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n--- !u!21 &2100000\nMaterial:\n  m_Name: ${nome}\n  m_CustomRenderQueue: -1\n  stringTagMap:\n${extra}  m_SavedProperties:\n    serializedVersion: 3\n    m_TexEnvs:\n` +
+    `      _MainTex:\n        m_Texture: {fileID: 2800000, guid: ${tex}, type: 3}\n        m_Scale: {x: 1, y: 1}\n        m_Offset: {x: 0, y: 0}\n    m_Floats:\n      _Cutoff: 0.5\n    m_Colors:\n      _Color: {r: 1, g: 1, b: 1, a: 1}\n`;
+  // a cena: [id do objeto, nome, posição, escala, componentes]
+  let id = 1000;
+  const docs = [];
+  const objeto = (nome, pos, esc, comps, { ativo = 1, pai = 0, rotY = 0 } = {}) => {
+    const go = ++id, tr = ++id, ids = comps.map(() => ++id);
+    const q = [0, Math.sin(rotY / 2), 0, Math.cos(rotY / 2)];
+    docs.push(`--- !u!1 &${go}\nGameObject:\n  m_Component:\n  - component: {fileID: ${tr}}\n` + ids.map((c) => `  - component: {fileID: ${c}}\n`).join("") + `  m_Layer: 0\n  m_Name: ${nome}\n  m_IsActive: ${ativo}\n`);
+    docs.push(`--- !u!4 &${tr}\nTransform:\n  m_GameObject: {fileID: ${go}}\n  m_LocalRotation: {x: ${q[0]}, y: ${q[1]}, z: ${q[2]}, w: ${q[3]}}\n  m_LocalPosition: {x: ${pos[0]}, y: ${pos[1]}, z: ${pos[2]}}\n  m_LocalScale: {x: ${esc[0]}, y: ${esc[1]}, z: ${esc[2]}}\n  m_Children: []\n  m_Father: {fileID: ${pai}}\n`);
+    comps.forEach((c, i) => docs.push(c(ids[i], go)));
+    return tr;
+  };
+  const filtro = (malha) => (i, go) => `--- !u!33 &${i}\nMeshFilter:\n  m_GameObject: {fileID: ${go}}\n  m_Mesh: ${malha}\n`;
+  const desenho = (matGuid) => (i, go) => `--- !u!23 &${i}\nMeshRenderer:\n  m_GameObject: {fileID: ${go}}\n  m_Enabled: 1\n  m_Materials:\n  - {fileID: ${matGuid ? "2100000, guid: " + matGuid + ", type: 2" : "10303, guid: 0000000000000000f000000000000000, type: 0"}}\n`;
+  const caixaCol = (gatilho = 0) => (i, go) => `--- !u!65 &${i}\nBoxCollider:\n  m_GameObject: {fileID: ${go}}\n  m_Material: {fileID: 0}\n  m_IsTrigger: ${gatilho}\n  m_Enabled: 1\n  serializedVersion: 3\n  m_Size: {x: 1, y: 1, z: 1}\n  m_Center: {x: 0, y: 0, z: 0}\n`;
+  const esferaCol = (i, go) => `--- !u!135 &${i}\nSphereCollider:\n  m_GameObject: {fileID: ${go}}\n  m_Material: {fileID: 13400000, guid: ${G.fisBola}, type: 2}\n  m_IsTrigger: 0\n  m_Enabled: 1\n  serializedVersion: 3\n  m_Radius: 0.5\n  m_Center: {x: 0, y: 0, z: 0}\n`;
+  const corpo = (gravidade, cinematico) => (i, go) => `--- !u!54 &${i}\nRigidbody:\n  m_GameObject: {fileID: ${go}}\n  serializedVersion: 4\n  m_Mass: 0.5\n  m_Drag: 0\n  m_AngularDrag: 0.05\n  m_UseGravity: ${gravidade}\n  m_IsKinematic: ${cinematico}\n  m_Interpolate: 0\n  m_Constraints: 0\n  m_CollisionDetection: 0\n`;
+  const pickup = (i, go) => `--- !u!114 &${i}\nMonoBehaviour:\n  m_GameObject: {fileID: ${go}}\n  m_Enabled: 1\n  m_Script: {fileID: 1804438810, guid: 661092b4961be7145bfbe56e1e62337b, type: 3}\n  DisallowTheft: 0\n  AutoHold: 1\n  InteractionText: \n  UseText: Use\n  pickupable: 1\n  proximity: 2\n`;
+  const cubo = "{fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}", esfera = "{fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}";
+  objeto("Chao", [0, -0.1, 0], [20, 0.2, 20], [filtro(cubo), desenho(G.matChao), caixaCol()]);
+  objeto("Parede", [0, 1, 6], [6, 2, 0.3], [filtro(cubo), desenho(null), caixaCol()]);
+  objeto("Grass_Patch", [0, 0, 3], [1, 1, 1], [filtro(`{fileID: 4300000, guid: ${G.grama}, type: 2}`), desenho(G.matGrama)]);
+  objeto("Gatilho", [0, 1, -3], [2, 2, 2], [caixaCol(1)]); // um gatilho (atravessável, nem aparece)
+  objeto("Ball", [2, 2, 0], [0.4, 0.4, 0.4], [filtro(esfera), desenho(null), esferaCol, corpo(1, 0)]);
+  objeto("Pickup Box", [-1.5, 0.15, 0], [0.3, 0.3, 0.3], [filtro(`{fileID: 4300000, guid: ${G.caixa}, type: 2}`), desenho(null), caixaCol(), corpo(0, 1), pickup]);
+  // uma sala desligada (o mundo liga por script quando alguém entra): 12 peças → entra no mapa; a versão "Quest" não
+  const sala = objeto("Salao", [-8, 0, -8], [1, 1, 1], [], { ativo: 0 });
+  for (let i = 0; i < 12; i++) objeto("Coluna " + i, [i % 4, 0.5, Math.floor(i / 4)], [0.3, 1, 0.3], [filtro(cubo), desenho(null)], { pai: sala });
+  const quest = objeto("Salao for Quest", [8, 0, -8], [1, 1, 1], [], { ativo: 0 });
+  for (let i = 0; i < 12; i++) objeto("Coluna Q " + i, [i % 4, 0.5, Math.floor(i / 4)], [0.3, 1, 0.3], [filtro(cubo), desenho(null)], { pai: quest });
+  // o ponto de nascer, virado para o +Z do Unity (o giro de 0)
+  const spawn = objeto("Spawn", [0, 0, 1], [1, 1, 1], []);
+  docs.push(`--- !u!1 &${++id}\nGameObject:\n  m_Name: VRCWorld\n  m_IsActive: 1\n--- !u!114 &${++id}\nMonoBehaviour:\n  m_GameObject: {fileID: ${id - 1}}\n  m_Enabled: 1\n  spawns:\n  - {fileID: ${spawn}}\n  spawnRadius: 0\n`);
+  const cena = "%YAML 1.1\n%TAG !u! tag:unity3d.com,2011:\n" + docs.join("");
+  // as texturas: o chão cinza (RGBA32 2×2: a linha de baixo vermelha, a de cima azul, para conferir a ordem) e a grama verde em DXT1
+  const rgba = Buffer.from([220, 30, 30, 255, 220, 30, 30, 255, 30, 30, 220, 255, 30, 30, 220, 255]);
+  const dxt = Buffer.alloc(8); dxt.writeUInt16LE(0x07e0, 0); dxt.writeUInt16LE(0x0000, 2); // verde puro, todos os pixels com a cor 0
+  const pacote = unityPackage([
+    { caminho: "Assets/Mundo/Mundo.unity", dados: cena, guid: G.cena },
+    { caminho: "Assets/Mundo/Mesh/Grass_Patch.asset", dados: malhaUnity("Grass_Patch", gramaUnity()), guid: G.grama },
+    { caminho: "Assets/Mundo/Mesh/PickupBox.asset", dados: malhaUnity("PickupBox", caixaUnity(1), { comprimida: true }), guid: G.caixa },
+    { caminho: "Assets/Mundo/Material/Chao.mat", dados: mat("Chao", G.texChao), guid: G.matChao },
+    { caminho: "Assets/Mundo/Material/Grama.mat", dados: mat("Grama", G.texGrama, "    RenderType: TransparentCutout\n"), guid: G.matGrama },
+    { caminho: "Assets/Mundo/Texture2D/Chao.asset", dados: texturaUnity("Chao", 2, 2, 4, rgba), guid: G.texChao },
+    { caminho: "Assets/Mundo/Texture2D/Grama.asset", dados: texturaUnity("Grama", 4, 4, 10, dxt), guid: G.texGrama },
+    { caminho: "Assets/Mundo/PhysicMaterial/Quica.physicMaterial", dados: "%YAML 1.1\n--- !u!134 &13400000\nPhysicMaterial:\n  m_Name: Quica\n  dynamicFriction: 0.3\n  staticFriction: 0.3\n  bounciness: 0.7\n", guid: G.fisBola },
+  ]);
+  return { pacote, malhaUnity, caixaUnity, gramaUnity, texturaUnity };
+}
+
 /** Um ZIP simples (sem compactar): [[nome, Buffer]]. */
 function zip(arquivos) {
   const crc = (buf) => { let c = ~0; for (const x of buf) { c ^= x; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; } return ~c >>> 0; };
@@ -409,4 +535,4 @@ function zip(arquivos) {
   return Buffer.concat([...partes, cd, fim]);
 }
 
-module.exports = { glb, caixas, gltfDeMalha, mapaDeTeste, mapaAnimado, mapaEspecular, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };
+module.exports = { mundoUnityComFisica, malhaUnity, caixaUnity, texturaUnity, glb, caixas, gltfDeMalha, mapaDeTeste, mapaAnimado, mapaEspecular, casaDeTeste, casaComLuzes, bonecoVRM0, bvhDeTeste, unityPackage, png, tga, psd, zip, avatarFBX, avatarDoUnity };

@@ -126,6 +126,17 @@ Com a personagem, a tela é só o jogo (`js/jogo.js`):
   desligar). Os outros na sala veem o corpo caído. O corpo **bate nele mesmo** (cápsulas em cada parte: o braço não
   entra no peito, as pernas não se cruzam por dentro) e **quem passa por cima arrasta** o corpo caído, na direção e
   na velocidade em que andava (sem botão de chutar: é só andar contra ele).
+- **Plantas que dobram**: grama, folhas, heras, flores e arbustos não seguram mais ninguém. Elas **balançam com o
+  vento e se afastam de quem passa** (você e as pessoas da sala), mais na ponta do que na base. Vale para qualquer
+  mapa: numa cena do Unity, só o que tinha colisor sólido segura; nos outros (`.glb`, `.fbx`, `.blend`...), uma peça
+  é planta pelo nome (dela, de um pai ou do material: *grass*, *grama*, *leaf*, *folha*, *ivy*, *flower*, *bush*,
+  *fern*, *vine*...) ou por ser pequena e de material recortado (capim e folhas feitos com imagem). Grades, cercas,
+  vasos e troncos continuam sólidos.
+- **Objetos com física**: num mundo do Unity, o que tinha **Rigidbody** cai, rola, quica (o material de física do
+  Unity diz quanto) e **é empurrado por quem anda contra** (uma bola baixa é chutada). O que tinha o **VRC Pickup** do
+  VRChat **dá para pegar**: **E** perto dele pega, **E** de novo põe na frente, **segurar E e soltar** joga (mais forte
+  quanto mais tempo segurou); no celular, o botão da mão. Com um item da mochila na mão, o E continua sendo do item.
+  Na sala, quem pegou ou mexeu num objeto manda onde ele está, e todos veem igual.
 - **Ninguém atravessa ninguém**: as personagens da sala são sólidas. Quem anda contra outra pessoa para encostado (ou
   desliza em volta dela).
 - **Clicar na personagem de alguém** abre **três bolinhas** em cima dela (do alto para o lado): **Adicionar amigo**,
@@ -677,8 +688,22 @@ modelos `.fbx`/`.obj`/`.dae` (direto ou de dentro do `.unitypackage`) ou a cena 
 **monta a cena** (`.unity`): cada peça no lugar, girada e no tamanho que o Unity guardou (as instâncias de
 prefab, com as mudanças da cena, e os prefabs dentro de prefabs), os cubos, esferas, cilindros e planos do próprio
 Unity e os materiais `.mat` (cor e textura principal). Sem cena, dá para trazer **todos os modelos** do pacote lado a
-lado. Os modelos sem `.mat` ganham as texturas pelo nome. Não vêm: os shaders do Unity, os terrenos (Terrain), as
-luzes assadas (lightmaps) e os scripts. Use só mapas que você tem o direito de usar.
+lado. Os modelos sem `.mat` ganham as texturas pelo nome.
+
+- **Mundos sem `.fbx`**: muitos pacotes de mundo trazem cada malha e cada textura no formato guardado pelo próprio
+  Unity (`Mesh.asset`, `Texture2D.asset`). O WEBC lê as malhas (cruas ou comprimidas) e as texturas RGBA, RGB, DXT1 e
+  DXT5; as comprimidas com *crunch* e as BC7 ainda não: no lugar entra a miniatura que o pacote traz (as cores
+  certas, com pouca resolução).
+- **Salas desligadas**: mundos com várias salas costumam guardá-las desligadas e ligar por script quando alguém
+  entra. Um grupo desligado com muitas peças entra no mapa; o que tem cara de sobra (versão *old*, *debug*,
+  *test*, a versão para *Quest*/celular, *occluder*) fica de fora.
+- **A física vai junto** (nos "extras" do `.glb`): os colisores sólidos do Unity (Box, Sphere, Capsule, Mesh, fora os
+  *Is Trigger* e as camadas que o VRChat deixa atravessar: *Pickup*, *Walkthrough*, *UI*...), os corpos com
+  **Rigidbody** e os objetos com **VRC Pickup**, e o **ponto de nascer** do *VRC Scene Descriptor*. Veja *Plantas que
+  dobram* e *Objetos com física* em Movimento.
+- **Não vêm**: os shaders do Unity, os terrenos (Terrain), as luzes assadas (lightmaps), as articulações (portas e
+  correntes com *HingeJoint*/*ConfigurableJoint*) e os scripts (Udon): portas, fechaduras e botões que um script
+  abre ou liga ficam parados. Use só mapas que você tem o direito de usar.
 
 ### Ajustar esqueleto
 
@@ -864,7 +889,11 @@ js/gltf.js         o carregador de glTF dos mapas (Draco, Meshopt e o material s
 js/mundo.js        cenário (mapas), colisão, andar (W A S D, Espaço), voar (V), onde nascer, câmera em terceira pessoa e controles de toque
 js/luzes.js        as luzes do mapa (do arquivo, as que brilham, pelo nome, as suas), as mais perto acesas e a luz calculada por raios
 js/conversor.js    conversor de mapas: .blend, .fbx, .obj, .dae, .stl, .ply, .3ds, .3mf, .usdz e glTF → .glb (um modelo ou todos juntos)
-js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity e os materiais .mat
+js/unity-cena.js   cenas do Unity (.unity, .prefab): cada peça no lugar, as formas do Unity, os materiais .mat e a física (colisores, Rigidbody, VRC Pickup)
+js/unity-malha.js  as malhas guardadas pelo Unity (Mesh .asset, cruas ou comprimidas)
+js/unity-textura.js as texturas guardadas pelo Unity (Texture2D .asset: RGBA, RGB, DXT1, DXT5; as outras pela miniatura)
+js/colisao.js      o que segura a pessoa no cenário, e as plantas que dobram com o vento e com quem passa
+js/fisica.js       os objetos com física do mapa: cair, rolar, ser empurrado, pegar (E), jogar, e o mesmo para todos na sala
 js/texturas.js     a textura certa de cada material: pelo .mat do Unity ou pelo nome da imagem
 js/avatar.js       conversor de avatares: .unitypackage, .fbx e .glb com esqueleto → personagem .vrm (ossos, pose em T,
                    materiais .mat do Unity, texturas TGA/PSD, expressões, balanço)
@@ -912,6 +941,7 @@ python3 tests/testar_navegador.py companhia_corpo   # menu Movimento
 python3 tests/testar_navegador.py companhia_mapas   # conversor de mapas (.blend e outros → .glb)
 python3 tests/testar_navegador.py companhia_sala    # salas: duas pessoas (dois navegadores) na mesma sala
 python3 tests/testar_navegador.py companhia_avatar  # avatares do Unity (.unitypackage, .fbx) → .vrm
+python3 tests/testar_navegador.py companhia_fisica  # mundo do Unity sem .fbx: malhas/texturas .asset, colisores, plantas, bola, pegar e jogar
 python3 tests/testar_navegador.py companhia_pacote  # pacotes com vários modelos (personagem, roupa, item, cena do Unity) e texturas pelo nome
 python3 tests/testar_navegador.py companhia_loja    # loja (publicar, prévia 3D, usar) e o site publicado sozinho
 python3 tests/testar_navegador.py companhia_contas  # contas: código por e-mail (servidor de e-mail de mentira), perfil

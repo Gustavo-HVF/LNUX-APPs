@@ -1818,11 +1818,15 @@
     const podeUsar = (e) => jogando() && !(C.webc && C.webc.visivel) && !editavel(e) && !e.ctrlKey && !e.metaKey && !e.altKey && !document.querySelector(".lnux-fundo-modal, .jogo-opcoes-fundo") && palco3d && palco3d.mundo && palco3d.mundo.andando;
     window.addEventListener("keydown", (e) => {
       if (!podeUsar(e)) return;
-      if (e.code === "KeyE" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.usar(); }
+      if (e.code === "KeyE" && mochila.naMao && !e.defaultPrevented) { e.preventDefault(); if (!e.repeat) mochila.usar(); } // (o E que pegou ou soltou um objeto do mapa não usa o item)
       if (e.code === "KeyG" && mochila.naMao) { e.preventDefault(); if (!e.repeat) mochila.alternarVisivel(); }
     });
     window.addEventListener("keyup", (e) => { if (e.code === "KeyE") mochila.soltar(); });
     window.addEventListener("blur", () => mochila.soltar());
+    // com um item da mochila na mão, o E é dele (e não pega os objetos do mapa)
+    const ligarMundo = () => { if (palco3d && palco3d.mundo) palco3d.mundo.temItemNaMao = () => !!mochila.naMao; };
+    ligarMundo();
+    if (!palco3d) ouvintesPalco.push(["quadro", ligarMundo]);
     return mochila;
   }
   /** Opções › Itens: os meus e os baixados; segurar, ajustar no meu corpo, guardar. */

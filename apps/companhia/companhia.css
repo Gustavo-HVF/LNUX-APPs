@@ -221,6 +221,9 @@
 .controles-mundo .botao-pulo { width: 64px; height: 64px; }
 .controles-mundo .botao-correr { width: 46px; height: 46px; font-size: 18px; }
 .controles-mundo .botao-correr[aria-pressed=true] { background: var(--destaque); color: #fff; border-color: var(--destaque); }
+.controles-mundo .botao-pegar { width: 54px; height: 54px; border-radius: 50%; border: 1px solid var(--borda); background: color-mix(in srgb, var(--painel) 60%, transparent); color: var(--texto); cursor: pointer; touch-action: none; backdrop-filter: blur(4px); display: grid; place-items: center; }
+.controles-mundo .botao-pegar[hidden] { display: none; }
+.controles-mundo .botao-pegar.segurando { background: var(--destaque); color: #fff; border-color: var(--destaque); }
 /* voar: o botão (só para quem pode), e Subir/Descer no lugar do pulo enquanto voa */
 .controles-mundo .botao-voar { width: 46px; height: 46px; font-size: 20px; }
 .controles-mundo .botao-voar[hidden] { display: none; }

@@ -329,10 +329,11 @@
         return null;
       }
       const modelos = C.conversor.modelos(arquivos), cenas = C.unityCena ? C.unityCena.cenas(arquivos) : [];
-      if (!modelos.length) { LNUX.aviso("Não achei um modelo 3D nesses arquivos (" + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ").", "alerta", 8000); return null; }
+      if (!modelos.length && !cenas.length) { LNUX.aviso("Não achei um modelo 3D nesses arquivos (" + C.conversor.FORMATOS.map((f) => "." + f[0]).join(", ") + ").", "alerta", 8000); return null; }
       // vários modelos (ou uma cena do Unity): montar a cena, juntar todos ou escolher um
-      let escolha = { tipo: "um", modelo: modelos[0] };
-      if (modelos.length > 1 || cenas.length) {
+      // (um mundo sem .fbx, com as malhas guardadas pelo Unity: só a cena)
+      let escolha = modelos.length ? { tipo: "um", modelo: modelos[0] } : { tipo: "cena", cena: cenas[0] };
+      if (modelos.length > 1 || (cenas.length && modelos.length)) {
         const nomeRadio = "conv-" + Math.random().toString(36).slice(2, 7);
         const radio = (valor, rotulo, dica, marcado) => el("label", { class: "lnux-alternar", style: { alignItems: "flex-start" } },
           el("input", { type: "radio", name: nomeRadio, value: valor, checked: marcado, "data-escolha": valor }), el("span", {}, el("b", {}, rotulo), dica ? el("span", { class: "fraco pequeno", style: { display: "block" } }, dica) : null));

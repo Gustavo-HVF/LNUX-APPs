@@ -50,11 +50,12 @@
       if (!nome) break;
       const tamanho = parseInt(texto.decode(dados.subarray(p + 124, p + 136)).replace(/\0.*$/, "").trim() || "0", 8) || 0;
       const corpo = dados.subarray(p + 512, p + 512 + tamanho);
-      const m = nome.replace(/^\.\//, "").match(/^([0-9a-f]{32})\/(pathname|asset|asset\.meta)$/i);
+      const m = nome.replace(/^\.\//, "").match(/^([0-9a-f]{32})\/(pathname|asset|asset\.meta|preview\.png)$/i);
       if (m) {
         if (!partes.has(m[1])) partes.set(m[1], {});
         if (m[2] === "pathname") partes.get(m[1]).pathname = texto.decode(corpo).split("\n")[0].trim();
         else if (m[2] === "asset") partes.get(m[1]).asset = corpo;
+        else if (m[2] === "preview.png") partes.get(m[1]).previa = corpo; // a miniatura que o Unity guarda (serve quando a textura não dá para ler)
         else partes.get(m[1]).meta = texto.decode(corpo);
       }
       p += 512 + Math.ceil(tamanho / 512) * 512;
@@ -62,9 +63,11 @@
     const arquivos = new Map();
     arquivos.metas = new Map();
     arquivos.guids = new Map();
-    for (const [guid, { pathname, asset, meta }] of partes) {
+    arquivos.previas = new Map();
+    for (const [guid, { pathname, asset, meta, previa }] of partes) {
       if (!pathname || !asset) continue;
       arquivos.set(pathname, new Blob([asset]));
+      if (previa && /\.asset$/i.test(pathname)) arquivos.previas.set(pathname, new Blob([previa], { type: "image/png" }));
       arquivos.guids.set(guid.toLowerCase(), pathname);
       if (meta) arquivos.metas.set(pathname, meta);
     }
@@ -178,6 +181,10 @@
       this.ragdoll = C.Ragdoll ? new C.Ragdoll(palco, this) : null; // o boneco de pano (js/ragdoll.js)
       this.outros = null;       // () → [{p: Vector3 (os pés), raio, altura}]: as pessoas da sala, que não dá para atravessar
       this.olharCabeca = 0;     // em primeira pessoa: quanto a cabeça abaixa (+) ou levanta (−), em radianos (os outros veem)
+      this.fisica = C.Fisica ? new C.Fisica(this) : null; // os objetos com física do mapa (js/fisica.js)
+      this.plantas = null;      // as plantas que dobram (js/colisao.js)
+      this.temItemNaMao = () => false; // a mochila diz se há um item na mão (aí o E usa o item)
+      this.apertouE = 0;
       this.ligarEntradas();
     }
     salvarCfg() { LNUX.preferencia.gravar("companhia.mundo", JSON.stringify(this.cfg)); }
@@ -248,7 +255,13 @@
       const T = window.THREE, raiz = this.palco.raiz, a = this.info && this.info.ajuste;
       this.vel.set(0, 0, 0);
       if (this.mapa && a && a.partida) { raiz.position.set(a.partida[0], a.partida[1], a.partida[2]); this.rumo = a.partida[3] || 0; }
-      else if (this.mapa) { this.rumo = 0; this.acharPartida(); }
+      else if (this.mapa && this.webc && this.webc.partida) {
+        // o ponto de nascer do mundo (VRC Scene Descriptor)
+        const pt = this.mapa.localToWorld(new T.Vector3(...this.webc.partida.pos));
+        raiz.position.copy(pt);
+        this.rumo = this.webc.partida.rumo + (+this.info.ajuste.giro || 0) * Math.PI / 180;
+        this.assentar();
+      } else if (this.mapa) { this.rumo = 0; this.acharPartida(); }
       else { raiz.position.set(0, 0, 0); this.rumo = 0; }
       raiz.rotation.y = this.rumo;
       raiz.updateMatrixWorld(true);
@@ -352,13 +365,22 @@
         if (e.code === "KeyF") { e.preventDefault(); if (!e.repeat) this.trocarCamera(); return; }
         if (e.code === "KeyQ") { e.preventDefault(); if (!e.repeat) { if (this.cfg.camera !== "ombro") this.trocarCamera("ombro"); else this.trocarOmbro(); } return; }
         if (e.code === "KeyR") { e.preventDefault(); if (!e.repeat) this.alternarRagdoll(); return; }
+        // E: pegar um objeto do mapa (com um item da mochila na mão, o E é do item); segurar e soltar o E joga
+        if (e.code === "KeyE" && this.fisica && !this.caido) {
+          if (this.fisica.segurando) { e.preventDefault(); if (!e.repeat) this.apertouE = performance.now(); return; }
+          if (!this.temItemNaMao() && this.fisica.maisPerto()) { e.preventDefault(); if (!e.repeat) this.fisica.pegarOuSoltar(); return; }
+        }
         const acao = TECLAS[e.code];
         if (!acao) return;
         e.preventDefault();
         if (acao === "pular" && !e.repeat) this.querPular = true;
         this.teclas.add(acao); // segurar o Espaço (ou o C) sobe (ou desce) quando está voando
       });
-      window.addEventListener("keyup", (e) => { const acao = TECLAS[e.code]; if (acao) this.teclas.delete(acao); });
+      window.addEventListener("keyup", (e) => {
+        const acao = TECLAS[e.code];
+        if (acao) this.teclas.delete(acao);
+        if (e.code === "KeyE" && this.apertouE && this.fisica && this.fisica.segurando) { this.fisica.soltar(this.forcaDoE()); this.apertouE = 0; }
+      });
       window.addEventListener("blur", () => this.teclas.clear());
       // arrastar no palco gira a câmera
       const c = this.palco.conteiner;
@@ -381,6 +403,8 @@
       c.addEventListener("pointerup", soltar);
       c.addEventListener("pointercancel", soltar);
     }
+    /** Quanto tempo o E (ou o botão de pegar) ficou apertado → força do arremesso: um toque põe, segurar joga. */
+    forcaDoE() { const t = performance.now() - this.apertouE; return t < 250 ? 0 : Math.min(1, (t - 250) / 900); }
     /** A rodinha (ou o gesto de pinça) aproxima e afasta a câmera. */
     zoom(fator) { if (this.cfg.camera === "primeira") return; this.cam.dist = limitar(this.cam.dist * fator, 0.7 * (this.altura / 1.5), 14 * (this.altura / 1.5)); }
     /** Direcional e botão de pulo na tela (para o celular; no computador ficam discretos). */
@@ -399,7 +423,18 @@
       };
       const subir = segurar(el("button", { class: "botao-subir", type: "button", title: "Subir (ou segure Espaço)", "aria-label": "Subir" }, "▲"), "pular");
       const descer = segurar(el("button", { class: "botao-descer", type: "button", title: "Descer (ou segure C)", "aria-label": "Descer" }, "▼"), "descer");
-      this.controles = el("div", { class: "controles-mundo" + (this.voando ? " voando" : "") }, base, el("div", { class: "botoes" }, voar, correr, pulo, descer, subir));
+      // pegar e soltar (aparece perto de um objeto pegável): tocar pega ou põe, segurar e soltar joga
+      const mao = el("button", { class: "botao-pegar", type: "button", title: C.t("Pegar (ou E)"), "aria-label": C.t("Pegar"), hidden: true });
+      mao.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 12V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 10V4.5a1.5 1.5 0 0 1 3 0V11"/><path d="M14 10.5V6a1.5 1.5 0 0 1 3 0v7.5c0 4-2.5 7-6 7-2.6 0-4-1.3-5.4-3.3L3.8 14a1.6 1.6 0 0 1 2.6-1.8L8 14"/></svg>';
+      mao.addEventListener("pointerdown", (e) => { this.apertouE = performance.now(); e.stopPropagation(); e.preventDefault(); });
+      mao.addEventListener("pointerup", (e) => {
+        e.stopPropagation();
+        if (!this.fisica) return;
+        if (this.fisica.segurando) this.fisica.soltar(this.forcaDoE()); else if (!this.temItemNaMao()) this.fisica.pegarOuSoltar();
+        this.apertouE = 0;
+      });
+      this.botaoPegar = mao;
+      this.controles = el("div", { class: "controles-mundo" + (this.voando ? " voando" : "") }, base, el("div", { class: "botoes" }, mao, voar, correr, pulo, descer, subir));
       voar.addEventListener("click", (e) => { e.stopPropagation(); this.alternarVoo(); });
       this.palco.conteiner.parentElement.append(this.controles);
       let toque = null;
@@ -424,6 +459,7 @@
     // ── a cada quadro: entradas → velocidade → colisão ──────────────
     atualizar(dt) {
       this.atualizarAnimacoes(); // as animações do mapa tocam andando ou não
+      this.atualizarFisica(dt);
       if (!this.andando || !this.palco.vrm) return;
       const raiz = this.palco.raiz, t = this.teclas, esc = this.altura / 1.5;
       if (this.ragdoll) this.ragdoll.passo(dt);
@@ -507,6 +543,28 @@
       // sombra no chão
       this.sombra.position.set(raiz.position.x, this.alturaDoChao(raiz.position) + 0.012, raiz.position.z);
       this.sombra.scale.setScalar(this.altura * 0.55 * Math.max(0.4, 1 - (raiz.position.y - this.sombra.position.y) * 0.5));
+    }
+    /** As plantas (quem está perto delas e o vento) e os objetos com física. */
+    atualizarFisica(dt) {
+      if (!this.mapa) return;
+      if (this.plantas && this.plantas.plantas.length) {
+        const pessoas = [];
+        if (this.palco.vrm) pessoas.push({ p: this.palco.raiz.position, raio: this.raio });
+        if (this.outros) {
+          const eu = this.palco.raiz.position;
+          const outros = this.outros().slice().sort((a, b) => a.p.distanceToSquared(eu) - b.p.distanceToSquared(eu));
+          for (const o of outros) pessoas.push({ p: o.p, raio: o.raio });
+        }
+        C.colisao.atualizar(this.plantas, pessoas, performance.now() / 1000);
+      }
+      if (this.fisica && this.fisica.corpos.length) {
+        this.fisica.passo(dt);
+        if (this.botaoPegar) {
+          const pode = this.andando && (this.fisica.segurando || (!this.temItemNaMao() && this.fisica.maisPerto()));
+          if (this.botaoPegar.hidden === !!pode) this.botaoPegar.hidden = !pode;
+          this.botaoPegar.classList.toggle("segurando", !!this.fisica.segurando);
+        }
+      }
     }
     /** Um quadro voando: anda para onde a câmera olha, Espaço sobe, C desce, Shift vai mais rápido; nada de gravidade nem paredes. */
     voar(dt, mx, mz, esc) {
@@ -765,15 +823,21 @@
       this.tirarMapa();
       this.mapa = objeto;
       this.prepararAnimacoes(objeto);
+      // o que a conversão escreveu (uma cena do Unity em metros, o ponto de nascer) e as plantas que dobram
+      let webc = null;
+      objeto.traverse((o) => { if (!webc && o.userData.webc && o.userData.webc.versao) webc = o.userData.webc; });
+      this.webc = webc;
+      this.plantas = C.colisao ? C.colisao.preparar(objeto) : null;
       this.info = { id: info.id || null, nome: info.nome || principal.split("/").pop(), principal, ajuste: Object.assign({ escala: 0, giro: 0, deitado: false, posicao: [0, 0, 0], partida: null }, info.ajuste || {}) };
       // tamanho: os FBX costumam vir em centímetros; um mapa "gigante" ou "minúsculo" é ajustado para caber uma pessoa
       const bruto = new T.Box3().setFromObject(objeto).getSize(new T.Vector3());
       const maior = Math.max(bruto.x, bruto.y, bruto.z) || 1;
-      if (!this.info.ajuste.escala) this.info.ajuste.escala = maior > 2000 ? 0.01 : maior < 1 ? +(8 / maior).toPrecision(2) : 1;
+      if (!this.info.ajuste.escala) this.info.ajuste.escala = webc ? 1 : maior > 2000 ? 0.01 : maior < 1 ? +(8 / maior).toPrecision(2) : 1; // a cena do Unity já vem em metros
       this.palco.cena.add(objeto);
       if (this.luzes) this.luzes.preparar(objeto); // as luzes do arquivo saem da cena (quem acende é js/luzes.js) e as outras são achadas
       this.luzDoAmbiente();
       this.aplicarAjuste();
+      if (this.fisica) this.fisica.carregar(objeto); // os corpos saem do mapa e passam a cair, rolar e ser pegos
       if (this.andando) { this.chao.visible = false; this.partida(); } else this.partida();
       this.palco.enquadrar();
       this.palco.emit("mapa", this.info);
@@ -795,14 +859,18 @@
       // todas as malhas viram uma só (só as posições), com a árvore que acelera a colisão
       // as peças que se mexem (as animadas) não entram: a colisão é a do mapa parado (a não ser que quase tudo se mexa)
       const todas = [];
-      this.mapa.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.attributes.position && o.visible) todas.push(o); });
+      // só o que segura a pessoa (as plantas e as peças sem colisor do Unity atravessam; os corpos com física se mexem)
+      const dentroDeCorpo = (o) => { for (let x = o; x; x = x.parent) if (x.userData.webc && x.userData.webc.corpo) return true; return false; };
+      this.mapa.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.attributes.position && o.visible && (!C.colisao || C.colisao.colide(o)) && !dentroDeCorpo(o)) todas.push(o); });
       const paradas = todas.filter((o) => !o.isSkinnedMesh && !o.userData.animado);
       const malhas = paradas.length >= todas.length * 0.4 ? paradas : todas;
+      if (!malhas.length) { this.colisor = null; if (this.luzes) this.luzes.depoisDoAjuste(); return; } // nada sólido: só o chão
       const gerador = new V.StaticGeometryGenerator(malhas);
       gerador.attributes = ["position"];
       const geo = gerador.generate();
       geo.boundsTree = new V.MeshBVH(geo);
       this.colisor = new T.Mesh(geo);
+      if (this.fisica && this.fisica.corpos.length) this.fisica.reiniciar(); // os objetos voltam para o lugar (o mapa mudou)
       if (this.luzes) this.luzes.depoisDoAjuste();
     }
     /**
@@ -869,6 +937,9 @@
         for (const m of [].concat(o.material || [])) { for (const v of Object.values(m)) if (v && v.isTexture) v.dispose(); m.dispose(); }
       });
       if (this.colisor) { this.colisor.geometry.dispose(); this.colisor = null; }
+      if (this.fisica) this.fisica.limpar();
+      this.plantas = null;
+      this.webc = null;
       this.mapa = null;
       this.info = null;
       this.caixa.min.set(-30, 0, -30);
@@ -921,10 +992,16 @@
           for (const [c, b] of pacote) saida.set(c, b);
           saida.metas = new Map([...(saida.metas || []), ...pacote.metas]);
           saida.guids = new Map([...(saida.guids || []), ...pacote.guids]);
+          saida.previas = new Map([...(saida.previas || []), ...(pacote.previas || [])]);
         } else saida.set(nome, blob);
       }
-      // ficam as cenas, os prefabs e os materiais do Unity (montar a cena e achar as texturas); o resto do Unity sai
-      for (const n of [...saida.keys()]) if (/(^|\/)(__MACOSX|\.DS_Store)/.test(n) || /\.(meta|cs|shader|asset|anim|controller|dll|overrideController|mask|physicMaterial|lighting|cginc|hlsl)$/i.test(n)) saida.delete(n);
+      // ficam as cenas, os prefabs, os materiais (.mat), os materiais de física e, com uma cena, as malhas guardadas pelo
+      // e texturas guardadas pelo Unity (.asset em ".../Mesh/" e ".../Texture2D/", ou todas se não houver essas pastas)
+      const temCena = [...saida.keys()].some((n) => /\.unity$/i.test(n)), pastaMesh = [...saida.keys()].some((n) => /\/Mesh\/[^/]+\.asset$/i.test(n));
+      for (const n of [...saida.keys()]) {
+        if (/\.asset$/i.test(n) && temCena && (!pastaMesh || /\/(Mesh|Texture2D)\//i.test(n))) continue;
+        if (/(^|\/)(__MACOSX|\.DS_Store)/.test(n) || /\.(meta|cs|shader|asset|anim|controller|dll|overrideController|mask|lighting|cginc|hlsl)$/i.test(n)) saida.delete(n);
+      }
       return saida;
     },
     modelos(arquivos) { return C.conversor.modelos(arquivos); },

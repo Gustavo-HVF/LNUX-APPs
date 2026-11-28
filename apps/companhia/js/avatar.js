@@ -60,12 +60,13 @@
   function lerMat(texto) {
     const texturas = {}, numeros = {}, cores = {};
     const guid = (s) => (s.match(/guid:\s*([0-9a-f]{32})/) || [])[1];
-    for (const m of texto.matchAll(/-\s*(_\w+):\s*\r?\n\s*m_Texture:\s*\{([^}]*)\}/g)) if (guid(m[2])) texturas[m[1]] = guid(m[2]);
+    // "- _MainTex:" (o comum), "_MainTex:" sem o tracinho (exportações mais novas) e "name: _MainTex / second:" (o antigo)
+    for (const m of texto.matchAll(/^[ \t]*(?:-\s*)?(\w+):\s*\r?\n\s*m_Texture:\s*\{([^}]*)\}/gm)) if (guid(m[2])) texturas[m[1]] = guid(m[2]);
     for (const m of texto.matchAll(/name:\s*(_\w+)\s*\r?\n\s*second:\s*\r?\n\s*m_Texture:\s*\{([^}]*)\}/g)) if (guid(m[2])) texturas[m[1]] = guid(m[2]); // formato antigo
-    for (const m of texto.matchAll(/-\s*(_\w+):\s*(-?\d[\d.eE+-]*)\s*$/gm)) numeros[m[1]] = +m[2];
+    for (const m of texto.matchAll(/^[ \t]*(?:-\s*)?(_\w+):[ \t]*(-?\d[\d.eE+-]*)[ \t]*$/gm)) numeros[m[1]] = +m[2];
     for (const m of texto.matchAll(/name:\s*(_\w+)\s*\r?\n\s*second:\s*(-?\d[\d.eE+-]*)\s*$/gm)) numeros[m[1]] = +m[2];
     const COR = "\\{r:\\s*([-\\d.eE+]+),\\s*g:\\s*([-\\d.eE+]+),\\s*b:\\s*([-\\d.eE+]+),\\s*a:\\s*([-\\d.eE+]+)\\}";
-    for (const m of texto.matchAll(new RegExp("-\\s*(_\\w+):\\s*" + COR, "g"))) cores[m[1]] = [+m[2], +m[3], +m[4], +m[5]];
+    for (const m of texto.matchAll(new RegExp("^[ \\t]*(?:-\\s*)?(_\\w+):[ \\t]*" + COR, "gm"))) cores[m[1]] = [+m[2], +m[3], +m[4], +m[5]];
     for (const m of texto.matchAll(new RegExp("name:\\s*(_\\w+)\\s*\\r?\\n\\s*second:\\s*" + COR, "g"))) cores[m[1]] = [+m[2], +m[3], +m[4], +m[5]];
     return { nome: semAspas((texto.match(/^\s*m_Name:[ \t]*(.*)$/m) || [, ""])[1]), texturas, numeros, cores,
       tipo: (texto.match(/RenderType:\s*(\w+)/) || [])[1] || "", fila: +((texto.match(/m_CustomRenderQueue:\s*(-?\d+)/) || [])[1] || -1),
@@ -283,7 +284,7 @@
   C.avatar = {
     MODELO,
     ACEITAR: ".unitypackage,.fbx,.glb,.blend",
-    lerMat, lerMetaDoModelo, lerTGA, lerPSD, acharExpressoes, ossoDoUnity,
+    lerMat, modoAlfa, lerMetaDoModelo, lerTGA, lerPSD, acharExpressoes, ossoDoUnity,
 
     /** O pacote tem cara de avatar (e não de cenário)? Um .vrm dentro, ou um modelo que o Unity marcou como pessoa. */
     pareceAvatar(arquivos) {
