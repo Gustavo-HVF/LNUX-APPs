@@ -1078,6 +1078,7 @@
   Object.assign(C.TEXTOS, {
     "Pacotes do Unity com vários modelos entram de uma vez: a personagem, as roupas vestidas nela, os itens e o cenário. As cenas do Unity (.unity) viram mapas com cada peça no lugar.": ["Unity packages with several models come in at once: the character, the clothes put on her, the items and the map. Unity scenes (.unity) become maps with every piece in place.", "複数のモデルが入った Unity パッケージをまとめて取り込み: キャラクター、着せる服、アイテム、マップ。Unity のシーン（.unity）は各パーツを元の位置に置いたマップに。"],
     "Boneco de pano melhor: o corpo bate nele mesmo (sem braço entrando no peito) e quem passa por cima arrasta.": ["Better ragdoll: the body collides with itself (no arm going into the chest) and whoever walks over it drags it.", "ラグドールを改善: 体どうしがぶつかり（腕が胸にめり込まない）、上を通るとひきずられます。"],
+    "O Y Bot é a personagem de quem não escolhe nenhuma, e o boneco do estúdio de itens (a mão fechada no cabo e o corpo inteiro).": ["Y Bot is the character for whoever doesn't pick one, and the dummy in the item studio (the hand closed around the handle and the whole body).", "キャラクターを選ばない人は Y Bot に。アイテムスタジオのマネキンにもなりました（取っ手を握った手と全身）。"],
     "O pacote tem {n} modelos{cena}. O que vira o cenário?": ["The package has {n} models{cena}. What becomes the map?", "パッケージに {n} 個のモデルがあります{cena}。どれをマップにしますか？"],
     " e {c} cena(s) do Unity": [" and {c} Unity scene(s)", "（Unity のシーン {c} 個）"],
     "Montar a cena do Unity (cada modelo no lugar)": ["Assemble the Unity scene (each model in place)", "Unity のシーンを組み立てる（各モデルを元の位置に）"],

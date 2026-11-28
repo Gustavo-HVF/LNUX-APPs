@@ -155,11 +155,15 @@
       await C.prepararVRM();
       const { GLTFLoader, VRMLoaderPlugin } = window.CompanhiaVRM, carregador = new GLTFLoader();
       carregador.register((p) => new VRMLoaderPlugin(p));
-      const gltf = await carregador.parseAsync(await C.bonecoPadrao([0.85, 0.78, 0.7]).arrayBuffer(), "");
+      const gltf = await carregador.parseAsync(await (await C.bonecoYBot()).arrayBuffer(), ""); // o Y Bot (ou o boneco de caixas, sem ele)
       const vrm = gltf.userData.vrm, nos = {};
       for (const n of C.OSSOS_VRM || []) { const no = vrm.humanoid.getNormalizedBoneNode(n); if (no) nos[n] = no; }
-      vrm.scene.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      boneco = { vrm, nos };
+      vrm.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+      // na vista da mão, o boneco inteiro fica num suporte que põe o osso da mão em cima do osso de mentira
+      const suporte = new T.Group();
+      suporte.matrixAutoUpdate = false;
+      suporte.add(vrm.scene);
+      boneco = { vrm, nos, suporte, temDedos: !!(nos.rightIndexProximal && nos.leftIndexProximal) };
       return boneco;
     }
 
@@ -174,12 +178,12 @@
     function focar() {
       const caixaB = new T.Box3();
       if (vista === "corpo" && boneco) caixaB.setFromObject(boneco.vrm.scene);
-      else if (vista === "mao") { caixaB.copy(caixaDe(mao)); if (vivo) caixaB.union(caixaDe(vivo.corpo)); }
+      else if (vista === "mao") { caixaB.set(new T.Vector3(-0.13, -0.07, -0.06), new T.Vector3(0.07, 0.03, 0.06)); if (vivo) caixaB.union(caixaDe(vivo.corpo)); } // a mão (no espaço do osso)
       else if (vivo) caixaB.copy(caixaDe(vivo.corpo));
       if (caixaB.isEmpty()) caixaB.set(new T.Vector3(-0.15, 0, -0.15), new T.Vector3(0.15, 0.2, 0.15));
       const c = caixaB.getCenter(new T.Vector3()), tam = caixaB.getSize(new T.Vector3()).length();
       orbita.alvo.copy(c);
-      orbita.dist = Math.max(0.25, tam * 1.4);
+      orbita.dist = vista === "mao" ? Math.min(0.55, Math.max(0.3, tam * 1.2)) : Math.max(0.25, tam * 1.4); // na mão: perto, mesmo com a luz da lanterna
       posicionarCamera();
     }
 
@@ -217,8 +221,10 @@
       if (!vivo) return;
       C.desencaixarItem(vivo);
       mao.visible = vista === "mao";
-      if (boneco) { if (vista === "corpo") cena.add(boneco.vrm.scene); else cena.remove(boneco.vrm.scene); }
       const naMao = vista === "mao" && (def.encaixe.osso === "rightHand" || def.encaixe.osso === "leftHand");
+      // o boneco: inteiro na vista do corpo; na da mão, preso pela mão no osso de mentira (no lugar da mão de caixas)
+      const comBoneco = boneco && (vista === "corpo" || (naMao && boneco.temDedos));
+      if (boneco) { if (comBoneco) cena.add(boneco.suporte); else cena.remove(boneco.suporte); }
       if (vista === "item") {
         vivo.aplicarEncaixe({ osso: def.encaixe.osso, pos: [0, 0, 0], rot: [0, 0, 0], escala: 1 });
         if (vivo.raiz.parent !== cena) cena.add(vivo.raiz);
@@ -231,6 +237,8 @@
         ossoFalso.remove(mao);
         mao = maoDeBoneco(def.encaixe.osso === "leftHand");
         mao.visible = naMao;
+        // com o Y Bot, fica só o cabo de referência da mão de caixas
+        if (comBoneco) for (const f of mao.children) f.visible = f === mao.userData.cabo;
         ossoFalso.add(mao);
         C.encaixarItem(vivo, { [def.encaixe.osso === "costas" ? "chest" : def.encaixe.osso]: ossoFalso, hips: ossoFalso }, false);
       }
@@ -537,11 +545,12 @@
     }
     async function trocarVista(v) {
       vista = v;
-      if (v === "corpo") await prepararBoneco();
+      if (v === "corpo" || v === "mao") { try { await prepararBoneco(); } catch (e) { console.warn("estúdio: o boneco não abriu", e); } }
       if (fechado) return;
       colocarNaVista();
       desenharBarra();
-      if (v === "mao") { orbita.giro = 0.6; orbita.altura = 0.15; } // de lado e um pouco de baixo: dá para ver os dedos fechados
+      // do lado dos dedos (o braço fica atrás da mão, sem tapar) e um pouco de baixo: dá para ver os dedos fechados
+      if (v === "mao") { orbita.giro = def.encaixe.osso === "leftHand" ? 0.9 : -0.9; orbita.altura = 0.35; }
       focar();
     }
     function alternarTeste(sim = !testando) {
@@ -775,7 +784,7 @@
     function quadro() {
       if (fechado) return;
       const dt = Math.min(0.05, relogio.getDelta());
-      if (boneco && vista === "corpo") {
+      if (boneco && boneco.suporte.parent) {
         // o boneco com os braços para baixo e a mão fechada em volta do cabo
         const pose = {};
         for (const [n, no] of Object.entries(boneco.nos)) { no.quaternion.identity(); pose[n] = no.quaternion; }
@@ -783,6 +792,14 @@
         if (pose.leftUpperArm) pose.leftUpperArm.setFromEuler(new T.Euler(0, 0, -1.25));
         C.poseDeSegurar(pose, def.encaixe.osso, 0);
         boneco.vrm.update(dt);
+        const s = boneco.suporte;
+        s.matrix.identity();
+        if (vista === "mao" && boneco.nos[def.encaixe.osso]) {
+          // a mão do boneco no lugar do osso de mentira (na origem): o suporte desfaz onde a mão está no corpo
+          s.updateMatrixWorld(true);
+          s.matrix.copy(boneco.nos[def.encaixe.osso].matrixWorld).invert();
+        }
+        s.updateMatrixWorld(true);
       }
       if (vivo) vivo.atualizar(dt);
       const p = parteSel(), obj = sel === "encaixe" ? vivo && vivo.corpo : p && vivo && vivo.objetos.get(p.id);

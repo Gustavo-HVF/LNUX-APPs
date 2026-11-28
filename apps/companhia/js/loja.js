@@ -336,7 +336,7 @@
     async animacao(blob, arquivo) {
       const T = window.THREE;
       const clip = await C.movimentos.clipDoArquivo(blob, arquivo || "animacao.bvh");
-      const { vrm, nos, pose, quadril } = await this.abrirVRM(C.bonecoPadrao([0.36, 0.62, 0.95]));
+      const { vrm, nos, pose, quadril } = await this.abrirVRM(await C.bonecoYBot());
       this.enquadrarPessoa(1.6);
       this.olhar.dist *= 1.15;
       const an = (this.animador = new C.Animador());

@@ -223,7 +223,7 @@
       this.gestoVisto = null;    // o número do último gesto dela que já vi (null: ainda não vi nenhum estado)
       this.acenar = 0;           // quando começou o aceno (s)
       this.avatar = null;        // {vrm, ...} quando o VRM dela chegou
-      this.avatarVersao = 0;
+      this.avatarVersao = -1;  // -1: ainda não sei (a primeira notícia dela abre o avatar, ou o Y Bot)
       this.aparencia = null;     // {ajuste, ocultas, texturas: {peça: Blob}}: como ela deixou a personagem
       this.aparenciaVersao = 0;
       this.texturas = new Map(); // n → Blob (as texturas dela que já baixei)
@@ -351,7 +351,16 @@
     }
     async buscarAvatar() {
       const versao = this.avatarVersao;
-      if (!versao) { this.trocarAvatar(null); return; }
+      if (!versao) {
+        // não mandou personagem: aparece com o Y Bot (o boneco padrão, aberto aqui mesmo)
+        try {
+          const av = await abrirAvatar(await C.bonecoYBot(), 1024);
+          if (this.avatarVersao || !this.grupo.parent) { window.CompanhiaVRM.VRMUtils.deepDispose(av.vrm.scene); return; }
+          if (this.aparencia) await aplicarAparencia(av, this.aparencia);
+          this.trocarAvatar(av);
+        } catch (e) { this.trocarAvatar(null); }
+        return;
+      }
       try {
         const blob = await pedir("GET", `${this.sala.codigo}/avatar/${this.id}?v=${versao}`, { como: "blob", sinal: this.sala.sinal() });
         const av = await abrirAvatar(blob, 1024);
@@ -833,7 +842,21 @@
   C.salaPedir = pedir;
 
   /**
-   * O avatar padrão: um boneco de caixas, montado aqui mesmo como um VRM 1.0 (só ossos e caixinhas presas neles), para
+   * O avatar padrão de quem não escolheu nenhuma personagem: o Y Bot (modelos/ybot.vrm, o boneco do Mixamo convertido
+   * para VRM pelo js/avatar.js). Cada aparelho abre o seu, então ele não passa pela sala. Sem o arquivo (o site aberto
+   * de outro lugar, sem rede), volta para o boneco de caixas. Devolve um Blob (.vrm).
+   */
+  let ybot = null;
+  C.bonecoYBot = function () {
+    if (!ybot) {
+      ybot = fetch(new URL("modelos/ybot.vrm", document.baseURI)).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
+        .catch((e) => { console.warn("WEBC: o Y Bot não veio, usando o boneco de caixas", e); ybot = null; return C.bonecoPadrao(); });
+    }
+    return ybot;
+  };
+
+  /**
+   * O boneco de caixas, montado aqui mesmo como um VRM 1.0 (só ossos e caixinhas presas neles), para
    * quem entra numa sala sem ter uma personagem .vrm. cor: [r, g, b] da roupa (0 a 1). Devolve um Blob (.vrm).
    */
   C.bonecoPadrao = function (cor = [0.31, 0.56, 0.97]) {

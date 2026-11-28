@@ -96,7 +96,7 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     const usar = await ana.pagina.locator("#estudio-usar").boundingBox();
     await ana.pagina.mouse.move(usar.x + usar.width / 2, usar.y + usar.height / 2);
     await ana.pagina.mouse.down();
-    await ana.pagina.waitForTimeout(700);
+    await ana.pagina.waitForTimeout(1000);
     const teste = await ana.ev(() => document.querySelector(".estudio-teste").textContent);
     await ana.pagina.mouse.up();
     await foto(ana, "estudio-teste");
@@ -172,8 +172,10 @@ const ok = (c, m) => { if (c) { passos++; console.log("  ✔ " + m); } else { er
     await bia.pagina.waitForFunction(() => window.Companhia.sala && window.Companhia.sala.dentro && window.Companhia.sala.remotos.size === 1, null, { timeout: 90000 });
     await bia.pagina.waitForFunction(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return r.item && r.avatar && r.item.raiz.visible && r.item.base && r.item.base.parent === r.avatar.nos.rightHand; }, null, { timeout: 60000 });
     ok(true, "a Bia vê o item na mão direita da Ana (o arquivo vem pela sala, uma vez)");
+    ok(await bia.ev(() => { const r = [...window.Companhia.sala.remotos.values()][0]; return !r.boneco.visible && !!r.avatar.nos.rightIndexProximal && r.altura > 1.7; }),
+      "a Ana entrou sem escolher personagem: a Bia vê o Y Bot (aberto no aparelho dela, com os dedos)");
     await ana.pagina.keyboard.down("KeyE");
-    await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].item.projeteis.length > 0, null, { timeout: 15000 }).then(() => ok(true, "a Ana atira e a Bia vê os tiros saindo do item"), () => ok(false, "a Ana atira e a Bia vê os tiros saindo do item"));
+    await bia.pagina.waitForFunction(() => [...window.Companhia.sala.remotos.values()][0].item.tiros > 0, null, { timeout: 15000 }).then(() => ok(true, "a Ana atira e a Bia vê os tiros saindo do item"), () => ok(false, "a Ana atira e a Bia vê os tiros saindo do item"));
     await ana.pagina.keyboard.up("KeyE");
 
     // ── ajustar no meu corpo ──

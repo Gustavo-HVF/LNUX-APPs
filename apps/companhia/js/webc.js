@@ -296,6 +296,7 @@
 
   /** O que mudou no WEBC (os mais novos primeiro). */
   const MUDANCAS = [
+    "O Y Bot é a personagem de quem não escolhe nenhuma, e o boneco do estúdio de itens (a mão fechada no cabo e o corpo inteiro).",
     "Pacotes do Unity com vários modelos entram de uma vez: a personagem, as roupas vestidas nela, os itens e o cenário. As cenas do Unity (.unity) viram mapas com cada peça no lugar.",
     "Boneco de pano melhor: o corpo bate nele mesmo (sem braço entrando no peito) e quem passa por cima arrasta.",
     "Personagens do Blender (.blend) viram personagens VRM: com a armadura ou só com os grupos de vértices (o esqueleto é refeito).",

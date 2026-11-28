@@ -82,8 +82,8 @@ pisca na tela).
     rugosidade, brilho, opacidade, aramado, faces chapadas, textura de uma imagem, desfazer e refazer, atalhos (W, E, R,
     X/Y/Z, F, Del, Ctrl+D, Ctrl+Z, Ctrl+Y), **Testar** (usar o item contra uma parede), foto automática, exportar e
     importar o `.glb`.
-  - **Encaixe no corpo**: mão direita ou esquerda, cabeça, peito, costas, quadril ou pés, com a **mão de boneco** (a
-    parte azul é onde fica o cabo) e o **boneco inteiro** para acertar. Quem baixa recebe o item no lugar que quem
+  - **Encaixe no corpo**: mão direita ou esquerda, cabeça, peito, costas, quadril ou pés, com a **mão do Y Bot** fechada
+    em volta do cabo (a parte azul é onde ele fica) e o **Y Bot inteiro** para acertar. Quem baixa recebe o item no lugar que quem
     criou deixou; em *Opções › Itens › Ajustar no meu corpo*, cada pessoa ajusta o dela (fica guardado no aparelho e
     os outros na sala veem no lugar novo).
   - **Guardar e publicar**: os itens ficam em *Meus itens* (no aparelho); *Publicar na loja* põe na categoria
@@ -182,7 +182,7 @@ tela de entrar.
 A página **Sala** lista as salas deste servidor (como a lista de servidores de um jogo): a miniatura do
 cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (👥 2/8), um 🔒 nas que têm senha e
 "Cheia" nas lotadas. Ela se atualiza sozinha. Em cima ficam o **seu nome** e a **sua personagem** (uma das suas,
-`.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou o boneco simples).
+`.vrm`, ZIP ou avatar do Unity; uma da loja, com 🛍️; ou, sem escolher nenhuma, o **Y Bot**).
 
 - **Entrar**: um clique na sala (pede a senha, se tiver). Uma sala **privada** não aparece na lista: entra quem
   tiver o link, que abre o WEBC já com ela em destaque ("A sala do seu link"); dá também para colar o link.
@@ -208,7 +208,9 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
   desiste e tenta de novo. Sair cancela o que ainda estava a caminho, então dá para sair e entrar de novo na hora.
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
-  dos outros, nem eles a sua: ela vai junto ao entrar.
+  dos outros, nem eles a sua: ela vai junto ao entrar. Quem entra **sem escolher personagem** aparece como o
+  **Y Bot** (o boneco do Mixamo, em `modelos/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
+  e o tamanho, as peças escondidas e as texturas trocadas valem do mesmo jeito.
 - **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
   proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
   correções dos ossos, as peças de roupa escondidas, as texturas trocadas e a roupa vestida.
@@ -890,6 +892,7 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
+modelos/ybot.vrm   o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
 vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
                    (MIT, three-vrm-pacote.min.js); MediaPipe Tasks Vision (Apache-2.0, mediapipe-visao.min.js) e o
                    decodificador Draco (Apache-2.0, draco/) — o Cubism Core e os ~30 MB do MediaPipe não vêm junto
