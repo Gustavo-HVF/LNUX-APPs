@@ -847,14 +847,14 @@
   C.salaPedir = pedir;
 
   /**
-   * O avatar padrão de quem não escolheu nenhuma personagem: o Y Bot (modelos/ybot.vrm, o boneco do Mixamo convertido
+   * O avatar padrão de quem não escolheu nenhuma personagem: o Y Bot (padrao/ybot.vrm, o boneco do Mixamo convertido
    * para VRM pelo js/avatar.js). Cada aparelho abre o seu, então ele não passa pela sala. Sem o arquivo (o site aberto
    * de outro lugar, sem rede), volta para o boneco de caixas. Devolve um Blob (.vrm).
    */
   let ybot = null;
   C.bonecoYBot = function () {
     if (!ybot) {
-      ybot = fetch(new URL("modelos/ybot.vrm", document.baseURI)).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
+      ybot = fetch(new URL("padrao/ybot.vrm", document.baseURI)).then((r) => { if (!r.ok) throw new Error("HTTP " + r.status); return r.blob(); })
         .catch((e) => { console.warn("WEBC: o Y Bot não veio, usando o boneco de caixas", e); ybot = null; return C.bonecoPadrao(); });
     }
     return ybot;

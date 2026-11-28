@@ -220,7 +220,7 @@ cenário, o nome, a descrição, quem criou, quantas pessoas estão e cabem (�
 - **Personagens dos outros**: cada um aparece com a personagem que escolheu (o `.vrm` passa pelo servidor da sala uma
   vez, sem limite de tamanho). Enquanto ela não chega, aparece um boneco simples. Você não precisa ter a personagem
   dos outros, nem eles a sua: ela vai junto ao entrar. Quem entra **sem escolher personagem** aparece como o
-  **Y Bot** (o boneco do Mixamo, em `modelos/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
+  **Y Bot** (o boneco do Mixamo, em `padrao/ybot.vrm`): cada aparelho abre o seu, então ele não passa pelo servidor,
   e o tamanho, as peças escondidas e as texturas trocadas valem do mesmo jeito.
 - **A aparência vale para todos**: o que você muda na personagem aparece igual para os outros, na hora: o tamanho e as
   proporções (*Movimento › Ajustar esqueleto*: altura, cabeça, braços, mãos, pernas), os braços em descanso, as
@@ -936,7 +936,7 @@ js/voz.js          geradores de voz, fila frase a frase, boca pelo som, cache, r
 js/memoria.js      IndexedDB, análise local e pela IA, BM25, visitas, exportar/importar, cópia no aparelho
 js/reacoes.js      reações aos toques (área × gesto)
 js/app.js          a tela: conversa, menus, janelas de ajustes
-modelos/ybot.vrm   o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
+padrao/ybot.vrm    o Y Bot (Mixamo, convertido para VRM pelo js/avatar.js): a personagem de quem não escolhe nenhuma e o boneco do estúdio de itens
 vendor/basis/      o transcodificador Basis Universal (abrir texturas KTX2), do three.js
 vendor/ktx2-codificador.min.js e vendor/ktx2/  o codificador KTX2 (ktx2-encoder + Basis Universal), baixado só ao gravar em KTX2
 vendor/            pixi.js 6 e pixi-live2d-display (MIT); three.js + three-vrm + three-vrm-animation + three-mesh-bvh
