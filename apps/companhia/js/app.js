@@ -785,6 +785,11 @@
     if (pacote) {
       try {
         const dentro = await C.lerUnityPackage(await pacote.blob());
+        // um mundo (só cena, sem nenhum modelo de pessoa) sem personagem 3D aberta: explica onde ele entra
+        if (!noPalco3D && !C.avatar.pareceAvatar(dentro) && !C.avatar.candidatos(dentro).length && C.unityCena && C.unityCena.cenas(dentro).length) {
+          LNUX.aviso(C.t("Esse pacote é um mundo (uma cena do Unity): abra uma personagem VRoid (.vrm) e solte de novo, ou use Movimento › Cenário."), "alerta", 10000);
+          return;
+        }
         if (!noPalco3D || C.avatar.pareceAvatar(dentro)) {
           const convertido = await pacoteDoAvatar(dentro, LNUX.nomeSemExtensao(pacote.nome));
           if (convertido) await importarPacote(convertido, null);
@@ -909,11 +914,16 @@
         if (!arqs.length) return null;
         const mapa = new Map();
         for (const a of arqs) mapa.set(a.nome, await a.blob());
-        const pronto = await C.mapas.preparar(mapa), principal = C.conversor.modelos(pronto)[0];
-        if (!principal) throw new Error("Não achei um modelo de cenário nesses arquivos.");
+        // um .unitypackage com cena (.unity): a cena montada, com a física (também os mundos sem .fbx, só com as malhas do Unity)
+        const pronto = await C.mapas.preparar(mapa), principal = C.conversor.modelos(pronto)[0], cena = C.unityCena ? C.unityCena.cenas(pronto)[0] : null;
+        if (!principal && !cena) throw new Error("Não achei um modelo de cenário nesses arquivos.");
         const prog = LNUX.progresso("Convertendo o mundo para .glb");
         let r;
-        try { r = await C.conversor.paraGLB(pronto, principal, { aoProgresso: (f, t) => prog.definir(f, t) }); } finally { prog.fechar(); }
+        try {
+          r = cena ? await C.conversor.juntarGLB(pronto, { cena, aoProgresso: (f, t) => prog.definir(f, t) })
+            : await C.conversor.paraGLB(pronto, principal, { aoProgresso: (f, t) => prog.definir(f, t) });
+        } finally { prog.fechar(); }
+        if (r.avisos && r.avisos.length) LNUX.aviso(r.avisos.join(" "), "alerta", 12000);
         const nome = LNUX.nomeSemExtensao(arqs[0].nome);
         return { blob: r.glb, arquivo: nomeArq(nome) + ".glb", nome };
       }
